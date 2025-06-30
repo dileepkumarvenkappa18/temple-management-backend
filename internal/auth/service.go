@@ -16,7 +16,7 @@ type TokenPair struct {
 
 type Service interface {
 	Register(input RegisterInput) error
-	Login(input LoginInput) (*TokenPair, *User, error) // ✅ Updated to return user
+	Login(input LoginInput) (*TokenPair, *User, error)
 	Refresh(refreshToken string) (string, error)
 }
 
@@ -65,7 +65,20 @@ func (s *service) Register(in RegisterInput) error {
 		PasswordHash: string(hash),
 		RoleID:       role.ID,
 	}
-	return s.repo.Create(user)
+
+	if err := s.repo.Create(user); err != nil {
+		return err
+	}
+
+	// ✅ Automatically create approval request for templeadmin
+	if in.Role == "templeadmin" {
+		err := s.repo.CreateApprovalRequest(user.ID, "entity")
+		if err != nil {
+			return errors.New("failed to create approval request")
+		}
+	}
+
+	return nil
 }
 
 func (s *service) Login(in LoginInput) (*TokenPair, *User, error) {
@@ -73,15 +86,25 @@ func (s *service) Login(in LoginInput) (*TokenPair, *User, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(in.Password)) != nil {
 		return nil, nil, errors.New("invalid credentials")
 	}
 
-	// Access token
+	// ✅ Only templeadmin requires approval
+	if user.Role.RoleName == "templeadmin" {
+		entityID, err := s.repo.FindEntityIDByUserID(user.ID)
+		if err != nil || entityID == nil {
+			return nil, nil, errors.New("your account is pending approval")
+		}
+		user.TenantID = entityID
+	}
+
 	accessClaims := jwt.MapClaims{
-		"user_id": user.ID,
-		"role_id": user.RoleID,
-		"exp":     time.Now().Add(s.accessTTL).Unix(),
+		"user_id":   user.ID,
+		"role_id":   user.RoleID,
+		"tenant_id": user.TenantID,
+		"exp":       time.Now().Add(s.accessTTL).Unix(),
 	}
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
 	at, err := accessToken.SignedString([]byte(s.accessSecret))
@@ -89,7 +112,6 @@ func (s *service) Login(in LoginInput) (*TokenPair, *User, error) {
 		return nil, nil, err
 	}
 
-	// Refresh token
 	refreshClaims := jwt.MapClaims{
 		"user_id": user.ID,
 		"exp":     time.Now().Add(s.refreshTTL).Unix(),
@@ -103,7 +125,7 @@ func (s *service) Login(in LoginInput) (*TokenPair, *User, error) {
 	return &TokenPair{
 		AccessToken:  at,
 		RefreshToken: rt,
-	}, user, nil // ✅ Return the user along with token pair
+	}, user, nil
 }
 
 func (s *service) Refresh(refreshToken string) (string, error) {

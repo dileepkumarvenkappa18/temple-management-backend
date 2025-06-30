@@ -23,6 +23,7 @@ type User struct {
   PasswordHash     string         `gorm:"size:255;not null"`
   Phone            *string        `gorm:"size:20"`
   RoleID           uint           `gorm:"not null"`
+  TenantID         *uint          `gorm:"index"` // ✅ Add this line for tenant or temple association
   Role             UserRole       `gorm:"foreignKey:RoleID"`
   Status           string         `gorm:"size:20;default:'active'"`
   EmailVerified    bool           `gorm:"default:false"`

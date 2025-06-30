@@ -28,12 +28,6 @@ type refreshReq struct {
 	RefreshToken string `json:"refreshToken" binding:"required" example:"your_refresh_token_here"`
 }
 
-// Swagger response struct
-type AuthResponse struct {
-	Token string `json:"token" example:"your_access_token"`
-	User  string `json:"user" example:"Sharath Kumar"`
-}
-
 // Register godoc
 // @Summary Register a new user
 // @Description Register a new user with email and password
@@ -58,20 +52,22 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	in := RegisterInput{
-		FullName: req.FullName,
-		Email:    req.Email,
-		Password: req.Password,
-		Role:     req.Role,
-	}
-
-	if err := h.service.Register(in); err != nil {
+	if err := h.service.Register(RegisterInput(req)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "registration successful"})
+	// ✅ Templeadmins go through approval flow
+	if req.Role == "templeadmin" {
+		c.JSON(http.StatusCreated, gin.H{
+			"message": "Temple Admin registered successfully. Awaiting Super Admin approval.",
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "Registration successful"})
 }
+
 
 // Login godoc
 // @Summary Login and get tokens
@@ -100,10 +96,11 @@ func (h *Handler) Login(c *gin.Context) {
 		"accessToken":  tokens.AccessToken,
 		"refreshToken": tokens.RefreshToken,
 		"user": gin.H{
-			"id":       user.ID,
-			"fullName": user.FullName,
-			"email":    user.Email,
-			"roleId":   user.RoleID,
+			"id":        user.ID,
+			"fullName":  user.FullName,
+			"email":     user.Email,
+			"roleId":    user.RoleID,
+			// "tenantId": optional → we'll add this if token logic supports it later
 		},
 	})
 }

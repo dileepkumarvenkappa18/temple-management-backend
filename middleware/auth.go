@@ -65,7 +65,20 @@ func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		c.Set("claims", token.Claims)
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid claims"})
+			return
+		}
+
+		// ✅ Store claims and user details in context
+		c.Set("claims", claims)
+		c.Set("user", map[string]interface{}{
+			"user_id":   claims["user_id"],
+			"role_id":   claims["role_id"],
+			"tenant_id": claims["tenant_id"], // Optional: only if your token includes it
+		})
+
 		c.Next()
 	}
 }
