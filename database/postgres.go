@@ -47,8 +47,6 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&seva.Seva{},
 		&seva.SevaBooking{},
 		&entity.Entity{},
-		&entity.EntityAddress{},
-		&entity.EntityDocument{},
 		&event.Event{}, // ✅ Add this line
 	); err != nil {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)

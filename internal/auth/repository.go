@@ -5,10 +5,12 @@ import "gorm.io/gorm"
 type Repository interface {
 	Create(user *User) error
 	FindByEmail(email string) (*User, error)
+	FindByID(userID uint) (User, error) // 👈 ADD THIS
 	FindRoleByName(name string) (*UserRole, error)
 	FindEntityIDByUserID(userID uint) (*uint, error)
-	CreateApprovalRequest(userID uint, requestType string) error // ✅ NEW
+	CreateApprovalRequest(userID uint, requestType string) error
 }
+
 
 type repository struct{ db *gorm.DB }
 
@@ -32,22 +34,34 @@ func (r *repository) FindRoleByName(name string) (*UserRole, error) {
 	return &role, err
 }
 
-// ✅ NEW: Get the approved EntityID for a user (for tenant/devotee/volunteer)
+// ✅ FIXED: Get the approved EntityID even if entity_id is NULL (temporary login allowed)
 func (r *repository) FindEntityIDByUserID(userID uint) (*uint, error) {
 	var req ApprovalRequest
-	err := r.db.Where("user_id = ? AND status = ?", userID, "approved").First(&req).Error
+	err := r.db.
+		Where("user_id = ? AND status = ?", userID, "approved").
+		Order("id DESC").
+		First(&req).Error
+
 	if err != nil {
 		return nil, err
 	}
+
+	// Return pointer to entity ID (may still be nil if not created yet)
 	return req.EntityID, nil
 }
 
-// ✅ NEW: Used during templeadmin registration to create approval request
+// ✅ Used during templeadmin registration to create approval request
 func (r *repository) CreateApprovalRequest(userID uint, requestType string) error {
 	req := ApprovalRequest{
 		UserID:      userID,
-		RequestType: requestType, // should be "entity"
+		RequestType: requestType,
 		Status:      "pending",
 	}
 	return r.db.Create(&req).Error
+}
+
+func (r *repository) FindByID(userID uint) (User, error) {
+	var user User
+	err := r.db.Preload("Role").First(&user, userID).Error
+	return user, err
 }

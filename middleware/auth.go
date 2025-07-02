@@ -7,42 +7,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/sharath018/temple-management-backend/config"
+	"github.com/sharath018/temple-management-backend/internal/auth"
 )
 
-func RequireRole(allowedRoles ...uint) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		claimsVal, exists := c.Get("claims")
-		if !exists {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-			return
-		}
 
-		claims, ok := claimsVal.(jwt.MapClaims)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
-			return
-		}
 
-		roleIDFloat, ok := claims["role_id"].(float64)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid role"})
-			return
-		}
-
-		userRole := uint(roleIDFloat)
-
-		for _, allowed := range allowedRoles {
-			if userRole == allowed {
-				c.Next()
-				return
-			}
-		}
-
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "forbidden"})
-	}
-}
-
-func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
+func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -71,13 +41,22 @@ func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		// ✅ Store claims and user details in context
+		userIDFloat, ok := claims["user_id"].(float64)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user_id missing in token"})
+			return
+		}
+
+		userID := uint(userIDFloat)
+		user, err := authSvc.GetUserByID(userID)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+			return
+		}
+
+		// ✅ Store the real typed user object in context
+		c.Set("user", user)
 		c.Set("claims", claims)
-		c.Set("user", map[string]interface{}{
-			"user_id":   claims["user_id"],
-			"role_id":   claims["role_id"],
-			"tenant_id": claims["tenant_id"], // Optional: only if your token includes it
-		})
 
 		c.Next()
 	}

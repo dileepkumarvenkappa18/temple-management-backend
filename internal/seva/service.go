@@ -28,26 +28,26 @@ func NewService(repo Repository) Service {
 	return &service{repo}
 }
 
-// Tenant only
+// templeadmin only
 func (s *service) CreateSeva(ctx context.Context, seva *Seva, userRole string, entityID uint) error {
-	if userRole != "tenant" {
-		return errors.New("unauthorized: only tenant can create sevas")
+	if userRole != "templeadmin" {
+		return errors.New("unauthorized: only templeadmin can create sevas")
 	}
 	seva.EntityID = entityID
 	return s.repo.CreateSeva(ctx, seva)
 }
 
 func (s *service) UpdateSeva(ctx context.Context, seva *Seva, userRole string, entityID uint) error {
-	if userRole != "tenant" {
-		return errors.New("unauthorized: only tenant can update sevas")
+	if userRole != "templeadmin" {
+		return errors.New("unauthorized: only templeadmin can update sevas")
 	}
 	seva.EntityID = entityID
 	return s.repo.UpdateSeva(ctx, seva)
 }
 
 func (s *service) DeleteSeva(ctx context.Context, sevaID uint, userRole string) error {
-	if userRole != "tenant" {
-		return errors.New("unauthorized: only tenant can delete sevas")
+	if userRole != "templeadmin" {
+		return errors.New("unauthorized: only templeadmin can delete sevas")
 	}
 	return s.repo.DeleteSeva(ctx, sevaID)
 }
@@ -59,6 +59,7 @@ func (s *service) GetSevasByEntity(ctx context.Context, entityID uint) ([]Seva, 
 func (s *service) GetSevaByID(ctx context.Context, id uint) (*Seva, error) {
 	return s.repo.GetSevaByID(ctx, id)
 }
+
 
 // Devotee only
 func (s *service) BookSeva(ctx context.Context, booking *SevaBooking, userRole string, userID uint, entityID uint) error {

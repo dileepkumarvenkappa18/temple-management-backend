@@ -3,6 +3,9 @@ package entity
 import (
 	"errors"
 	"strings"
+	"time"
+
+	"github.com/sharath018/temple-management-backend/internal/auth"
 )
 
 type Service struct {
@@ -13,15 +16,42 @@ func NewService(r *Repository) *Service {
 	return &Service{Repo: r}
 }
 
+var (
+	ErrMissingFields = errors.New("temple name and email are required")
+)
+
 // ========== ENTITY CORE ==========
 
-func (s *Service) CreateEntity(e *Entity) error {
-	if strings.TrimSpace(e.TempleName) == "" ||
-		strings.TrimSpace(e.EntityCode) == "" ||
-		strings.TrimSpace(e.Email) == "" {
-		return errors.New("temple name, code, and email are required")
+func (s *Service) CreateEntity(e *Entity, userID uint) error {
+	// Validate required fields
+	if strings.TrimSpace(e.Name) == "" || strings.TrimSpace(e.Email) == "" {
+		return ErrMissingFields
 	}
-	return s.Repo.CreateEntity(e)
+
+	now := time.Now()
+
+	// Populate required base fields
+	e.Status = "pending"
+	e.CreatedBy = userID
+	e.CreatedAt = now
+	e.UpdatedAt = now
+
+	// Save the entity
+	if err := s.Repo.CreateEntity(e); err != nil {
+		return err
+	}
+
+	// Create approval request
+	req := &auth.ApprovalRequest{
+		UserID:      userID,
+		EntityID:    &e.ID,
+		RequestType: "temple_approval",
+		Status:      "pending",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	return s.Repo.CreateApprovalRequest(req)
 }
 
 func (s *Service) GetAllEntities() ([]Entity, error) {
@@ -33,33 +63,10 @@ func (s *Service) GetEntityByID(id int) (Entity, error) {
 }
 
 func (s *Service) UpdateEntity(e Entity) error {
+	e.UpdatedAt = time.Now()
 	return s.Repo.UpdateEntity(e)
-}
-
-func (s *Service) ToggleEntityStatus(id int, isActive bool) error {
-	return s.Repo.ToggleEntityStatus(id, isActive)
 }
 
 func (s *Service) DeleteEntity(id int) error {
 	return s.Repo.DeleteEntity(id)
-}
-
-// ========== ADDRESS ==========
-
-func (s *Service) AddEntityAddress(addr EntityAddress) error {
-	return s.Repo.AddEntityAddress(addr)
-}
-
-func (s *Service) GetEntityAddress(entityID int) (EntityAddress, error) {
-	return s.Repo.GetEntityAddress(entityID)
-}
-
-// ========== DOCUMENTS ==========
-
-func (s *Service) AddEntityDocument(doc EntityDocument) error {
-	return s.Repo.AddEntityDocument(doc)
-}
-
-func (s *Service) GetEntityDocuments(entityID int) ([]EntityDocument, error) {
-	return s.Repo.GetEntityDocuments(entityID)
 }

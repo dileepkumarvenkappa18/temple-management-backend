@@ -40,8 +40,6 @@ func main() {
 	// 🔧 Auto-migrate Entity, Event, RSVP models
 	if err := db.AutoMigrate(
 		&entity.Entity{},
-		&entity.EntityAddress{},
-		&entity.EntityDocument{},
 		&event.Event{},
 		&eventrsvp.RSVP{}, // 🆕 Migrate RSVP model
 	); err != nil {

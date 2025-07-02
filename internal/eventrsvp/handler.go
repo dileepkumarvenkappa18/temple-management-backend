@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/event"
 )
 
@@ -22,9 +23,16 @@ func NewHandler(service *Service, eventService *event.Service) *Handler {
 
 // POST /event-rsvps/:eventID
 func (h *Handler) CreateRSVP(c *gin.Context) {
-	userData, _ := c.Get("user")
-	userMap := userData.(map[string]interface{})
-	userID := uint(userMap["user_id"].(float64))
+	userData, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
+	}
+	user, ok := userData.(auth.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user from context"})
+		return
+	}
 
 	eventID, err := strconv.Atoi(c.Param("eventID"))
 	if err != nil || eventID < 1 {
@@ -32,7 +40,7 @@ func (h *Handler) CreateRSVP(c *gin.Context) {
 		return
 	}
 
-	// 🔍 Check if event exists (via eventService)
+	// 🔍 Check if event exists
 	_, err = h.Service.EventService.GetEventByID(uint(eventID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Event not found"})
@@ -49,7 +57,7 @@ func (h *Handler) CreateRSVP(c *gin.Context) {
 	}
 
 	// 👇 Try update first
-	err = h.Service.UpdateRSVPStatus(uint(eventID), userID, req.Status, req.Notes)
+	err = h.Service.UpdateRSVPStatus(uint(eventID), user.ID, req.Status, req.Notes)
 	if err == nil {
 		c.JSON(http.StatusOK, gin.H{"message": "RSVP updated successfully"})
 		return
@@ -58,7 +66,7 @@ func (h *Handler) CreateRSVP(c *gin.Context) {
 	// 👇 Fallback: create new
 	rsvp := &RSVP{
 		EventID: uint(eventID),
-		UserID:  userID,
+		UserID:  user.ID,
 		Status:  req.Status,
 		Notes:   req.Notes,
 	}
@@ -71,14 +79,20 @@ func (h *Handler) CreateRSVP(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"message": "RSVP submitted successfully"})
 }
 
-
 // GET /event-rsvps/my
 func (h *Handler) GetMyRSVPs(c *gin.Context) {
-	userData, _ := c.Get("user")
-	userMap := userData.(map[string]interface{})
-	userID := userMap["user_id"].(float64)
+	userData, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
+	}
+	user, ok := userData.(auth.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user from context"})
+		return
+	}
 
-	rsvps, err := h.Service.GetMyRSVPs(uint(userID))
+	rsvps, err := h.Service.GetMyRSVPs(user.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get RSVPs"})
 		return

@@ -2,42 +2,27 @@ package middleware
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/sharath018/temple-management-backend/internal/auth"
 )
 
 func RBACMiddleware(allowedRoles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		claims, exists := c.Get("claims")
+		userVal, exists := c.Get("user")
 		if !exists {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
 			return
 		}
 
-		tokenClaims, ok := claims.(jwt.MapClaims)
+		user, ok := userVal.(auth.User)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid user object"})
 			return
 		}
 
-		roleIDFloat, ok := tokenClaims["role_id"].(float64)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "role missing in token"})
-			return
-		}
-
-		roleMap := map[int]string{
-			1: "superadmin",
-			2: "templeadmin",
-			3: "devotee",
-			4: "volunteer",
-		}
-		roleName := roleMap[int(roleIDFloat)]
-
-		for _, allowed := range allowedRoles {
-			if strings.ToLower(allowed) == roleName {
+		for _, role := range allowedRoles {
+			if user.Role.RoleName == role {
 				c.Next()
 				return
 			}

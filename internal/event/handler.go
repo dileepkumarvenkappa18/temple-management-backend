@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sharath018/temple-management-backend/internal/auth"
 )
 
 type Handler struct {
@@ -18,28 +19,22 @@ func NewHandler(s *Service) *Handler {
 
 // CreateEvent handles POST /events
 func (h *Handler) CreateEvent(c *gin.Context) {
-	userRaw, userOk := c.Get("user")
-	if !userOk {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized - user not found in context"})
+	userRaw, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found in context"})
 		return
 	}
 
-	userData, ok := userRaw.(map[string]interface{})
+	user, ok := userRaw.(auth.User) // ✅ use actual struct
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user token structure"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user in context"})
 		return
 	}
 
-	userIDRaw, ok1 := userData["user_id"]
-	entityIDRaw, ok2 := userData["tenant_id"]
-
-	if !ok1 || !ok2 || userIDRaw == nil || entityIDRaw == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id or tenant_id missing in token"})
+	if user.EntityID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "entity_id missing for user"})
 		return
 	}
-
-	userID := uint(userIDRaw.(float64))
-	entityID := uint(entityIDRaw.(float64))
 
 	var req Event
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -47,22 +42,25 @@ func (h *Handler) CreateEvent(c *gin.Context) {
 		return
 	}
 
-	// PATCH: Validate EventDate is not empty/default
 	if req.EventDate.IsZero() || req.EventDate.Before(time.Now().AddDate(-10, 0, 0)) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Event date is required and must be valid"})
 		return
 	}
 
-	req.CreatedBy = userID
-	req.EntityID = entityID
+	req.CreatedBy = user.ID
+	req.EntityID = *user.EntityID
 
 	if err := h.Service.CreateEvent(&req); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create event: " + err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "Event created successfully","event_id": req.ID})
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Event created successfully",
+		"event":   req,
+	})
 }
+
 
 // GetEventByID handles GET /events/:id
 func (h *Handler) GetEventByID(c *gin.Context) {
@@ -95,9 +93,9 @@ func (h *Handler) GetUpcomingEvents(c *gin.Context) {
 		return
 	}
 
-	entityIDRaw, exists := userMap["tenant_id"]
+	entityIDRaw, exists := userMap["entity_id"]
 	if !exists || entityIDRaw == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id missing in token"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "entity_id missing in token"})
 		return
 	}
 
@@ -126,9 +124,9 @@ func (h *Handler) ListEvents(c *gin.Context) {
 		return
 	}
 
-	entityIDRaw, exists := userMap["tenant_id"]
+	entityIDRaw, exists := userMap["entity_id"]
 	if !exists || entityIDRaw == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id missing in token"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "entity_id missing in token"})
 		return
 	}
 

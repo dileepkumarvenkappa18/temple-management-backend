@@ -2,11 +2,12 @@ package auth
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"golang.org/x/crypto/bcrypt"
 	"github.com/sharath018/temple-management-backend/config"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type TokenPair struct {
@@ -18,6 +19,8 @@ type Service interface {
 	Register(input RegisterInput) error
 	Login(input LoginInput) (*TokenPair, *User, error)
 	Refresh(refreshToken string) (string, error)
+	GetUserByID(userID uint) (User, error)
+	
 }
 
 type service struct {
@@ -50,30 +53,40 @@ type LoginInput struct {
 	Password string
 }
 
+
+
 func (s *service) Register(in RegisterInput) error {
-	role, err := s.repo.FindRoleByName(in.Role)
+	roleName := strings.ToLower(in.Role)
+	role, err := s.repo.FindRoleByName(roleName)
 	if err != nil {
 		return errors.New("invalid role")
 	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
+
+	status := "active"
+	if roleName == "templeadmin" {
+		status = "pending"
+	}
+
 	user := &User{
 		FullName:     in.FullName,
 		Email:        in.Email,
 		PasswordHash: string(hash),
 		RoleID:       role.ID,
+		Status:       status,
 	}
 
 	if err := s.repo.Create(user); err != nil {
 		return err
 	}
 
-	// ✅ Automatically create approval request for templeadmin
-	if in.Role == "templeadmin" {
-		err := s.repo.CreateApprovalRequest(user.ID, "entity")
-		if err != nil {
+	if roleName == "templeadmin" {
+		// ✅ FIXED: Correct approval request type
+		if err := s.repo.CreateApprovalRequest(user.ID, "tenant_approval"); err != nil {
 			return errors.New("failed to create approval request")
 		}
 	}
@@ -81,31 +94,42 @@ func (s *service) Register(in RegisterInput) error {
 	return nil
 }
 
+
 func (s *service) Login(in LoginInput) (*TokenPair, *User, error) {
 	user, err := s.repo.FindByEmail(in.Email)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(in.Password)) != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(in.Password)); err != nil {
 		return nil, nil, errors.New("invalid credentials")
 	}
 
-	// ✅ Only templeadmin requires approval
-	if user.Role.RoleName == "templeadmin" {
-		entityID, err := s.repo.FindEntityIDByUserID(user.ID)
-		if err != nil || entityID == nil {
-			return nil, nil, errors.New("your account is pending approval")
-		}
-		user.TenantID = entityID
+	switch user.Status {
+	case "pending":
+		return nil, nil, errors.New("your account is pending approval")
+	case "rejected":
+		return nil, nil, errors.New("your account was rejected by admin")
+	case "inactive":
+		return nil, nil, errors.New("your account is inactive")
 	}
 
+	// ✅ Templeadmin must have TenantID set after approval
+	if user.Role.RoleName == "templeadmin" && user.Status != "active" {
+    return nil, nil, errors.New("your account is pending approval by Super Admin")
+}
+
+
+
 	accessClaims := jwt.MapClaims{
-		"user_id":   user.ID,
-		"role_id":   user.RoleID,
-		"tenant_id": user.TenantID,
-		"exp":       time.Now().Add(s.accessTTL).Unix(),
-	}
+    "user_id": user.ID,
+    "role_id": user.RoleID,
+    "exp":     time.Now().Add(s.accessTTL).Unix(),
+}
+if user.EntityID != nil {
+    accessClaims["entity_id"] = *user.EntityID
+}
+
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
 	at, err := accessToken.SignedString([]byte(s.accessSecret))
 	if err != nil {
@@ -145,4 +169,8 @@ func (s *service) Refresh(refreshToken string) (string, error) {
 	}
 	newToken := jwt.NewWithClaims(jwt.SigningMethodHS256, newAccessClaims)
 	return newToken.SignedString([]byte(s.accessSecret))
+}
+
+func (s *service) GetUserByID(userID uint) (User, error) {
+	return s.repo.FindByID(userID)
 }
