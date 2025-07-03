@@ -114,21 +114,27 @@ func (s *service) Login(in LoginInput) (*TokenPair, *User, error) {
 		return nil, nil, errors.New("your account is inactive")
 	}
 
-	// ✅ Templeadmin must have TenantID set after approval
 	if user.Role.RoleName == "templeadmin" && user.Status != "active" {
-    return nil, nil, errors.New("your account is pending approval by Super Admin")
-}
+		return nil, nil, errors.New("your account is pending approval by Super Admin")
+	}
 
+	// ✅ Inject entity_id from membership/approval for devotee/volunteer/templeadmin
+	if user.EntityID == nil && (user.Role.RoleName == "templeadmin" || user.Role.RoleName == "devotee" || user.Role.RoleName == "volunteer") {
+		entityID, err := s.repo.FindEntityIDByUserID(user.ID)
+		if err == nil && entityID != nil {
+			user.EntityID = entityID
+		}
+	}
 
-
+	// ✅ Build access token with entity_id if available
 	accessClaims := jwt.MapClaims{
-    "user_id": user.ID,
-    "role_id": user.RoleID,
-    "exp":     time.Now().Add(s.accessTTL).Unix(),
-}
-if user.EntityID != nil {
-    accessClaims["entity_id"] = *user.EntityID
-}
+		"user_id": user.ID,
+		"role_id": user.RoleID,
+		"exp":     time.Now().Add(s.accessTTL).Unix(),
+	}
+	if user.EntityID != nil {
+		accessClaims["entity_id"] = *user.EntityID
+	}
 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
 	at, err := accessToken.SignedString([]byte(s.accessSecret))
@@ -136,6 +142,7 @@ if user.EntityID != nil {
 		return nil, nil, err
 	}
 
+	// ✅ Build refresh token
 	refreshClaims := jwt.MapClaims{
 		"user_id": user.ID,
 		"exp":     time.Now().Add(s.refreshTTL).Unix(),
@@ -151,6 +158,8 @@ if user.EntityID != nil {
 		RefreshToken: rt,
 	}, user, nil
 }
+
+
 
 func (s *service) Refresh(refreshToken string) (string, error) {
 	token, err := jwt.Parse(refreshToken, func(t *jwt.Token) (interface{}, error) {

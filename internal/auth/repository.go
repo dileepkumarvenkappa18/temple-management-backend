@@ -9,10 +9,16 @@ type Repository interface {
 	FindRoleByName(name string) (*UserRole, error)
 	FindEntityIDByUserID(userID uint) (*uint, error)
 	CreateApprovalRequest(userID uint, requestType string) error
+	UpdateEntityID(userID uint, entityID uint) error
+
 }
 
 
 type repository struct{ db *gorm.DB }
+
+func (r *repository) UpdateEntityID(userID uint, entityID uint) error {
+	return r.db.Model(&User{}).Where("id = ?", userID).Update("entity_id", entityID).Error
+}
 
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db}
@@ -36,19 +42,40 @@ func (r *repository) FindRoleByName(name string) (*UserRole, error) {
 
 // ✅ FIXED: Get the approved EntityID even if entity_id is NULL (temporary login allowed)
 func (r *repository) FindEntityIDByUserID(userID uint) (*uint, error) {
+	var entityID uint
+
+	// First: Check for templeadmin approved request
 	var req ApprovalRequest
 	err := r.db.
 		Where("user_id = ? AND status = ?", userID, "approved").
 		Order("id DESC").
 		First(&req).Error
 
-	if err != nil {
-		return nil, err
+	if err == nil && req.EntityID != nil {
+		return req.EntityID, nil
 	}
 
-	// Return pointer to entity ID (may still be nil if not created yet)
-	return req.EntityID, nil
+	// Second: Check for devotee/volunteer membership
+	type membership struct {
+		EntityID uint
+	}
+
+	var m membership
+	err = r.db.
+		Table("user_entity_memberships").
+		Select("entity_id").
+		Where("user_id = ?", userID).
+		Order("joined_at DESC").
+		First(&m).Error
+
+	if err == nil {
+		entityID = m.EntityID
+		return &entityID, nil
+	}
+
+	return nil, gorm.ErrRecordNotFound
 }
+
 
 // ✅ Used during templeadmin registration to create approval request
 func (r *repository) CreateApprovalRequest(userID uint, requestType string) error {

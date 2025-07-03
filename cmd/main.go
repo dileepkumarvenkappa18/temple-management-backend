@@ -10,6 +10,7 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/entity"
 	"github.com/sharath018/temple-management-backend/internal/event"
 	"github.com/sharath018/temple-management-backend/internal/eventrsvp"
+	"github.com/sharath018/temple-management-backend/internal/userprofile"
 	"github.com/sharath018/temple-management-backend/routes"
 )
 
@@ -42,6 +43,8 @@ func main() {
 		&entity.Entity{},
 		&event.Event{},
 		&eventrsvp.RSVP{}, // 🆕 Migrate RSVP model
+		&userprofile.DevoteeProfile{},
+		&userprofile.UserEntityMembership{},
 	); err != nil {
 		panic(fmt.Sprintf("❌ DB AutoMigrate failed: %v", err))
 	}

@@ -11,6 +11,8 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/seva"
 	"github.com/sharath018/temple-management-backend/internal/superadmin"
 	"github.com/sharath018/temple-management-backend/middleware"
+	"github.com/sharath018/temple-management-backend/internal/userprofile"
+
 
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -135,4 +137,23 @@ sevaRoutes.GET("/", sevaHandler.GetSevas) // Exposed to allow entity_id-based qu
 		rsvpRoutes.GET("/:eventID", middleware.RBACMiddleware("templeadmin"), rsvpHandler.GetRSVPsByEvent)
 		rsvpRoutes.GET("/my", middleware.RBACMiddleware("devotee", "volunteer"), rsvpHandler.GetMyRSVPs)
 	}
+
+// ========== User Profile & Membership ==========
+profileRepo := userprofile.NewRepository(database.DB)
+profileService := userprofile.NewService(profileRepo, authRepo)
+profileHandler := userprofile.NewHandler(profileService)
+
+profileRoutes := protected.Group("/profiles")
+{
+	profileRoutes.GET("/:userID", middleware.RBACMiddleware("devotee"), profileHandler.GetProfile)
+	profileRoutes.PUT("/:userID", middleware.RBACMiddleware("devotee"), profileHandler.CreateOrUpdateProfile)
+}
+
+membershipRoutes := protected.Group("/memberships")
+{
+	membershipRoutes.POST("/", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.JoinTemple)
+	membershipRoutes.GET("/", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.ListMemberships)
+}
+
+
 }
