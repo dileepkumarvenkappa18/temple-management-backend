@@ -6,46 +6,63 @@ import (
 	"gorm.io/gorm"
 )
 
-// UserRole maps to user_roles
+// UserRole represents the user_roles table
 type UserRole struct {
-	ID                  uint           `gorm:"primaryKey;autoIncrement"`
-	RoleName            string         `gorm:"size:50;unique;not null"` // tenant, devotee, volunteer, super_admin
-	Description         string         `gorm:"type:text"`
-	CanRegisterPublicly bool           `gorm:"default:true"`
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	ID                  uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	RoleName            string         `gorm:"size:50;unique;not null" json:"role_name"` // tenant, devotee, volunteer, super_admin
+	Description         string         `gorm:"type:text" json:"description"`
+	CanRegisterPublicly bool           `gorm:"default:true" json:"can_register_publicly"`
+	CreatedAt           time.Time      `json:"created_at"`
+	UpdatedAt           time.Time      `json:"updated_at"`
 }
 
-// User maps to users table
+// TableName overrides table name for UserRole
+func (UserRole) TableName() string {
+	return "user_roles"
+}
+
+// User represents the users table
 type User struct {
-	ID              uint           `gorm:"primaryKey;autoIncrement"`
-	FullName        string         `gorm:"size:255;not null"`
-	Email           string         `gorm:"size:255;unique;not null"`
-	PasswordHash    string         `gorm:"size:255;not null"`
-	Phone           *string        `gorm:"size:20"`
-	RoleID          uint           `gorm:"not null"`
-	Role            UserRole       `gorm:"foreignKey:RoleID;references:ID"`
-	EntityID        *uint          `gorm:"index"` // Optional: linked only after approval
-	Status          string         `gorm:"size:20;default:'active'"` // active, pending, rejected, inactive
-	EmailVerified   bool           `gorm:"default:false"`
-	EmailVerifiedAt *time.Time
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	DeletedAt       gorm.DeletedAt `gorm:"index"`
+	ID                    uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	FullName              string         `gorm:"size:255;not null" json:"full_name"`
+	Email                 string         `gorm:"size:255;unique;not null" json:"email"`
+	PasswordHash          string         `gorm:"size:255;not null" json:"-"`
+	Phone                 *string        `gorm:"size:20" json:"phone,omitempty"`
+	RoleID                uint           `gorm:"not null" json:"role_id"`
+	Role                  UserRole       `gorm:"foreignKey:RoleID;references:ID" json:"role"`
+	EntityID              *uint          `gorm:"index" json:"entity_id,omitempty"` // Set after approval
+	Status                string         `gorm:"size:20;default:'active'" json:"status"` // active, pending, rejected, inactive
+	EmailVerified         bool           `gorm:"default:false" json:"email_verified"`
+	EmailVerifiedAt       *time.Time     `json:"email_verified_at,omitempty"`
+	ForgotPasswordToken   *string        `gorm:"size:255" json:"-"`
+	ForgotPasswordExpiry  *time.Time     `json:"-"`
+	CreatedAt             time.Time      `json:"created_at"`
+	UpdatedAt             time.Time      `json:"updated_at"`
+	DeletedAt             gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-// ApprovalRequest maps to approval_requests
+// TableName overrides table name for User
+func (User) TableName() string {
+	return "users"
+}
+
+// ApprovalRequest represents approval_requests table
 type ApprovalRequest struct {
-	ID          uint           `gorm:"primaryKey;autoIncrement"`
-	UserID      uint           `gorm:"not null"`
-	User        User           `gorm:"foreignKey:UserID;references:ID"`
-	RequestType string         `gorm:"size:50;not null"` // tenant_approval, temple_approval
-	EntityID    *uint
-	Status      string         `gorm:"size:20;default:'pending'"` // pending, approved, rejected
-	AdminNotes  *string        `gorm:"type:text"`
-	ApprovedBy  *uint
-	ApprovedAt  *time.Time
-	RejectedAt  *time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID          uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID      uint       `gorm:"not null" json:"user_id"`
+	User        User       `gorm:"foreignKey:UserID;references:ID" json:"user"`
+	RequestType string     `gorm:"size:50;not null" json:"request_type"` // tenant_approval, temple_approval
+	EntityID    *uint      `json:"entity_id,omitempty"`
+	Status      string     `gorm:"size:20;default:'pending'" json:"status"` // pending, approved, rejected
+	AdminNotes  *string    `gorm:"type:text" json:"admin_notes,omitempty"`
+	ApprovedBy  *uint      `json:"approved_by,omitempty"`
+	ApprovedAt  *time.Time `json:"approved_at,omitempty"`
+	RejectedAt  *time.Time `json:"rejected_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+// TableName overrides table name for ApprovalRequest
+func (ApprovalRequest) TableName() string {
+	return "approval_requests"
 }

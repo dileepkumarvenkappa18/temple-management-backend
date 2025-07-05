@@ -33,11 +33,19 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	authHandler := auth.NewHandler(authSvc)
 
 	authGroup := api.Group("/auth")
-	{
-		authGroup.POST("/register", authHandler.Register)
-		authGroup.POST("/login", authHandler.Login)
-		authGroup.POST("/refresh", authHandler.Refresh)
-	}
+{
+	authGroup.POST("/register", authHandler.Register)
+	authGroup.POST("/login", authHandler.Login)
+	authGroup.POST("/refresh", authHandler.Refresh)
+
+	// ✅ NEW: Forgot/Reset/Logout
+	authGroup.POST("/forgot-password", authHandler.ForgotPassword)
+	authGroup.POST("/reset-password", authHandler.ResetPassword)
+
+	// Logout requires Auth Middleware to clear token from Redis
+	authGroup.POST("/logout", middleware.AuthMiddleware(cfg, authSvc), authHandler.Logout)
+}
+
 
 	protected := api.Group("/")
     protected.Use(middleware.AuthMiddleware(cfg, authSvc))

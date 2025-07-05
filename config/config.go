@@ -17,10 +17,15 @@ type Config struct {
 	DBPassword string
 	DBName     string
 
-	JWTAccessSecret      string
-	JWTRefreshSecret     string
-	JWTAccessTTLHours    int
-	JWTRefreshTTLHours   int
+	JWTAccessSecret    string
+	JWTRefreshSecret   string
+	JWTAccessTTLHours  int
+	JWTRefreshTTLHours int
+
+	// ✅ Redis Config
+	RedisAddr     string
+	RedisPassword string
+	RedisDB       int
 }
 
 func Load() *Config {
@@ -30,6 +35,7 @@ func Load() *Config {
 
 	accessTTL, _ := strconv.Atoi(os.Getenv("JWT_ACCESS_TTL_HOURS"))
 	refreshTTL, _ := strconv.Atoi(os.Getenv("JWT_REFRESH_TTL_HOURS"))
+	redisDB, _ := strconv.Atoi(os.Getenv("REDIS_DB"))
 
 	return &Config{
 		Port: os.Getenv("PORT"),
@@ -44,5 +50,9 @@ func Load() *Config {
 		JWTRefreshSecret:   os.Getenv("JWT_REFRESH_SECRET"),
 		JWTAccessTTLHours:  accessTTL,
 		JWTRefreshTTLHours: refreshTTL,
+
+		RedisAddr:     os.Getenv("REDIS_ADDR"),     // e.g., redis:6379
+		RedisPassword: os.Getenv("REDIS_PASSWORD"), // blank if none
+		RedisDB:       redisDB,                     // usually 0
 	}
 }

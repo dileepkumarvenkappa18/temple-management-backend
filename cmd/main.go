@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/config"
@@ -12,6 +13,7 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/eventrsvp"
 	"github.com/sharath018/temple-management-backend/internal/userprofile"
 	"github.com/sharath018/temple-management-backend/routes"
+	"github.com/sharath018/temple-management-backend/utils"
 )
 
 // @title           Temple Management API
@@ -29,6 +31,11 @@ import (
 func main() {
 	cfg := config.Load()
 	db := database.Connect(cfg)
+
+		// ✅ STEP: Init Redis 🔧
+	if err := utils.InitRedis(); err != nil {
+		log.Fatalf("❌ Redis init failed: %v", err)
+	}
 
 	// 🌱 Seed user roles and Super Admin
 	if err := auth.SeedUserRoles(db); err != nil {
