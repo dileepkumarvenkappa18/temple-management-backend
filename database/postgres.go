@@ -10,11 +10,11 @@ import (
 
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/internal/auth"
-	"github.com/sharath018/temple-management-backend/internal/seva"
 	"github.com/sharath018/temple-management-backend/internal/entity"
+	"github.com/sharath018/temple-management-backend/internal/seva"
 	// ADD THIS IMPORT at the top
-"github.com/sharath018/temple-management-backend/internal/event"
-
+	"github.com/sharath018/temple-management-backend/internal/donation"
+	"github.com/sharath018/temple-management-backend/internal/event"
 )
 
 var DB *gorm.DB
@@ -48,6 +48,7 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&seva.SevaBooking{},
 		&entity.Entity{},
 		&event.Event{}, // ✅ Add this line
+		&donation.Donation{}, // ✅ Add this line
 	); err != nil {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)
 	}

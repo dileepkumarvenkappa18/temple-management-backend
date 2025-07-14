@@ -10,13 +10,12 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/eventrsvp"
 	"github.com/sharath018/temple-management-backend/internal/seva"
 	"github.com/sharath018/temple-management-backend/internal/superadmin"
-	"github.com/sharath018/temple-management-backend/middleware"
 	"github.com/sharath018/temple-management-backend/internal/userprofile"
+	"github.com/sharath018/temple-management-backend/middleware"
 
-
+	_ "github.com/sharath018/temple-management-backend/docs"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-	_ "github.com/sharath018/temple-management-backend/docs"
 )
 
 func Setup(r *gin.Engine, cfg *config.Config) {
@@ -26,6 +25,7 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	api := r.Group("/api/v1")
+	api.Use(middleware.RateLimiterMiddleware()) // 🛡 Global rate limit: 5 req/sec per IP
 
 	// ========== Auth ==========
 	authRepo := auth.NewRepository(database.DB)
@@ -33,23 +33,21 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	authHandler := auth.NewHandler(authSvc)
 
 	authGroup := api.Group("/auth")
-{
-	authGroup.POST("/register", authHandler.Register)
-	authGroup.POST("/login", authHandler.Login)
-	authGroup.POST("/refresh", authHandler.Refresh)
+	{
+		authGroup.POST("/register", authHandler.Register)
+		authGroup.POST("/login", authHandler.Login)
+		authGroup.POST("/refresh", authHandler.Refresh)
 
-	// ✅ NEW: Forgot/Reset/Logout
-	authGroup.POST("/forgot-password", authHandler.ForgotPassword)
-	authGroup.POST("/reset-password", authHandler.ResetPassword)
+		// ✅ NEW: Forgot/Reset/Logout
+		authGroup.POST("/forgot-password", authHandler.ForgotPassword)
+		authGroup.POST("/reset-password", authHandler.ResetPassword)
 
-	// Logout requires Auth Middleware to clear token from Redis
-	authGroup.POST("/logout", middleware.AuthMiddleware(cfg, authSvc), authHandler.Logout)
-}
-
+		// Logout requires Auth Middleware to clear token from Redis
+		authGroup.POST("/logout", middleware.AuthMiddleware(cfg, authSvc), authHandler.Logout)
+	}
 
 	protected := api.Group("/")
-    protected.Use(middleware.AuthMiddleware(cfg, authSvc))
-
+	protected.Use(middleware.AuthMiddleware(cfg, authSvc))
 
 	// Dashboards
 	protected.GET("/superadmin/dashboard", middleware.RBACMiddleware("superadmin"), func(c *gin.Context) {
@@ -70,55 +68,53 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	superadminService := superadmin.NewService(superadminRepo)
 	superadminHandler := superadmin.NewHandler(superadminService)
 
-	superadminRoutes := protected.Group("/superadmin")
-	superadminRoutes.Use(middleware.RBACMiddleware("superadmin"))
-	{
-		// TENANT APPROVAL
-		superadminRoutes.GET("/tenants/pending", superadminHandler.GetPendingTenants)
-		superadminRoutes.POST("/tenants/:id/approve", superadminHandler.ApproveTenant)
-		superadminRoutes.POST("/tenants/:id/reject", superadminHandler.RejectTenant)
+superadminRoutes := protected.Group("/superadmin")
+superadminRoutes.Use(middleware.RBACMiddleware("superadmin"))
+{
+	// 🔁 Paginated list of all tenants with optional ?status=pending&limit=10&page=1
+	superadminRoutes.GET("/tenants", superadminHandler.GetTenantsWithFilters)
+	superadminRoutes.PATCH("/tenants/:id/approval", superadminHandler.UpdateTenantApprovalStatus)
 
-		// ENTITY APPROVAL
-		superadminRoutes.GET("/entities/pending", superadminHandler.GetPendingEntities)
-		superadminRoutes.POST("/entities/:id/approve", superadminHandler.ApproveEntity)
-		superadminRoutes.POST("/entities/:id/reject", superadminHandler.RejectEntity)
-	}
+	// 🔁 Paginated list of entities with optional ?status=pending&limit=10&page=1
+	superadminRoutes.GET("/entities", superadminHandler.GetEntitiesWithFilters)
+	superadminRoutes.PATCH("/entities/:id/approval", superadminHandler.UpdateEntityApprovalStatus)
+}
+
+
 
 	// ========== Seva ==========
 	sevaRepo := seva.NewRepository(database.DB)
-sevaService := seva.NewService(sevaRepo)
-sevaHandler := seva.NewHandler(sevaService)
+	sevaService := seva.NewService(sevaRepo)
+	sevaHandler := seva.NewHandler(sevaService)
 
-sevaRoutes := protected.Group("/sevas")
+	sevaRoutes := protected.Group("/sevas")
 
-// 🔐 Temple Admin Only
-sevaRoutes.POST("/", middleware.RBACMiddleware("templeadmin"), sevaHandler.CreateSeva)
-sevaRoutes.GET("/entity-bookings", middleware.RBACMiddleware("templeadmin"), sevaHandler.GetEntityBookings)
-sevaRoutes.PATCH("/bookings/:id/status", middleware.RBACMiddleware("templeadmin"), sevaHandler.UpdateBookingStatus)
+	// 🔐 Temple Admin Only
+	sevaRoutes.POST("/", middleware.RBACMiddleware("templeadmin"), sevaHandler.CreateSeva)
+	sevaRoutes.GET("/entity-bookings", middleware.RBACMiddleware("templeadmin"), sevaHandler.GetEntityBookings)
+	sevaRoutes.PATCH("/bookings/:id/status", middleware.RBACMiddleware("templeadmin"), sevaHandler.UpdateBookingStatus)
 
-// 🔐 Devotee Only
-sevaRoutes.POST("/bookings", middleware.RBACMiddleware("devotee"), sevaHandler.BookSeva)
-sevaRoutes.GET("/my-bookings", middleware.RBACMiddleware("devotee"), sevaHandler.GetMyBookings)
-sevaRoutes.PATCH("/bookings/:id/cancel", middleware.RBACMiddleware("devotee"), sevaHandler.CancelBooking)
+	// 🔐 Devotee Only
+	sevaRoutes.POST("/bookings", middleware.RBACMiddleware("devotee"), sevaHandler.BookSeva)
+	sevaRoutes.GET("/my-bookings", middleware.RBACMiddleware("devotee"), sevaHandler.GetMyBookings)
+	sevaRoutes.PATCH("/bookings/:id/cancel", middleware.RBACMiddleware("devotee"), sevaHandler.CancelBooking)
 
-// 🌐 Public or All Authenticated Users
-sevaRoutes.GET("/", sevaHandler.GetSevas) // Exposed to allow entity_id-based querying
-
+	// 🌐 Public or All Authenticated Users
+	sevaRoutes.GET("/", sevaHandler.GetSevas) // Exposed to allow entity_id-based querying
 
 	// ========== Entity ==========
-{
-	entityRepo := entity.NewRepository(database.DB)
-	entityService := entity.NewService(entityRepo)
-	entityHandler := entity.NewHandler(entityService)
+	{
+		entityRepo := entity.NewRepository(database.DB)
+		entityService := entity.NewService(entityRepo)
+		entityHandler := entity.NewHandler(entityService)
 
-	entityRoutes := protected.Group("/entities")
-	entityRoutes.POST("/", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.CreateEntity)
-	entityRoutes.GET("/", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.GetAllEntities)
-	entityRoutes.GET("/:id", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.GetEntityByID)
-	entityRoutes.PUT("/:id", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.UpdateEntity)
-	entityRoutes.DELETE("/:id", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.DeleteEntity)
-}
-
+		entityRoutes := protected.Group("/entities")
+		entityRoutes.POST("/", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.CreateEntity)
+		entityRoutes.GET("/", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.GetAllEntities)
+		entityRoutes.GET("/:id", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.GetEntityByID)
+		entityRoutes.PUT("/:id", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.UpdateEntity)
+		entityRoutes.DELETE("/:id", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.DeleteEntity)
+	}
 
 	// ========== Event & RSVP ==========
 	eventRepo := event.NewRepository(database.DB)
@@ -142,26 +138,25 @@ sevaRoutes.GET("/", sevaHandler.GetSevas) // Exposed to allow entity_id-based qu
 
 		rsvpRoutes := protected.Group("/event-rsvps")
 		rsvpRoutes.POST("/:eventID", middleware.RBACMiddleware("devotee", "volunteer"), rsvpHandler.CreateRSVP)
-		rsvpRoutes.GET("/:eventID", middleware.RBACMiddleware("templeadmin"), rsvpHandler.GetRSVPsByEvent)
+		rsvpRoutes.GET("/:eventID", middleware.RBACMiddleware("devotee"), rsvpHandler.GetRSVPsByEvent)
 		rsvpRoutes.GET("/my", middleware.RBACMiddleware("devotee", "volunteer"), rsvpHandler.GetMyRSVPs)
 	}
 
-// ========== User Profile & Membership ==========
-profileRepo := userprofile.NewRepository(database.DB)
-profileService := userprofile.NewService(profileRepo, authRepo)
-profileHandler := userprofile.NewHandler(profileService)
+	// ========== User Profile & Membership ==========
+	profileRepo := userprofile.NewRepository(database.DB)
+	profileService := userprofile.NewService(profileRepo, authRepo)
+	profileHandler := userprofile.NewHandler(profileService)
 
-profileRoutes := protected.Group("/profiles")
-{
-	profileRoutes.GET("/:userID", middleware.RBACMiddleware("devotee"), profileHandler.GetProfile)
-	profileRoutes.PUT("/:userID", middleware.RBACMiddleware("devotee"), profileHandler.CreateOrUpdateProfile)
-}
+	profileRoutes := protected.Group("/profiles")
+	{
+		profileRoutes.GET("/:userID", middleware.RBACMiddleware("devotee"), profileHandler.GetProfile)
+		profileRoutes.PUT("/:userID", middleware.RBACMiddleware("devotee"), profileHandler.CreateOrUpdateProfile)
+	}
 
-membershipRoutes := protected.Group("/memberships")
-{
-	membershipRoutes.POST("/", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.JoinTemple)
-	membershipRoutes.GET("/", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.ListMemberships)
-}
-
+	membershipRoutes := protected.Group("/memberships")
+	{
+		membershipRoutes.POST("/", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.JoinTemple)
+		membershipRoutes.GET("/", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.ListMemberships)
+	}
 
 }

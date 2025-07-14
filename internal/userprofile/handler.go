@@ -70,17 +70,26 @@ func (h *Handler) CreateOrUpdateProfile(c *gin.Context) {
 // ===========================
 
 // POST /memberships
+// POST /memberships
 func (h *Handler) JoinTemple(c *gin.Context) {
 	var input struct {
-		UserID   uint `json:"user_id" binding:"required"`
 		EntityID uint `json:"entity_id" binding:"required"`
 	}
+
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
 		return
 	}
 
-	membership, err := h.service.JoinTemple(input.UserID, input.EntityID)
+	// ✅ Extract user ID from token (middleware must set it via `c.Set("user_id", userID)`)
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	userID := userIDVal.(uint)
+
+	membership, err := h.service.JoinTemple(userID, input.EntityID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not join temple"})
 		return
@@ -88,6 +97,7 @@ func (h *Handler) JoinTemple(c *gin.Context) {
 
 	c.JSON(http.StatusOK, membership)
 }
+
 
 // GET /memberships?user_id=1
 func (h *Handler) ListMemberships(c *gin.Context) {

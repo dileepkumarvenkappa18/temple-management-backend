@@ -26,6 +26,10 @@ type Config struct {
 	RedisAddr     string
 	RedisPassword string
 	RedisDB       int
+
+			// ✅ Razorpay Keys
+	RazorpayKey    string
+	RazorpaySecret string
 }
 
 func Load() *Config {
@@ -54,5 +58,9 @@ func Load() *Config {
 		RedisAddr:     os.Getenv("REDIS_ADDR"),     // e.g., redis:6379
 		RedisPassword: os.Getenv("REDIS_PASSWORD"), // blank if none
 		RedisDB:       redisDB,                     // usually 0
+
+			// ✅ Razorpay fields loaded
+	RazorpayKey:    os.Getenv("RAZORPAY_KEY_ID"),
+	RazorpaySecret: os.Getenv("RAZORPAY_KEY_SECRET"),
 	}
 }
