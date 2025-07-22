@@ -1,6 +1,9 @@
 package event
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 // Service wraps business logic for temple events
 type Service struct {
@@ -15,21 +18,39 @@ func NewService(r *Repository) *Service {
 // ===========================
 // 🎯 Create Event
 func (s *Service) CreateEvent(req *CreateEventRequest, createdBy uint, entityID uint) error {
+	// 🔄 Parse EventDate
+	eventDate, err := time.Parse("2006-01-02", req.EventDate)
+	if err != nil {
+		return errors.New("invalid event_date format. Use YYYY-MM-DD")
+	}
+
+	// 🔄 Parse EventTime (optional)
+	var eventTimePtr *time.Time
+	if req.EventTime != "" {
+		parsedTime, err := time.Parse("15:04", req.EventTime)
+		if err != nil {
+			return errors.New("invalid event_time format. Use HH:MM in 24-hour format")
+		}
+		normalizedTime := time.Date(0, 1, 1, parsedTime.Hour(), parsedTime.Minute(), 0, 0, time.UTC)
+		eventTimePtr = &normalizedTime
+	}
+
+	// 🛡 Handle optional IsActive safely
+	isActive := true
+	if req.IsActive != nil {
+		isActive = *req.IsActive
+	}
+
 	event := &Event{
-		Title:                req.Title,
-		Description:          req.Description,
-		EventDate:            req.EventDate,
-		EventTime:            req.EventTime,
-		EndDate:              req.EndDate,
-		EndTime:              req.EndTime,
-		Location:             req.Location,
-		ImageURL:             req.ImageURL,
-		MaxAttendees:         req.MaxAttendees,
-		RegistrationRequired: req.RegistrationRequired,
-		Category:             req.Category, // ✅ added
-		IsActive:             true,
-		CreatedBy:            createdBy,
-		EntityID:             entityID,
+		Title:       req.Title,
+		Description: req.Description,
+		EventDate:   eventDate,
+		EventTime:   eventTimePtr,
+		Location:    req.Location,
+		EventType:   req.EventType,
+		IsActive:    isActive,
+		CreatedBy:   createdBy,
+		EntityID:    entityID,
 	}
 
 	return s.Repo.CreateEvent(event)
@@ -49,7 +70,6 @@ func (s *Service) GetEventByID(id uint) (*Event, error) {
 	return event, nil
 }
 
-
 // ===========================
 // 📆 Get Upcoming Events
 func (s *Service) GetUpcomingEvents(entityID uint) ([]Event, error) {
@@ -58,28 +78,29 @@ func (s *Service) GetUpcomingEvents(entityID uint) ([]Event, error) {
 
 // ===========================
 // 📄 List Events with Pagination
-// 📄 List Events with Pagination + Filters
-func (s *Service) ListEventsByEntity(entityID uint, limit, offset int, category, search, status string) ([]Event, error) {
-	events, err := s.Repo.ListEventsByEntity(entityID, limit, offset, category, search, status)
+func (s *Service) ListEventsByEntity(entityID uint, limit, offset int, search string) ([]Event, error) {
+	events, err := s.Repo.ListEventsByEntity(entityID, limit, offset, search)
 	if err != nil {
 		return nil, err
 	}
 
 	for i := range events {
-		count, _ := s.Repo.CountRSVPs(events[i].ID) // ignore error for now
+		count, _ := s.Repo.CountRSVPs(events[i].ID)
 		events[i].RSVPCount = count
 	}
 
 	return events, nil
 }
 
-
-
+// ===========================
+// 📊 Dashboard Stats
+func (s *Service) GetEventStats(entityID uint) (*EventStatsResponse, error) {
+	return s.Repo.GetEventStats(entityID)
+}
 
 // ===========================
 // 🛠 Update Event (with ownership check)
 func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, entityID uint) error {
-	// Ensure ownership
 	event, err := s.Repo.GetEventByID(id)
 	if err != nil {
 		return err
@@ -88,18 +109,31 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, entityID uint) e
 		return errors.New("unauthorized: cannot update this event")
 	}
 
-	// ✅ update with category support
+	// 🔄 Update fields
 	event.Title = req.Title
 	event.Description = req.Description
-	event.EventDate = req.EventDate
-	event.EventTime = req.EventTime
-	event.EndDate = req.EndDate
-	event.EndTime = req.EndTime
+
+	// 🔄 Parse EventDate
+	eventDate, err := time.Parse("2006-01-02", req.EventDate)
+	if err != nil {
+		return errors.New("invalid event_date format. Use YYYY-MM-DD")
+	}
+	event.EventDate = eventDate
+
+	// 🔄 Parse EventTime
+	if req.EventTime != "" {
+		parsedTime, err := time.Parse("15:04", req.EventTime)
+		if err != nil {
+			return errors.New("invalid event_time format. Use HH:MM in 24-hour format")
+		}
+		normalizedTime := time.Date(0, 1, 1, parsedTime.Hour(), parsedTime.Minute(), 0, 0, time.UTC)
+		event.EventTime = &normalizedTime
+	} else {
+		event.EventTime = nil
+	}
+
 	event.Location = req.Location
-	event.ImageURL = req.ImageURL
-	event.MaxAttendees = req.MaxAttendees
-	event.RegistrationRequired = req.RegistrationRequired
-	event.Category = req.Category
+	event.EventType = req.EventType
 
 	if req.IsActive != nil {
 		event.IsActive = *req.IsActive

@@ -14,6 +14,8 @@ type Repository interface {
 	FindEntityIDByUserID(userID uint) (*uint, error)
 	CreateApprovalRequest(userID uint, requestType string) error
 	UpdateEntityID(userID uint, entityID uint) error
+	GetUserEmailsByRole(roleName string, entityID uint) ([]string, error)
+
 
 	// ✅ NEW for Forgot Password
 	SetForgotPasswordToken(userID uint, token string, expiry time.Time) error
@@ -102,6 +104,22 @@ func (r *repository) UpdateEntityID(userID uint, entityID uint) error {
 	return r.db.Model(&User{}).Where("id = ?", userID).Update("entity_id", entityID).Error
 }
 
+
+// ✅ GetUserEmailsByRole fetches all user emails by role and entity
+func (r *repository) GetUserEmailsByRole(roleName string, entityID uint) ([]string, error) {
+	var emails []string
+
+	err := r.db.
+		Table("users").
+		Select("email").
+		Joins("JOIN user_roles ON users.role_id = user_roles.id").
+		Where("user_roles.role_name = ? AND users.entity_id = ? AND users.status = ?", roleName, entityID, "active").
+		Scan(&emails).Error
+
+	return emails, err
+}
+
+
 // ✅ Set Forgot Password Token and expiry
 func (r *repository) SetForgotPasswordToken(userID uint, token string, expiry time.Time) error {
 	return r.db.Model(&User{}).Where("id = ?", userID).Updates(map[string]interface{}{
@@ -130,4 +148,3 @@ func (r *repository) ClearResetToken(userID uint) error {
 func (r *repository) Update(user *User) error {
 	return r.db.Save(user).Error
 }
-

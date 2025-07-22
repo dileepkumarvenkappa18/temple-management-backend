@@ -2,37 +2,35 @@ package userprofile
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sharath018/temple-management-backend/internal/auth"
 )
 
-// Handler struct
+
+
 type Handler struct {
 	service Service
 }
 
-// NewHandler creates a new Handler
 func NewHandler(s Service) *Handler {
-	return &Handler{
-		service: s,
-	}
+	return &Handler{service: s}
 }
 
 // ===========================
 // 🔹 PROFILE ENDPOINTS
 // ===========================
 
-// GET /profiles/:userID
-func (h *Handler) GetProfile(c *gin.Context) {
-	userIDParam := c.Param("userID")
-	userID, err := strconv.Atoi(userIDParam)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+// GET /profiles/me
+func (h *Handler) GetMyProfile(c *gin.Context) {
+	user, ok := c.Get("user")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
 		return
 	}
+	currentUser := user.(auth.User)
 
-	profile, err := h.service.Get(uint(userID))
+	profile, err := h.service.Get(currentUser.ID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Profile not found"})
 		return
@@ -41,22 +39,28 @@ func (h *Handler) GetProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, profile)
 }
 
-// PUT /profiles/:userID
+// POST /profiles
 func (h *Handler) CreateOrUpdateProfile(c *gin.Context) {
-	userIDParam := c.Param("userID")
-	userID, err := strconv.Atoi(userIDParam)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+	user, ok := c.Get("user")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
 		return
 	}
+	currentUser := user.(auth.User)
 
-	var dto CreateOrUpdateProfileDTO
-	if err := c.ShouldBindJSON(&dto); err != nil {
+	if currentUser.EntityID == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Entity ID missing"})
+		return
+	}
+	entityID := *currentUser.EntityID
+
+	var input DevoteeProfileInput
+	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
 		return
 	}
 
-	profile, err := h.service.CreateOrUpdateProfile(uint(userID), dto)
+	profile, err := h.service.CreateOrUpdateProfile(currentUser.ID, entityID, input)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not save profile"})
 		return
@@ -70,26 +74,23 @@ func (h *Handler) CreateOrUpdateProfile(c *gin.Context) {
 // ===========================
 
 // POST /memberships
-// POST /memberships
 func (h *Handler) JoinTemple(c *gin.Context) {
+	user, ok := c.Get("user")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
+	}
+	currentUser := user.(auth.User)
+
 	var input struct {
 		EntityID uint `json:"entity_id" binding:"required"`
 	}
-
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
 		return
 	}
 
-	// ✅ Extract user ID from token (middleware must set it via `c.Set("user_id", userID)`)
-	userIDVal, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
-	userID := userIDVal.(uint)
-
-	membership, err := h.service.JoinTemple(userID, input.EntityID)
+	membership, err := h.service.JoinTemple(currentUser.ID, input.EntityID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not join temple"})
 		return
@@ -98,17 +99,16 @@ func (h *Handler) JoinTemple(c *gin.Context) {
 	c.JSON(http.StatusOK, membership)
 }
 
-
-// GET /memberships?user_id=1
+// GET /memberships
 func (h *Handler) ListMemberships(c *gin.Context) {
-	userIDStr := c.Query("user_id")
-	userID, err := strconv.Atoi(userIDStr)
-	if err != nil || userID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or missing user_id"})
+	user, ok := c.Get("user")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
 		return
 	}
+	currentUser := user.(auth.User)
 
-	memberships, err := h.service.ListMemberships(uint(userID))
+	memberships, err := h.service.ListMemberships(currentUser.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch memberships"})
 		return

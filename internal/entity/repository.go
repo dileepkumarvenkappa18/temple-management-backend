@@ -17,31 +17,38 @@ func NewRepository(db *gorm.DB) *Repository {
 
 // ========== ENTITY CORE ==========
 
+// Create a new temple entity
 func (r *Repository) CreateEntity(e *Entity) error {
 	return r.DB.Create(e).Error
 }
 
+// Create an approval request for the temple (linked to auth module)
 func (r *Repository) CreateApprovalRequest(req *auth.ApprovalRequest) error {
 	return r.DB.Create(req).Error
 }
 
+// Fetch all temple entities (ordered by most recent)
 func (r *Repository) GetAllEntities() ([]Entity, error) {
 	var entities []Entity
-	err := r.DB.Find(&entities).Error
+	err := r.DB.Order("created_at DESC").Find(&entities).Error
 	return entities, err
 }
 
+// Fetch a single temple entity by ID
 func (r *Repository) GetEntityByID(id int) (Entity, error) {
-	var e Entity
-	err := r.DB.First(&e, id).Error
-	return e, err
+	var entity Entity
+	err := r.DB.First(&entity, id).Error
+	return entity, err
 }
 
+// Update an existing temple entity
 func (r *Repository) UpdateEntity(e Entity) error {
 	e.UpdatedAt = time.Now()
 	return r.DB.Model(&Entity{}).Where("id = ?", e.ID).Updates(e).Error
 }
 
+// Delete a temple entity by ID
 func (r *Repository) DeleteEntity(id int) error {
 	return r.DB.Delete(&Entity{}, id).Error
 }
+

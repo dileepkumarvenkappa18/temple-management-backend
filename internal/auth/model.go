@@ -22,24 +22,26 @@ func (UserRole) TableName() string {
 }
 
 // User represents the users table
+// User represents the users table
 type User struct {
-	ID                    uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	FullName              string         `gorm:"size:255;not null" json:"full_name"`
-	Email                 string         `gorm:"size:255;unique;not null" json:"email"`
-	PasswordHash          string         `gorm:"size:255;not null" json:"-"`
-	Phone                 *string        `gorm:"size:20" json:"phone,omitempty"`
-	RoleID                uint           `gorm:"not null" json:"role_id"`
-	Role                  UserRole       `gorm:"foreignKey:RoleID;references:ID" json:"role"`
-	EntityID              *uint          `gorm:"index" json:"entity_id,omitempty"` // Set after approval
-	Status                string         `gorm:"size:20;default:'active'" json:"status"` // active, pending, rejected, inactive
-	EmailVerified         bool           `gorm:"default:false" json:"email_verified"`
-	EmailVerifiedAt       *time.Time     `json:"email_verified_at,omitempty"`
-	ForgotPasswordToken   *string        `gorm:"size:255" json:"-"`
-	ForgotPasswordExpiry  *time.Time     `json:"-"`
-	CreatedAt             time.Time      `json:"created_at"`
-	UpdatedAt             time.Time      `json:"updated_at"`
-	DeletedAt             gorm.DeletedAt `gorm:"index" json:"-"`
+	ID                   uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	FullName             string         `gorm:"size:255;not null" json:"full_name"`
+	Email                string         `gorm:"size:255;unique;not null" json:"email"`
+	PasswordHash         string         `gorm:"size:255;not null" json:"-"`
+	Phone                string         `gorm:"size:20;not null" json:"phone"` // ✅ updated
+	RoleID               uint           `gorm:"not null" json:"role_id"`
+	Role                 UserRole       `gorm:"foreignKey:RoleID;references:ID" json:"role"`
+	EntityID             *uint          `gorm:"index" json:"entity_id,omitempty"`
+	Status               string         `gorm:"size:20;default:'active'" json:"status"` // active, pending, rejected, inactive
+	EmailVerified        bool           `gorm:"default:false" json:"email_verified"`
+	EmailVerifiedAt      *time.Time     `json:"email_verified_at,omitempty"`
+	ForgotPasswordToken  *string        `gorm:"size:255" json:"-"`
+	ForgotPasswordExpiry *time.Time     `json:"-"`
+	CreatedAt            time.Time      `json:"created_at"`
+	UpdatedAt            time.Time      `json:"updated_at"`
+	DeletedAt            gorm.DeletedAt `gorm:"index" json:"-"`
 }
+
 
 // TableName overrides table name for User
 func (User) TableName() string {

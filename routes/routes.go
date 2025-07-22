@@ -5,9 +5,11 @@ import (
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/database"
 	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/internal/donation"
 	"github.com/sharath018/temple-management-backend/internal/entity"
 	"github.com/sharath018/temple-management-backend/internal/event"
 	"github.com/sharath018/temple-management-backend/internal/eventrsvp"
+	"github.com/sharath018/temple-management-backend/internal/notification"
 	"github.com/sharath018/temple-management-backend/internal/seva"
 	"github.com/sharath018/temple-management-backend/internal/superadmin"
 	"github.com/sharath018/temple-management-backend/internal/userprofile"
@@ -68,20 +70,19 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	superadminService := superadmin.NewService(superadminRepo)
 	superadminHandler := superadmin.NewHandler(superadminService)
 
-superadminRoutes := protected.Group("/superadmin")
-superadminRoutes.Use(middleware.RBACMiddleware("superadmin"))
-{
-	// 🔁 Paginated list of all tenants with optional ?status=pending&limit=10&page=1
-	superadminRoutes.GET("/tenants", superadminHandler.GetTenantsWithFilters)
-	superadminRoutes.PATCH("/tenants/:id/approval", superadminHandler.UpdateTenantApprovalStatus)
+	superadminRoutes := protected.Group("/superadmin")
+	superadminRoutes.Use(middleware.RBACMiddleware("superadmin"))
+	{
+		// 🔁 Paginated list of all tenants with optional ?status=pending&limit=10&page=1
+		superadminRoutes.GET("/tenants", superadminHandler.GetTenantsWithFilters)
+		superadminRoutes.PATCH("/tenants/:id/approval", superadminHandler.UpdateTenantApprovalStatus)
 
-	// 🔁 Paginated list of entities with optional ?status=pending&limit=10&page=1
-	superadminRoutes.GET("/entities", superadminHandler.GetEntitiesWithFilters)
-	superadminRoutes.PATCH("/entities/:id/approval", superadminHandler.UpdateEntityApprovalStatus)
-}
+		// 🔁 Paginated list of entities with optional ?status=pending&limit=10&page=1
+		superadminRoutes.GET("/entities", superadminHandler.GetEntitiesWithFilters)
+		superadminRoutes.PATCH("/entities/:id/approval", superadminHandler.UpdateEntityApprovalStatus)
+	}
 
-
-
+	// ========== Seva ==========
 	// ========== Seva ==========
 	sevaRepo := seva.NewRepository(database.DB)
 	sevaService := seva.NewService(sevaRepo)
@@ -89,18 +90,19 @@ superadminRoutes.Use(middleware.RBACMiddleware("superadmin"))
 
 	sevaRoutes := protected.Group("/sevas")
 
-	// 🔐 Temple Admin Only
+	// 🔐 Temple Admin Only (Entity Seva Management)
 	sevaRoutes.POST("/", middleware.RBACMiddleware("templeadmin"), sevaHandler.CreateSeva)
 	sevaRoutes.GET("/entity-bookings", middleware.RBACMiddleware("templeadmin"), sevaHandler.GetEntityBookings)
 	sevaRoutes.PATCH("/bookings/:id/status", middleware.RBACMiddleware("templeadmin"), sevaHandler.UpdateBookingStatus)
+	sevaRoutes.GET("/bookings/:id", middleware.RBACMiddleware("templeadmin"), sevaHandler.GetBookingByID)
+	sevaRoutes.GET("/booking-counts", middleware.RBACMiddleware("templeadmin"), sevaHandler.GetBookingCounts)
 
-	// 🔐 Devotee Only
+	// 🔐 Devotee Only (Booking Seva + Filters)
 	sevaRoutes.POST("/bookings", middleware.RBACMiddleware("devotee"), sevaHandler.BookSeva)
 	sevaRoutes.GET("/my-bookings", middleware.RBACMiddleware("devotee"), sevaHandler.GetMyBookings)
-	sevaRoutes.PATCH("/bookings/:id/cancel", middleware.RBACMiddleware("devotee"), sevaHandler.CancelBooking)
 
-	// 🌐 Public or All Authenticated Users
-	sevaRoutes.GET("/", sevaHandler.GetSevas) // Exposed to allow entity_id-based querying
+	// 🔍 Devotee View: Paginated & Filterable Sevas
+	sevaRoutes.GET("/", middleware.RBACMiddleware("devotee"), sevaHandler.GetSevas) // Now secured for devotee search
 
 	// ========== Entity ==========
 	{
@@ -114,6 +116,8 @@ superadminRoutes.Use(middleware.RBACMiddleware("superadmin"))
 		entityRoutes.GET("/:id", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.GetEntityByID)
 		entityRoutes.PUT("/:id", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.UpdateEntity)
 		entityRoutes.DELETE("/:id", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.DeleteEntity)
+
+
 	}
 
 	// ========== Event & RSVP ==========
@@ -121,15 +125,12 @@ superadminRoutes.Use(middleware.RBACMiddleware("superadmin"))
 	eventService := event.NewService(eventRepo)
 	eventHandler := event.NewHandler(eventService)
 
-	{
-		eventRoutes := protected.Group("/events")
-		eventRoutes.POST("/", middleware.RBACMiddleware("templeadmin"), eventHandler.CreateEvent)
-		eventRoutes.GET("/", eventHandler.ListEvents)
-		eventRoutes.GET("/upcoming", eventHandler.GetUpcomingEvents)
-		eventRoutes.GET("/:id", eventHandler.GetEventByID)
-		eventRoutes.PUT("/:id", middleware.RBACMiddleware("templeadmin"), eventHandler.UpdateEvent)
-		eventRoutes.DELETE("/:id", middleware.RBACMiddleware("templeadmin"), eventHandler.DeleteEvent)
-	}
+	eventRoutes := protected.Group("/events", middleware.RBACMiddleware("templeadmin"))
+	eventRoutes.POST("/", eventHandler.CreateEvent)
+	eventRoutes.GET("/", eventHandler.ListEvents)
+	eventRoutes.GET("/upcoming", eventHandler.GetUpcomingEvents)
+	eventRoutes.GET("/:id", eventHandler.GetEventByID)
+	eventRoutes.GET("/stats", eventHandler.GetEventStats)
 
 	{
 		rsvpRepo := eventrsvp.NewRepository(database.DB)
@@ -149,8 +150,11 @@ superadminRoutes.Use(middleware.RBACMiddleware("superadmin"))
 
 	profileRoutes := protected.Group("/profiles")
 	{
-		profileRoutes.GET("/:userID", middleware.RBACMiddleware("devotee"), profileHandler.GetProfile)
-		profileRoutes.PUT("/:userID", middleware.RBACMiddleware("devotee"), profileHandler.CreateOrUpdateProfile)
+		profileRoutes.GET("/me", middleware.RBACMiddleware("devotee"), profileHandler.GetMyProfile)
+		profileRoutes.POST("/", middleware.RBACMiddleware("devotee"), profileHandler.CreateOrUpdateProfile)
+		profileRoutes.PUT("/", middleware.RBACMiddleware("devotee"), profileHandler.CreateOrUpdateProfile)
+		// 		profileRoutes.GET("/:id/devotees", middleware.RBACMiddleware("templeadmin"), profileHandler.GetDevoteesByTemple)
+		// profileRoutes.GET("/:id/devotee-stats", middleware.RBACMiddleware("templeadmin"), profileHandler.GetDevoteeStats)
 	}
 
 	membershipRoutes := protected.Group("/memberships")
@@ -158,5 +162,63 @@ superadminRoutes.Use(middleware.RBACMiddleware("superadmin"))
 		membershipRoutes.POST("/", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.JoinTemple)
 		membershipRoutes.GET("/", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.ListMemberships)
 	}
+
+	{
+		donationRepo := donation.NewRepository(database.DB)
+		donationService := donation.NewService(donationRepo, cfg)
+		donationHandler := donation.NewHandler(donationService)
+
+		donationRoutes := protected.Group("/donations")
+		{
+			// Devotee: Create & Verify Donation, View My Donations
+			donationRoutes.POST("/", middleware.RBACMiddleware("devotee"), donationHandler.CreateDonation)
+			donationRoutes.POST("/verify", middleware.RBACMiddleware("devotee"), donationHandler.VerifyDonation)
+			donationRoutes.GET("/my", middleware.RBACMiddleware("devotee"), donationHandler.GetMyDonations)
+
+			// Temple Admin: View Top & All Donors (real-time)
+			// donationRoutes.GET("/top-donors", middleware.RBACMiddleware("templeadmin"), donationHandler.GetTopDonors)
+			// donationRoutes.GET("/all-donors", middleware.RBACMiddleware("templeadmin"), donationHandler.GetAllDonors)
+
+			// Temple Admin: View all donations for their entity
+			donationRoutes.GET("/", middleware.RBACMiddleware("templeadmin"), donationHandler.GetDonationsByEntity)
+		}
+	}
+
+	// ========== Notifications ==========
+	{
+		notificationRepo := notification.NewRepository(database.DB)
+		notificationService := notification.NewService(notificationRepo, authRepo, cfg)
+
+		notificationHandler := notification.NewHandler(notificationService)
+
+		notificationRoutes := protected.Group("/notifications")
+		notificationRoutes.Use(middleware.RBACMiddleware("templeadmin"))
+
+		// 🧩 Templates
+		notificationRoutes.POST("/templates", notificationHandler.CreateTemplate)
+		notificationRoutes.GET("/templates", notificationHandler.GetTemplates)
+		notificationRoutes.GET("/templates/:id", notificationHandler.GetTemplateByID)
+		notificationRoutes.PUT("/templates/:id", notificationHandler.UpdateTemplate)
+		notificationRoutes.DELETE("/templates/:id", notificationHandler.DeleteTemplate)
+
+		// 📬 Send Notification
+		notificationRoutes.POST("/send", notificationHandler.SendNotification)
+
+		// 📜 View Logs
+		notificationRoutes.GET("/logs", notificationHandler.GetMyNotifications)
+	}
+
+	// ========== Devotee Portal ==========
+	// devoteeRepo := devotee.NewRepository(database.DB)
+	// devoteeService := devotee.NewService(devoteeRepo)
+	// devoteeHandler := devotee.NewHandler(devoteeService)
+
+	// devoteeRoutes := protected.Group("/devotee")
+	// devoteeRoutes.Use(middleware.RBACMiddleware("devotee"))
+	// {
+	// 	devoteeRoutes.POST("/select-temple", devoteeHandler.SelectTemple)
+	// 	devoteeRoutes.GET("/my-temple", devoteeHandler.GetMyTemple)
+	// 	devoteeRoutes.GET("/overview", devoteeHandler.GetDevoteeOverview) // ✅ Devotee overview
+	// }
 
 }

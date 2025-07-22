@@ -171,15 +171,71 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 }
 
 // ==============================
-// 🧾 5. (Optional) Get Donation Receipt by ID (Future Enhancement)
+// ⭐ 5. TOP 5 DONORS — FOR ENTITY BOARD
 // ==============================
-// func (h *Handler) GetDonationReceipt(c *gin.Context) {
-//     // TODO: Implement receipt endpoint that returns donation receipt
-//     // as a signed URL or PDF metadata.
+// type TopDonor struct {
+// 	Name   string  `json:"name"`
+// 	Amount float64 `json:"amount"`
+// }
+
+// func (h *Handler) GetTopDonors(c *gin.Context) {
+// 	user, exists := c.Get("user")
+// 	if !exists {
+// 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+// 		return
+// 	}
+// 	currentUser, ok := user.(auth.User)
+// 	if !ok || currentUser.EntityID == nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or missing entity"})
+// 		return
+// 	}
+
+// 	topDonors, err := h.svc.GetTopDonors(*currentUser.EntityID)
+// 	if err != nil {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+// 		return
+// 	}
+
+// 	c.JSON(http.StatusOK, gin.H{
+// 		"top_donors": topDonors,
+// 	})
 // }
 
 
+// // ==============================
+// // 📋 6. ALL DONORS — AFTER CLICK "VIEW ALL DONORS"
+// // ==============================
+// type Donor struct {
+// 	Name   string  `json:"name"`
+// 	Email  string  `json:"email"`
+// 	Amount float64 `json:"amount"`
+// 	Date   string  `json:"date"`
+// 	Method string  `json:"method"`
+// 	Status string  `json:"status"`
+// }
 
+// func (h *Handler) GetAllDonors(c *gin.Context) {
+// 	user, exists := c.Get("user")
+// 	if !exists {
+// 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+// 		return
+// 	}
+// 	currentUser, ok := user.(auth.User)
+// 	if !ok || currentUser.EntityID == nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or missing entity"})
+// 		return
+// 	}
+
+// 	donors, err := h.svc.GetAllDonors(*currentUser.EntityID)
+// 	if err != nil {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+// 		return
+// 	}
+
+// 	c.JSON(http.StatusOK, gin.H{
+// 		"donors": donors,
+// 	})
+// }
 
 
 

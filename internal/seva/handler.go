@@ -17,90 +17,119 @@ func NewHandler(service Service) *Handler {
 	return &Handler{service}
 }
 
-// Create a new seva (templeadmin only)
+// ========================= REQUEST STRUCTS =============================
+
+type CreateSevaRequest struct {
+	Name              string             `json:"name" binding:"required"`
+	SevaType          string             `json:"seva_type" binding:"required"`
+	Description       string             `json:"description"`
+	Price             float64            `json:"price"`
+	Duration          int                `json:"duration" binding:"required"`
+	MaxBookingsPerDay int                `json:"max_bookings_per_day"`
+	Status            string             `json:"status"`
+	IsActive          bool               `json:"is_active"`
+	Availability      []SevaAvailability `json:"availability"`
+}
+
+type BookSevaRequest struct {
+	SevaID          uint    `json:"seva_id" binding:"required"`
+	BookingDate     string  `json:"booking_date" binding:"required"` // format: YYYY-MM-DD
+	BookingTime     string  `json:"booking_time" binding:"required"` // format: HH:MM
+	SpecialRequests string  `json:"special_requests"`
+	AmountPaid      float64 `json:"amount_paid"`
+	PaymentStatus   string  `json:"payment_status"`
+}
+
+// ========================= SEVA HANDLERS =============================
+
 func (h *Handler) CreateSeva(c *gin.Context) {
-	var seva Seva
-	if err := c.ShouldBindJSON(&seva); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	user := c.MustGet("user").(auth.User)
-
-	if user.Role.RoleName != "templeadmin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only temple admin can create sevas"})
-		return
-	}
-
-	if user.EntityID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to any entity"})
-		return
-	}
-
-	err := h.service.CreateSeva(c, &seva, "templeadmin", *user.EntityID)
-	if err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusCreated, seva)
-}
-
-// Get all sevas for a temple
-func (h *Handler) GetSevas(c *gin.Context) {
-	entityIDParam := c.Query("entity_id")
-	entityID, err := strconv.Atoi(entityIDParam)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entity_id"})
-		return
-	}
-
-	sevas, err := h.service.GetSevasByEntity(c, uint(entityID))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not fetch sevas"})
-		return
-	}
-	c.JSON(http.StatusOK, sevas)
-}
-
-// Book a seva (devotee only)
-func (h *Handler) BookSeva(c *gin.Context) {
-	type SevaBookingInput struct {
-		SevaID          uint    `json:"seva_id"`
-		BookingDate     string  `json:"booking_date"` // YYYY-MM-DD
-		BookingTime     string  `json:"booking_time"` // HH:MM
-		SpecialRequests string  `json:"special_requests"`
-		AmountPaid      float64 `json:"amount_paid"`
-		PaymentStatus   string  `json:"payment_status"`
-	}
-
-	var input SevaBookingInput
+	var input CreateSevaRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
 		return
 	}
 
 	user := c.MustGet("user").(auth.User)
-
-	if user.Role.RoleName != "devotee" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only devotee can book seva"})
+	if user.Role.RoleName != "templeadmin" || user.EntityID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized or invalid entity"})
 		return
 	}
 
-	if user.EntityID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to any entity"})
+	seva := Seva{
+		EntityID:          *user.EntityID,
+		Name:              input.Name,
+		SevaType:          input.SevaType,
+		Description:       input.Description,
+		Price:             input.Price,
+		Duration:          input.Duration,
+		MaxBookingsPerDay: input.MaxBookingsPerDay,
+		Status:            input.Status,
+		IsActive:          input.IsActive,
+		Availability:      input.Availability,
+	}
+
+	if err := h.service.CreateSeva(c, &seva, user.Role.RoleName, *user.EntityID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create seva: " + err.Error()})
 		return
 	}
 
-	// Parse date and time
-	parsedDate, err := time.Parse("2006-01-02", input.BookingDate)
+	c.JSON(http.StatusCreated, gin.H{"message": "Seva created successfully", "seva": seva})
+}
+
+func (h *Handler) GetSevas(c *gin.Context) {
+	user := c.MustGet("user").(auth.User)
+	if user.Role.RoleName != "devotee" || user.EntityID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	offset := (page - 1) * limit
+
+	sevaType := c.Query("seva_type")
+	search := c.Query("search")
+
+	sevas, err := h.service.GetPaginatedSevas(
+		c,
+		*user.EntityID,
+		sevaType,
+		search,
+		limit,
+		offset,
+	)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid booking_date format, expected YYYY-MM-DD"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch sevas: " + err.Error()})
 		return
 	}
 
-	parsedTime, err := time.Parse("15:04", input.BookingTime)
+	c.JSON(http.StatusOK, gin.H{"sevas": sevas})
+}
+
+
+// ========================= BOOKING HANDLERS =============================
+
+func (h *Handler) BookSeva(c *gin.Context) {
+	var input BookSevaRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
+		return
+	}
+
+	user := c.MustGet("user").(auth.User)
+	if user.Role.RoleName != "devotee" || user.EntityID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized or invalid entity"})
+		return
+	}
+
+	date, err := time.Parse("2006-01-02", input.BookingDate)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid booking_time format, expected HH:MM in 24hr format"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid booking_date format"})
+		return
+	}
+	timeSlot, err := time.Parse("15:04", input.BookingTime)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid booking_time format"})
 		return
 	}
 
@@ -108,92 +137,100 @@ func (h *Handler) BookSeva(c *gin.Context) {
 		SevaID:          input.SevaID,
 		UserID:          user.ID,
 		EntityID:        *user.EntityID,
-		BookingDate:     parsedDate,
-		BookingTime:     parsedTime,
+		BookingDate:     date,
+		BookingTime:     timeSlot,
 		SpecialRequests: input.SpecialRequests,
 		AmountPaid:      input.AmountPaid,
 		PaymentStatus:   input.PaymentStatus,
 		Status:          "pending",
 	}
 
-	err = h.service.BookSeva(c, &booking, "devotee", user.ID, *user.EntityID)
-	if err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	if err := h.service.BookSeva(c, &booking, "devotee", user.ID, *user.EntityID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Booking failed: " + err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, booking)
+
+	c.JSON(http.StatusCreated, gin.H{"message": "Seva booked successfully", "booking": booking})
 }
 
-// Get devotee's bookings
 func (h *Handler) GetMyBookings(c *gin.Context) {
 	user := c.MustGet("user").(auth.User)
-
 	bookings, err := h.service.GetBookingsForUser(c, user.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not fetch bookings"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch bookings"})
 		return
 	}
-	c.JSON(http.StatusOK, bookings)
+	c.JSON(http.StatusOK, gin.H{"bookings": bookings})
 }
 
-// Get all bookings for a temple (templeadmin only)
 func (h *Handler) GetEntityBookings(c *gin.Context) {
 	user := c.MustGet("user").(auth.User)
-
-	if user.Role.RoleName != "templeadmin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only templeadmin can view entity bookings"})
+	if user.Role.RoleName != "templeadmin" || user.EntityID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	if user.EntityID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to entity"})
-		return
-	}
+	status := c.Query("status")
+	sevaType := c.Query("seva_type")
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
+	search := c.Query("search")
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
-	bookings, err := h.service.GetBookingsForEntity(c, *user.EntityID)
+	bookings, err := h.service.GetDetailedBookingsWithFilters(
+		c, *user.EntityID, status, sevaType, startDate, endDate, search, limit, offset,
+	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not fetch bookings"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch detailed bookings: " + err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, bookings)
+
+	c.JSON(http.StatusOK, gin.H{"bookings": bookings})
 }
 
-// Cancel a seva booking (devotee only)
-func (h *Handler) CancelBooking(c *gin.Context) {
+func (h *Handler) GetBookingByID(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid booking ID"})
+		return
+	}
+
+	booking, err := h.service.GetBookingByID(c, uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Booking not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"booking": booking})
+}
+
+func (h *Handler) GetBookingCounts(c *gin.Context) {
 	user := c.MustGet("user").(auth.User)
-
-	if user.Role.RoleName != "devotee" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only devotee can cancel bookings"})
+	if user.Role.RoleName != "templeadmin" || user.EntityID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	bookingID, err := strconv.Atoi(c.Param("id"))
+	counts, err := h.service.GetBookingStatusCounts(c, *user.EntityID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid booking ID"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch counts: " + err.Error()})
 		return
 	}
 
-	err = h.service.CancelBooking(c, uint(bookingID), user.ID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "booking cancelled successfully"})
+	c.JSON(http.StatusOK, gin.H{"counts": counts})
 }
 
-// Update booking status (templeadmin only)
 func (h *Handler) UpdateBookingStatus(c *gin.Context) {
 	user := c.MustGet("user").(auth.User)
-
 	if user.Role.RoleName != "templeadmin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only templeadmin can update booking status"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	bookingID, err := strconv.Atoi(c.Param("id"))
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid booking ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid booking ID"})
 		return
 	}
 
@@ -201,15 +238,14 @@ func (h *Handler) UpdateBookingStatus(c *gin.Context) {
 		Status string `json:"status"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil || input.Status == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or missing status"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status field"})
 		return
 	}
 
-	err = h.service.UpdateBookingStatus(c, uint(bookingID), input.Status)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err := h.service.UpdateBookingStatus(c, uint(id), input.Status); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Status update failed: " + err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "booking status updated"})
+	c.JSON(http.StatusOK, gin.H{"message": "Booking status updated successfully"})
 }

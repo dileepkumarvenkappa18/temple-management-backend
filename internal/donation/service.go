@@ -21,6 +21,8 @@ type Service interface {
 	VerifyAndUpdateDonation(req VerifyPaymentRequest) error
 	GetDonationsByUser(userID uint) ([]Donation, error)
 	GetDonationsByEntity(entityID uint, page int, limit int, status string) ([]Donation, error)
+	// GetTopDonors(entityID uint) ([]TopDonor, error)
+	// GetAllDonors(entityID uint) ([]Donor, error)
 }
 
 type service struct {
@@ -189,6 +191,38 @@ func (s *service) VerifyDonation(paymentID string, orderID string) (*Donation, e
 
 	return donation, nil
 }
+
+// func (s *service) GetTopDonors(entityID uint) ([]TopDonor, error) {
+// 	ctx := context.Background()
+// 	return s.repo.ListTopDonorsByEntity(ctx, entityID, 5)
+// }
+
+// // ==============================
+// // 📋 Get All Donors (Real-time)
+// // ==============================
+// func (s *service) GetAllDonors(entityID uint) ([]Donor, error) {
+// 	ctx := context.Background()
+
+// 	donations, err := s.repo.ListAllSuccessfulDonorsByEntity(ctx, entityID)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	var donors []Donor
+// 	for _, d := range donations {
+// 		donor := Donor{
+// 			Name:   "", // We'll leave this empty for now unless you join with user info
+// 			Email:  "", // Same here
+// 			Amount: d.Amount,
+// 			Date:   d.DonatedAt.Format("2006-01-02"),
+// 			Method: d.Method,
+// 			Status: d.Status,
+// 		}
+// 		donors = append(donors, donor)
+// 	}
+// 	return donors, nil
+// }
+
 
 
 

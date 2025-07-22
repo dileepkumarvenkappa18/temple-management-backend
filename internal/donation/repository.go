@@ -13,6 +13,8 @@ type Repository interface {
 	UpdatePaymentStatus(ctx context.Context, orderID string, status string, paymentID *string) error
 	ListByUserID(ctx context.Context, userID uint) ([]Donation, error)
 	ListByEntityID(ctx context.Context, entityID uint, page int, limit int, status string) ([]Donation, error)
+	// ListTopDonorsByEntity(ctx context.Context, entityID uint, limit int) ([]TopDonor, error)
+	// ListAllSuccessfulDonorsByEntity(ctx context.Context, entityID uint) ([]Donation, error) // 🔄 New method
 }
 
 type repository struct {
@@ -92,8 +94,39 @@ func (r *repository) ListByEntityID(ctx context.Context, entityID uint, page int
 }
 
 
+// ================================
+// 🏆 List top donors by total amount
+// ================================
+// func (r *repository) ListTopDonorsByEntity(ctx context.Context, entityID uint, limit int) ([]TopDonor, error) {
+// 	var donors []TopDonor
+
+// 	err := r.db.WithContext(ctx).
+// 		Table("donations d").
+// 		Select("u.full_name AS name, SUM(d.amount) AS amount").
+// 		Joins("JOIN users u ON d.user_id = u.id").
+// 		Where("d.entity_id = ? AND d.status = ?", entityID, StatusSuccess).
+// 		Group("u.full_name").
+// 		Order("amount DESC").
+// 		Limit(limit).
+// 		Scan(&donors).Error
+
+// 	return donors, err
+// }
 
 
+// // ================================
+// // 📋 List all successful donors with details
+// // ================================
+// func (r *repository) ListAllSuccessfulDonorsByEntity(ctx context.Context, entityID uint) ([]Donation, error) {
+// 	var donations []Donation
+
+// 	err := r.db.WithContext(ctx).
+// 		Where("entity_id = ? AND status = ?", entityID, StatusSuccess).
+// 		Order("donated_at DESC").
+// 		Find(&donations).Error
+
+// 	return donations, err
+// }
 
 
 

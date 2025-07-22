@@ -27,9 +27,17 @@ type Config struct {
 	RedisPassword string
 	RedisDB       int
 
-			// ✅ Razorpay Keys
+	// ✅ Razorpay Keys
 	RazorpayKey    string
 	RazorpaySecret string
+
+	// ✅ SMTP Config
+	SMTPHost      string
+	SMTPPort      string
+	SMTPUsername  string
+	SMTPPassword  string
+	SMTPFromName  string
+	SMTPFromEmail string
 }
 
 func Load() *Config {
@@ -55,12 +63,19 @@ func Load() *Config {
 		JWTAccessTTLHours:  accessTTL,
 		JWTRefreshTTLHours: refreshTTL,
 
-		RedisAddr:     os.Getenv("REDIS_ADDR"),     // e.g., redis:6379
-		RedisPassword: os.Getenv("REDIS_PASSWORD"), // blank if none
-		RedisDB:       redisDB,                     // usually 0
+		RedisAddr:     os.Getenv("REDIS_ADDR"),
+		RedisPassword: os.Getenv("REDIS_PASSWORD"),
+		RedisDB:       redisDB,
 
-			// ✅ Razorpay fields loaded
-	RazorpayKey:    os.Getenv("RAZORPAY_KEY_ID"),
-	RazorpaySecret: os.Getenv("RAZORPAY_KEY_SECRET"),
+		RazorpayKey:    os.Getenv("RAZORPAY_KEY_ID"),
+		RazorpaySecret: os.Getenv("RAZORPAY_KEY_SECRET"),
+
+		// ✅ SMTP fields
+		SMTPHost:      os.Getenv("SMTP_HOST"),
+		SMTPPort:      os.Getenv("SMTP_PORT"),
+		SMTPUsername:  os.Getenv("SMTP_USERNAME"),
+		SMTPPassword:  os.Getenv("SMTP_PASSWORD"),
+		SMTPFromName:  os.Getenv("SMTP_FROM_NAME"),
+		SMTPFromEmail: os.Getenv("SMTP_FROM_EMAIL"),
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"crypto/rand"
 	"encoding/hex"
+	"regexp"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/sharath018/temple-management-backend/utils"
@@ -58,6 +59,7 @@ type RegisterInput struct {
 	Email    string
 	Password string
 	Role     string
+	Phone    string
 }
 
 func (s *service) Register(in RegisterInput) error {
@@ -65,6 +67,11 @@ func (s *service) Register(in RegisterInput) error {
 	role, err := s.repo.FindRoleByName(roleName)
 	if err != nil {
 		return errors.New("invalid role")
+	}
+
+	// ✅ Enforce Gmail-only email validation (redundant safety layer)
+	if !strings.HasSuffix(strings.ToLower(in.Email), "@gmail.com") {
+		return errors.New("only @gmail.com emails are allowed")
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
@@ -77,12 +84,20 @@ func (s *service) Register(in RegisterInput) error {
 		status = "pending"
 	}
 
+	// ✅ Clean phone number (strip +91, non-digits, validate)
+	phone, err := cleanPhone(in.Phone)
+	if err != nil {
+		return err
+	}
+
 	user := &User{
 		FullName:     in.FullName,
 		Email:        in.Email,
 		PasswordHash: string(hash),
 		RoleID:       role.ID,
 		Status:       status,
+		Phone:  phone,
+
 	}
 
 	if err := s.repo.Create(user); err != nil {
@@ -97,6 +112,8 @@ func (s *service) Register(in RegisterInput) error {
 
 	return nil
 }
+
+
 
 // =============================
 // Login
@@ -291,3 +308,18 @@ func generateSecureToken() string {
 	return hex.EncodeToString(b)
 }
 
+func cleanPhone(raw string) (string, error) {
+	re := regexp.MustCompile(`\D`)
+	cleaned := re.ReplaceAllString(raw, "")
+
+	// Strip leading 91 if present and length is 12
+	if len(cleaned) == 12 && strings.HasPrefix(cleaned, "91") {
+		cleaned = cleaned[2:]
+	}
+
+	if len(cleaned) != 10 {
+		return "", errors.New("invalid phone number format")
+	}
+
+	return cleaned, nil
+}

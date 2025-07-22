@@ -54,6 +54,7 @@ func SeedSuperAdminUser(db *gorm.DB) error {
 	user := User{
 		FullName:      "Super Admin",
 		Email:         email,
+		Phone:         "9999888877",
 		PasswordHash:  string(hash),
 		RoleID:        role.ID,
 		EmailVerified: true,

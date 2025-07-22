@@ -2,6 +2,7 @@ package auth
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,40 +17,47 @@ func NewHandler(s Service) *Handler { return &Handler{s} }
 
 type RegisterRequest struct {
 	FullName string `json:"fullName" binding:"required" example:"Sharath Kumar"`
-	Email    string `json:"email" binding:"required,email" example:"sharath@example.com"`
+	Email    string `json:"email" binding:"required,email" example:"example@gmail.com"`
 	Password string `json:"password" binding:"required,min=6" example:"secret123"`
 	Role     string `json:"role" binding:"required" example:"templeadmin"`
+	Phone    string `json:"phone" binding:"required" example:"+919876543210"`
 }
 
-// @Summary Register a new user
-// @Tags Auth
-// @Accept json
-// @Produce json
-// @Param input body RegisterRequest true "User registration details"
-// @Success 201 {object} map[string]string
-// @Failure 400 {object} map[string]string
-// @Failure 403 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /auth/register [post]
 func (h *Handler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	// ❌ Block superadmin registration
 	if req.Role == "superadmin" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Super Admin registration is not allowed"})
 		return
 	}
+
+	// ✅ Validate Gmail only
+	if !isGmail(req.Email) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only @gmail.com emails are allowed for registration"})
+		return
+	}
+
 	if err := h.service.Register(RegisterInput(req)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
 	if req.Role == "templeadmin" {
 		c.JSON(http.StatusCreated, gin.H{"message": "Temple Admin registered. Awaiting approval."})
 		return
 	}
+
 	c.JSON(http.StatusCreated, gin.H{"message": "Registration successful"})
+}
+
+// 🔍 Email helper
+func isGmail(email string) bool {
+	return strings.HasSuffix(strings.ToLower(email), "@gmail.com")
 }
 
 // ===============================
@@ -61,15 +69,6 @@ type loginReq struct {
 	Password string `json:"password" binding:"required" example:"secret123"`
 }
 
-// @Summary Login and receive access + refresh tokens
-// @Tags Auth
-// @Accept json
-// @Produce json
-// @Param loginReq body loginReq true "User login credentials"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
-// @Router /auth/login [post]
 func (h *Handler) Login(c *gin.Context) {
 	var req loginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -107,15 +106,6 @@ type refreshReq struct {
 	RefreshToken string `json:"refreshToken" binding:"required" example:"your_refresh_token_here"`
 }
 
-// @Summary Refresh access token using refresh token
-// @Tags Auth
-// @Accept json
-// @Produce json
-// @Param refreshReq body refreshReq true "Refresh payload"
-// @Success 200 {object} map[string]string
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
-// @Router /auth/refresh [post]
 func (h *Handler) Refresh(c *gin.Context) {
 	var req refreshReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -138,14 +128,6 @@ type forgotPasswordReq struct {
 	Email string `json:"email" binding:"required,email" example:"sharath@example.com"`
 }
 
-// @Summary Request a password reset token
-// @Tags Auth
-// @Accept json
-// @Produce json
-// @Param forgotPasswordReq body forgotPasswordReq true "Email to send reset token to"
-// @Success 200 {object} map[string]string
-// @Failure 400 {object} map[string]string
-// @Router /auth/forgot-password [post]
 func (h *Handler) ForgotPassword(c *gin.Context) {
 	var req forgotPasswordReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -168,14 +150,6 @@ type resetPasswordReq struct {
 	NewPassword string `json:"newPassword" binding:"required,min=6" example:"newsecret123"`
 }
 
-// @Summary Reset password using token
-// @Tags Auth
-// @Accept json
-// @Produce json
-// @Param resetPasswordReq body resetPasswordReq true "Password reset request"
-// @Success 200 {object} map[string]string
-// @Failure 400 {object} map[string]string
-// @Router /auth/reset-password [post]
 func (h *Handler) ResetPassword(c *gin.Context) {
 	var req resetPasswordReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -193,10 +167,6 @@ func (h *Handler) ResetPassword(c *gin.Context) {
 // Logout
 // ===============================
 
-// @Summary Logout current user (frontend should remove token)
-// @Tags Auth
-// @Success 200 {object} map[string]string
-// @Router /auth/logout [post]
 func (h *Handler) Logout(c *gin.Context) {
 	_ = h.service.Logout() // stateless
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
