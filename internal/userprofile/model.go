@@ -117,12 +117,12 @@ type EmergencyContact struct {
 }
 
 // ==========================
-// 🔗 Membership Mapping Table
+// 🔗 Membership Mapping Table: Temple Join Logic
 type UserEntityMembership struct {
 	ID        uint      `gorm:"primaryKey"`
-	UserID    uint      `gorm:"not null"`              // Injected from token
-	EntityID  uint      `gorm:"not null" json:"entity_id"`
-	JoinedAt  time.Time `gorm:"default:current_timestamp" json:"joined_at"`
+	UserID    uint      `gorm:"not null;index" json:"user_id"`
+	EntityID  uint      `gorm:"not null;index" json:"entity_id"`
+	JoinedAt  time.Time `gorm:"autoCreateTime" json:"joined_at"`
 	Status    string    `gorm:"default:'active'" json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 }

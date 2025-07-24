@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/internal/entity"
 	"gorm.io/gorm"
 )
 
@@ -15,6 +16,9 @@ type Service interface {
 	Get(userID uint) (*DevoteeProfile, error)
 	JoinTemple(userID uint, entityID uint) (*UserEntityMembership, error)
 	ListMemberships(userID uint) ([]UserEntityMembership, error)
+	SearchTemples(query, state, templeType string) ([]entity.Entity, error) // ✅ Changed return type
+	GetRecentTemples() ([]entity.Entity, error)
+
 }
 
 // ========== SERVICE INIT ==========
@@ -77,14 +81,14 @@ type DevoteeProfileInput struct {
 	SpecialInterestsOrNotes    *string `json:"special_interests_or_notes"`
 
 	// Section 5
-	SpouseName      *string     `json:"spouse_name"`
-	SpouseEmail     *string     `json:"spouse_email"`
-	SpousePhone     *string     `json:"spouse_phone"`
-	SpouseDOB       *time.Time  `json:"spouse_dob"`
-	SpouseGotra     *string     `json:"spouse_gotra"`
-	SpouseNakshatra *string     `json:"spouse_nakshatra"`
-	Children        []*Child    `json:"children"`
-	EmergencyContacts []*EmergencyContact `json:"emergency_contacts"`
+	SpouseName         *string             `json:"spouse_name"`
+	SpouseEmail        *string             `json:"spouse_email"`
+	SpousePhone        *string             `json:"spouse_phone"`
+	SpouseDOB          *time.Time          `json:"spouse_dob"`
+	SpouseGotra        *string             `json:"spouse_gotra"`
+	SpouseNakshatra    *string             `json:"spouse_nakshatra"`
+	Children           []*Child            `json:"children"`
+	EmergencyContacts  []*EmergencyContact `json:"emergency_contacts"`
 
 	// Section 6
 	HealthNotes           *string `json:"health_notes"`
@@ -93,6 +97,7 @@ type DevoteeProfileInput struct {
 	PersonalSankalpa      *string `json:"personal_sankalpa"`
 	AdditionalNotes       *string `json:"additional_notes"`
 }
+
 
 // ========== PROFILE LOGIC ==========
 
@@ -106,37 +111,34 @@ func (s *service) CreateOrUpdateProfile(userID, entityID uint, input DevoteeProf
 		return nil, err
 	}
 
+	// Fill the profile from input
 	profile := &DevoteeProfile{
-		UserID:   userID,
-		EntityID: entityID,
-
-		FullName:      input.FullName,
-		DOB:           input.DOB,
-		Gender:        input.Gender,
-		StreetAddress: input.StreetAddress,
-		City:          input.City,
-		State:         input.State,
-		Pincode:       input.Pincode,
-		Country:       input.Country,
-
-		Gotra:     input.Gotra,
-		Nakshatra: input.Nakshatra,
-		Rashi:     input.Rashi,
-		Lagna:     input.Lagna,
-		VedaShaka: input.VedaShaka,
-
-		FatherName:               input.FatherName,
-		FatherGotra:              input.FatherGotra,
-		FatherNativePlace:        input.FatherNativePlace,
-		FatherVedaShaka:          input.FatherVedaShaka,
-		MotherName:               input.MotherName,
-		MaidenGotra:              input.MaidenGotra,
-		MotherNativePlace:        input.MotherNativePlace,
-		MaternalGrandfatherName:  input.MaternalGrandfatherName,
-		PaternalGrandfatherName:  input.PaternalGrandfatherName,
-		PaternalGrandmotherName:  input.PaternalGrandmotherName,
-		MaternalGrandmotherName:  input.MaternalGrandmotherName,
-
+		UserID:                     userID,
+		EntityID:                   entityID,
+		FullName:                   input.FullName,
+		DOB:                        input.DOB,
+		Gender:                     input.Gender,
+		StreetAddress:              input.StreetAddress,
+		City:                       input.City,
+		State:                      input.State,
+		Pincode:                    input.Pincode,
+		Country:                    input.Country,
+		Gotra:                      input.Gotra,
+		Nakshatra:                  input.Nakshatra,
+		Rashi:                      input.Rashi,
+		Lagna:                      input.Lagna,
+		VedaShaka:                  input.VedaShaka,
+		FatherName:                 input.FatherName,
+		FatherGotra:                input.FatherGotra,
+		FatherNativePlace:          input.FatherNativePlace,
+		FatherVedaShaka:            input.FatherVedaShaka,
+		MotherName:                 input.MotherName,
+		MaidenGotra:                input.MaidenGotra,
+		MotherNativePlace:          input.MotherNativePlace,
+		MaternalGrandfatherName:   input.MaternalGrandfatherName,
+		PaternalGrandfatherName:   input.PaternalGrandfatherName,
+		PaternalGrandmotherName:   input.PaternalGrandmotherName,
+		MaternalGrandmotherName:   input.MaternalGrandmotherName,
 		SevaAbhisheka:              input.SevaAbhisheka,
 		SevaArti:                   input.SevaArti,
 		SevaAnnadana:               input.SevaAnnadana,
@@ -150,45 +152,56 @@ func (s *service) CreateOrUpdateProfile(userID, entityID uint, input DevoteeProf
 		DonateTempleConstruction:   input.DonateTempleConstruction,
 		DonateGeneral:              input.DonateGeneral,
 		SpecialInterestsOrNotes:    input.SpecialInterestsOrNotes,
-
-		SpouseName:      input.SpouseName,
-		SpouseEmail:     input.SpouseEmail,
-		SpousePhone:     input.SpousePhone,
-		SpouseDOB:       input.SpouseDOB,
-		SpouseGotra:     input.SpouseGotra,
-		SpouseNakshatra: input.SpouseNakshatra,
-		Children:        input.Children,
-		EmergencyContacts: input.EmergencyContacts,
-
-		HealthNotes:           input.HealthNotes,
-		AllergiesOrConditions: input.AllergiesOrConditions,
-		DietaryRestrictions:   input.DietaryRestrictions,
-		PersonalSankalpa:      input.PersonalSankalpa,
-		AdditionalNotes:       input.AdditionalNotes,
-
+		SpouseName:                 input.SpouseName,
+		SpouseEmail:                input.SpouseEmail,
+		SpousePhone:                input.SpousePhone,
+		SpouseDOB:                  input.SpouseDOB,
+		SpouseGotra:                input.SpouseGotra,
+		SpouseNakshatra:            input.SpouseNakshatra,
+		Children:                   input.Children,
+		EmergencyContacts:          input.EmergencyContacts,
+		HealthNotes:                input.HealthNotes,
+		AllergiesOrConditions:      input.AllergiesOrConditions,
+		DietaryRestrictions:        input.DietaryRestrictions,
+		PersonalSankalpa:           input.PersonalSankalpa,
+		AdditionalNotes:            input.AdditionalNotes,
 		ProfileCompletionPercentage: calculateCompletionPercentage(input),
 		UpdatedAt:                   time.Now(),
 	}
 
+	// If profile already exists, update it
 	if existing != nil && existing.ID > 0 {
 		profile.ID = existing.ID
 		err = s.repo.Update(profile)
 		return profile, err
 	}
 
+	// Else create new
 	err = s.repo.Create(profile)
 	return profile, err
 }
 
+
 // ========== MEMBERSHIP LOGIC ==========
 
 func (s *service) JoinTemple(userID uint, entityID uint) (*UserEntityMembership, error) {
+	temple, err := s.repo.GetFullTempleByID(entityID)
+	if err != nil {
+		return nil, err
+	}
+	if temple == nil {
+		return nil, errors.New("temple not found")
+	}
+	if temple.Status != "approved" {
+		return nil, errors.New("temple not approved")
+	}
+
 	existing, err := s.repo.GetMembership(userID, entityID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
 	if existing != nil {
-		return existing, nil
+		return nil, errors.New("already joined this temple")
 	}
 
 	membership := &UserEntityMembership{
@@ -200,10 +213,6 @@ func (s *service) JoinTemple(userID uint, entityID uint) (*UserEntityMembership,
 		return nil, err
 	}
 
-	if err := s.authRepo.UpdateEntityID(userID, entityID); err != nil {
-		return nil, err
-	}
-
 	return membership, nil
 }
 
@@ -211,12 +220,15 @@ func (s *service) ListMemberships(userID uint) ([]UserEntityMembership, error) {
 	return s.repo.ListMembershipsByUser(userID)
 }
 
+func (s *service) SearchTemples(query, state, templeType string) ([]entity.Entity, error) {
+	return s.repo.SearchTemples(query, state, templeType) // ✅ Uses simplified return
+}
+
 // ========== PROFILE COMPLETION LOGIC ==========
 
 func calculateCompletionPercentage(p DevoteeProfileInput) int {
 	filled := 0
 	total := 12
-
 	if p.FullName != nil && *p.FullName != "" {
 		filled++
 	}
@@ -253,7 +265,10 @@ func calculateCompletionPercentage(p DevoteeProfileInput) int {
 	if p.SpecialInterestsOrNotes != nil && *p.SpecialInterestsOrNotes != "" {
 		filled++
 	}
-
 	return int(float64(filled) / float64(total) * 100)
+}
+
+func (s *service) GetRecentTemples() ([]entity.Entity, error) {
+	return s.repo.FetchRecentTemples()
 }
 

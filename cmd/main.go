@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-    "github.com/gin-contrib/cors"
 
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/database"
@@ -19,37 +19,25 @@ import (
 	"github.com/sharath018/temple-management-backend/utils"
 )
 
-// @title           Temple Management API
-// @version         1.0
-// @description     API Documentation for Temple Management SaaS Platform
-// @termsOfService  http://localhost:5173/terms
-// @contact.name    Temple Management Support
-// @contact.url     http://localhost:5173
-// @contact.email   support@templemgmt.com
-// @license.name    MIT
-// @license.url     https://opensource.org/licenses/MIT
-// @host            localhost:8080
-// @BasePath        /api/v1
-
 func main() {
 	cfg := config.Load()
 	db := database.Connect(cfg)
 
-	// ✅ STEP: Init Redis 🔧
+	// ✅ Init Redis
 	if err := utils.InitRedis(); err != nil {
 		log.Fatalf("❌ Redis init failed: %v", err)
 	}
 
-	// ✅ STEP: Init Kafka 🔧
+	// ✅ Init Kafka
 	utils.InitializeKafka()
 
-	// ✅ FIXED: Inject authRepo into notification service
+	// ✅ Inject authRepo into notification service
 	authRepo := auth.NewRepository(db)
 	notificationRepo := notification.NewRepository(db)
 	notificationService := notification.NewService(notificationRepo, authRepo, cfg)
 	notification.StartKafkaConsumer(notificationService)
 
-	// 🌱 Seed user roles and Super Admin
+	// ✅ Seed roles and super admin
 	if err := auth.SeedUserRoles(db); err != nil {
 		panic(fmt.Sprintf("❌ Failed to seed roles: %v", err))
 	}
@@ -57,7 +45,7 @@ func main() {
 		panic(fmt.Sprintf("❌ Failed to seed Super Admin: %v", err))
 	}
 
-	// 🔧 Auto-migrate Entity, Event, RSVP models
+	// ✅ Auto-migrate models
 	if err := db.AutoMigrate(
 		&entity.Entity{},
 		&event.Event{},
@@ -66,20 +54,41 @@ func main() {
 		panic(fmt.Sprintf("❌ DB AutoMigrate failed: %v", err))
 	}
 
-	// 🌐 Setup Gin router and inject all route handlers
-	router := gin.Default()
+	// 🌐 Setup router manually to control middleware order
+	router := gin.New()
+	router.Use(gin.Logger())
+	router.Use(gin.Recovery())
 
-	// 🛣️ Register all routes with injected handlers
-	routes.Setup(router, cfg)
+	// ✅ Optional request logger for CORS debugging
+	router.Use(func(c *gin.Context) {
+		log.Printf("👉 %s %s from origin %s", c.Request.Method, c.Request.URL.Path, c.Request.Header.Get("Origin"))
+		c.Next()
+	})
 
+	// ✅ Global CORS middleware
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"}, // Adjust for production if needed
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type","Accept", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
+		AllowOrigins: []string{
+			"http://localhost:5173",
+			"http://127.0.0.1:5173",
+		},
+		AllowMethods: []string{
+			"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS",
+		},
+		AllowHeaders: []string{
+			"Origin", "Content-Type", "Accept", "Authorization", "X-Tenant-ID", "Content-Length", "X-Requested-With",
+		},
+		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+
+	// ✅ Handle preflight CORS requests for all routes
+	router.OPTIONS("/*path", func(c *gin.Context) {
+		c.Status(204)
+	})
+
+	// ✅ Register routes
+	routes.Setup(router, cfg)
 
 	// 🚀 Run server
 	fmt.Printf("🚀 Server starting on port %s\n", cfg.Port)

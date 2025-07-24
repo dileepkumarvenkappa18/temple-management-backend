@@ -2,7 +2,9 @@ package userprofile
 
 import (
 	"errors"
+	"strings"
 
+	"github.com/sharath018/temple-management-backend/internal/entity"
 	"gorm.io/gorm"
 )
 
@@ -18,13 +20,20 @@ type Repository interface {
 	GetMembership(userID, entityID uint) (*UserEntityMembership, error)
 	ListMembershipsByUser(userID uint) ([]UserEntityMembership, error)
 	ListUserIDsByEntity(entityID uint) ([]uint, error)
+
+	// Temple Search
+	SearchTemples(query string, state string, templeType string) ([]entity.Entity, error)
+	ListPreApprovedTemples(limit int) ([]entity.Entity, error)
+	GetTempleByID(entityID uint) (*entity.Entity, error)
+	GetFullTempleByID(entityID uint) (*entity.Entity, error)
+	FetchRecentTemples() ([]entity.Entity, error)
+
 }
 
 type repository struct {
 	db *gorm.DB
 }
 
-// NewRepository creates a new repository instance
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }
@@ -33,12 +42,10 @@ func NewRepository(db *gorm.DB) Repository {
 // 🔹 DevoteeProfile Operations
 // ==============================
 
-// Create inserts a new DevoteeProfile into the database
 func (r *repository) Create(profile *DevoteeProfile) error {
 	return r.db.Create(profile).Error
 }
 
-// GetByUserID fetches a DevoteeProfile by the associated user ID
 func (r *repository) GetByUserID(userID uint) (*DevoteeProfile, error) {
 	var profile DevoteeProfile
 	if err := r.db.Where("user_id = ?", userID).First(&profile).Error; err != nil {
@@ -47,7 +54,6 @@ func (r *repository) GetByUserID(userID uint) (*DevoteeProfile, error) {
 	return &profile, nil
 }
 
-// Update modifies an existing DevoteeProfile
 func (r *repository) Update(profile *DevoteeProfile) error {
 	return r.db.Save(profile).Error
 }
@@ -56,12 +62,10 @@ func (r *repository) Update(profile *DevoteeProfile) error {
 // 🔹 Membership Operations
 // ==============================
 
-// CreateMembership inserts a new user-entity membership record
 func (r *repository) CreateMembership(m *UserEntityMembership) error {
 	return r.db.Create(m).Error
 }
 
-// GetMembership checks if a user has already joined a specific entity
 func (r *repository) GetMembership(userID, entityID uint) (*UserEntityMembership, error) {
 	var membership UserEntityMembership
 	err := r.db.Where("user_id = ? AND entity_id = ?", userID, entityID).First(&membership).Error
@@ -71,14 +75,12 @@ func (r *repository) GetMembership(userID, entityID uint) (*UserEntityMembership
 	return &membership, err
 }
 
-// ListMembershipsByUser returns all temple memberships for a user
 func (r *repository) ListMembershipsByUser(userID uint) ([]UserEntityMembership, error) {
 	var memberships []UserEntityMembership
 	err := r.db.Where("user_id = ?", userID).Find(&memberships).Error
 	return memberships, err
 }
 
-// ListUserIDsByEntity returns all user IDs that joined a given temple (entity)
 func (r *repository) ListUserIDsByEntity(entityID uint) ([]uint, error) {
 	var memberships []UserEntityMembership
 	err := r.db.Select("user_id").Where("entity_id = ?", entityID).Find(&memberships).Error
@@ -92,3 +94,68 @@ func (r *repository) ListUserIDsByEntity(entityID uint) ([]uint, error) {
 	}
 	return userIDs, nil
 }
+
+// ==============================
+// 🔹 Temple Search Operations
+// ==============================
+
+func (r *repository) SearchTemples(query string, state string, templeType string) ([]entity.Entity, error) {
+	var temples []entity.Entity
+
+	db := r.db.Model(&entity.Entity{}).
+		Where("LOWER(status) = ?", "approved")
+
+	if query != "" {
+		q := "%" + strings.ToLower(query) + "%"
+		db = db.Where("LOWER(name) LIKE ? OR LOWER(city) LIKE ? OR LOWER(state) LIKE ?", q, q, q)
+	}
+
+	if state != "" {
+		db = db.Where("LOWER(state) = ?", strings.ToLower(state))
+	}
+
+	if templeType != "" {
+		db = db.Where("LOWER(temple_type) = ?", strings.ToLower(templeType))
+	}
+
+	err := db.Find(&temples).Error
+	return temples, err
+}
+
+func (r *repository) ListPreApprovedTemples(limit int) ([]entity.Entity, error) {
+	var temples []entity.Entity
+	err := r.db.Model(&entity.Entity{}).
+		Where("LOWER(status) = ?", "approved").
+		Limit(limit).
+		Find(&temples).Error
+	return temples, err
+}
+
+func (r *repository) GetTempleByID(entityID uint) (*entity.Entity, error) {
+	var temple entity.Entity
+	err := r.db.Where("id = ?", entityID).First(&temple).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &temple, err
+}
+
+func (r *repository) GetFullTempleByID(entityID uint) (*entity.Entity, error) {
+	var temple entity.Entity
+	err := r.db.Where("id = ?", entityID).First(&temple).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &temple, err
+}
+
+func (r *repository) FetchRecentTemples() ([]entity.Entity, error) {
+	var temples []entity.Entity
+	err := r.db.Model(&entity.Entity{}).
+		Where("LOWER(status) = ?", "approved").
+		Order("created_at DESC").
+		Limit(6).
+		Find(&temples).Error
+	return temples, err
+}
+

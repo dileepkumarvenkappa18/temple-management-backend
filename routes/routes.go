@@ -127,7 +127,9 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 
 	eventRoutes := protected.Group("/events", middleware.RBACMiddleware("templeadmin"))
 	eventRoutes.POST("/", eventHandler.CreateEvent)
+	eventRoutes.POST("", eventHandler.CreateEvent)
 	eventRoutes.GET("/", eventHandler.ListEvents)
+	eventRoutes.GET("", eventHandler.ListEvents)
 	eventRoutes.GET("/upcoming", eventHandler.GetUpcomingEvents)
 	eventRoutes.GET("/:id", eventHandler.GetEventByID)
 	eventRoutes.GET("/stats", eventHandler.GetEventStats)
@@ -157,11 +159,22 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		// profileRoutes.GET("/:id/devotee-stats", middleware.RBACMiddleware("templeadmin"), profileHandler.GetDevoteeStats)
 	}
 
+		// ========== Membership (Join Temples) ==========
 	membershipRoutes := protected.Group("/memberships")
 	{
 		membershipRoutes.POST("/", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.JoinTemple)
 		membershipRoutes.GET("/", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.ListMemberships)
 	}
+
+	// ========== Temple Search ==========
+	// ========== Temple Search ==========
+templeSearchRoutes := protected.Group("/temples")
+{
+	templeSearchRoutes.GET("/search", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.SearchTemples)
+	templeSearchRoutes.GET("/recent", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.GetRecentTemples)
+}
+
+
 
 	{
 		donationRepo := donation.NewRepository(database.DB)

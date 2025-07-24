@@ -58,7 +58,7 @@ if err := DB.AutoMigrate(
 	&userprofile.DevoteeProfile{},
 	&userprofile.Child{},
 	&userprofile.EmergencyContact{},
-	&userprofile.UserEntityMembership{},
+&userprofile.UserEntityMembership{},
 ); err != nil {
 	log.Fatalf("❌ AutoMigrate failed: %v", err)
 }

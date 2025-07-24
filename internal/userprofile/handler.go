@@ -7,8 +7,6 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/auth"
 )
 
-
-
 type Handler struct {
 	service Service
 }
@@ -40,6 +38,7 @@ func (h *Handler) GetMyProfile(c *gin.Context) {
 }
 
 // POST /profiles
+// POST /profiles
 func (h *Handler) CreateOrUpdateProfile(c *gin.Context) {
 	user, ok := c.Get("user")
 	if !ok {
@@ -48,16 +47,25 @@ func (h *Handler) CreateOrUpdateProfile(c *gin.Context) {
 	}
 	currentUser := user.(auth.User)
 
-	if currentUser.EntityID == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Entity ID missing"})
-		return
-	}
-	entityID := *currentUser.EntityID
-
 	var input DevoteeProfileInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
 		return
+	}
+
+	var entityID uint
+
+	// ✅ Try to extract EntityID from user context first
+	if currentUser.EntityID != nil {
+		entityID = *currentUser.EntityID
+	} else {
+		// 🔍 fallback: look up from memberships
+		memberships, err := h.service.ListMemberships(currentUser.ID)
+		if err != nil || len(memberships) == 0 {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: No associated temple found. Please join a temple first."})
+			return
+		}
+		entityID = memberships[0].EntityID // default to first membership
 	}
 
 	profile, err := h.service.CreateOrUpdateProfile(currentUser.ID, entityID, input)
@@ -68,6 +76,7 @@ func (h *Handler) CreateOrUpdateProfile(c *gin.Context) {
 
 	c.JSON(http.StatusOK, profile)
 }
+
 
 // ===========================
 // 🔹 MEMBERSHIP ENDPOINTS
@@ -92,7 +101,7 @@ func (h *Handler) JoinTemple(c *gin.Context) {
 
 	membership, err := h.service.JoinTemple(currentUser.ID, input.EntityID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not join temple"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -116,3 +125,33 @@ func (h *Handler) ListMemberships(c *gin.Context) {
 
 	c.JSON(http.StatusOK, memberships)
 }
+
+// ===========================
+// 🔹 SEARCH TEMPLES ENDPOINT
+// ===========================
+
+// GET /temples/search?query=&state=&temple_type=
+func (h *Handler) SearchTemples(c *gin.Context) {
+	query := c.Query("query")             // name/city/state search text
+	state := c.Query("state")             // optional filter
+	templeType := c.Query("temple_type")  // optional filter
+
+	results, err := h.service.SearchTemples(query, state, templeType)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to search temples"})
+		return
+	}
+
+	c.JSON(http.StatusOK, results)
+}
+
+// GET /profiles/recent-temples
+func (h *Handler) GetRecentTemples(c *gin.Context) {
+	temples, err := h.service.GetRecentTemples()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch recent temples"})
+		return
+	}
+	c.JSON(http.StatusOK, temples)
+}
+
