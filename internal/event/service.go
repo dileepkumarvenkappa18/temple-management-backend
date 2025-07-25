@@ -109,18 +109,14 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, entityID uint) e
 		return errors.New("unauthorized: cannot update this event")
 	}
 
-	// 🔄 Update fields
-	event.Title = req.Title
-	event.Description = req.Description
-
-	// 🔄 Parse EventDate
+	// 🔄 Parse and update EventDate
 	eventDate, err := time.Parse("2006-01-02", req.EventDate)
 	if err != nil {
 		return errors.New("invalid event_date format. Use YYYY-MM-DD")
 	}
 	event.EventDate = eventDate
 
-	// 🔄 Parse EventTime
+	// 🔄 Parse and update EventTime (or nil)
 	if req.EventTime != "" {
 		parsedTime, err := time.Parse("15:04", req.EventTime)
 		if err != nil {
@@ -132,15 +128,19 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, entityID uint) e
 		event.EventTime = nil
 	}
 
+	// 🔄 Other fields
+	event.Title = req.Title
+	event.Description = req.Description
 	event.Location = req.Location
 	event.EventType = req.EventType
-
 	if req.IsActive != nil {
 		event.IsActive = *req.IsActive
 	}
 
-	return s.Repo.UpdateEvent(id, entityID, req)
+	// ✅ Now update using parsed `*Event`
+	return s.Repo.UpdateEvent(event)
 }
+
 
 // ===========================
 // ❌ Delete Event (with ownership check)

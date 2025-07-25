@@ -19,9 +19,6 @@ type Service interface {
 	GetBookingsForEntity(ctx context.Context, entityID uint) ([]SevaBooking, error)
 	UpdateBookingStatus(ctx context.Context, bookingID uint, newStatus string) error
 
-	// Availability
-	SetAvailabilityForSeva(ctx context.Context, sevaID uint, slots []SevaAvailability, userRole string) error
-	GetAvailabilityForSeva(ctx context.Context, sevaID uint) ([]SevaAvailability, error)
 
 	// Composite Booking Details
 	GetDetailedBookingsForEntity(ctx context.Context, entityID uint) ([]DetailedBooking, error)
@@ -121,31 +118,31 @@ func (s *service) UpdateBookingStatus(ctx context.Context, bookingID uint, newSt
 
 
 // 🔄 Templeadmin only: Add/Replace Availability
-func (s *service) SetAvailabilityForSeva(ctx context.Context, sevaID uint, slots []SevaAvailability, userRole string) error {
-	if userRole != "templeadmin" {
-		return errors.New("unauthorized: only templeadmin can manage availability")
-	}
+// func (s *service) SetAvailabilityForSeva(ctx context.Context, sevaID uint, slots []SevaAvailability, userRole string) error {
+// 	if userRole != "templeadmin" {
+// 		return errors.New("unauthorized: only templeadmin can manage availability")
+// 	}
 
-	// Remove previous availability
-	if err := s.repo.DeleteAvailabilityBySevaID(ctx, sevaID); err != nil {
-		return err
-	}
+// 	// Remove previous availability
+// 	if err := s.repo.DeleteAvailabilityBySevaID(ctx, sevaID); err != nil {
+// 		return err
+// 	}
 
-	// Save new availability
-	for _, slot := range slots {
-		slot.SevaID = sevaID
-		if err := s.repo.CreateAvailability(ctx, &slot); err != nil {
-			return err
-		}
-	}
+// 	// Save new availability
+// 	for _, slot := range slots {
+// 		slot.SevaID = sevaID
+// 		if err := s.repo.CreateAvailability(ctx, &slot); err != nil {
+// 			return err
+// 		}
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 // 🔄 Public: View availability for seva
-func (s *service) GetAvailabilityForSeva(ctx context.Context, sevaID uint) ([]SevaAvailability, error) {
-	return s.repo.GetAvailabilityBySevaID(ctx, sevaID)
-}
+// func (s *service) GetAvailabilityForSeva(ctx context.Context, sevaID uint) ([]SevaAvailability, error) {
+// 	return s.repo.GetAvailabilityBySevaID(ctx, sevaID)
+// }
 
 // 🔄 Templeadmin only: Full booking table with names, types, etc.
 func (s *service) GetDetailedBookingsForEntity(ctx context.Context, entityID uint) ([]DetailedBooking, error) {

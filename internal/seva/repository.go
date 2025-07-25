@@ -22,9 +22,9 @@ type Repository interface {
 	UpdateBookingStatus(ctx context.Context, bookingID uint, newStatus string) error
 
 	// 🔄 Availability schedule
-	CreateAvailability(ctx context.Context, slot *SevaAvailability) error
-	GetAvailabilityBySevaID(ctx context.Context, sevaID uint) ([]SevaAvailability, error)
-	DeleteAvailabilityBySevaID(ctx context.Context, sevaID uint) error
+	// CreateAvailability(ctx context.Context, slot *SevaAvailability) error
+	// GetAvailabilityBySevaID(ctx context.Context, sevaID uint) ([]SevaAvailability, error)
+	// DeleteAvailabilityBySevaID(ctx context.Context, sevaID uint) error
 
 	// 🔄 Booking limits
 	CountBookingsForSlot(ctx context.Context, sevaID uint, date time.Time, slot string) (int64, error)
@@ -171,24 +171,24 @@ func (r *repository) UpdateBookingStatus(ctx context.Context, bookingID uint, ne
 // -----------------------------------------
 // 🔄 Seva Availability
 // -----------------------------------------
-func (r *repository) CreateAvailability(ctx context.Context, slot *SevaAvailability) error {
-	return r.db.WithContext(ctx).Create(slot).Error
-}
+// func (r *repository) CreateAvailability(ctx context.Context, slot *SevaAvailability) error {
+// 	return r.db.WithContext(ctx).Create(slot).Error
+// }
 
-func (r *repository) GetAvailabilityBySevaID(ctx context.Context, sevaID uint) ([]SevaAvailability, error) {
-	var slots []SevaAvailability
-	err := r.db.WithContext(ctx).
-		Where("seva_id = ?", sevaID).
-		Order("date, time_slot").
-		Find(&slots).Error
-	return slots, err
-}
+// func (r *repository) GetAvailabilityBySevaID(ctx context.Context, sevaID uint) ([]SevaAvailability, error) {
+// 	var slots []SevaAvailability
+// 	err := r.db.WithContext(ctx).
+// 		Where("seva_id = ?", sevaID).
+// 		Order("date, time_slot").
+// 		Find(&slots).Error
+// 	return slots, err
+// }
 
-func (r *repository) DeleteAvailabilityBySevaID(ctx context.Context, sevaID uint) error {
-	return r.db.WithContext(ctx).
-		Where("seva_id = ?", sevaID).
-		Delete(&SevaAvailability{}).Error
-}
+// func (r *repository) DeleteAvailabilityBySevaID(ctx context.Context, sevaID uint) error {
+// 	return r.db.WithContext(ctx).
+// 		Where("seva_id = ?", sevaID).
+// 		Delete(&SevaAvailability{}).Error
+// }
 
 // -----------------------------------------
 // 🔄 Booking Limit Checker

@@ -3,43 +3,42 @@ package superadmin
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/entity"
 )
 
+// Service handles the business logic for superadmin functionalities.
 type Service struct {
 	repo *Repository
 }
 
+// NewService creates a new instance of the superadmin Service.
 func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
 }
 
-// ================== TENANT ==================
+// ============ TENANT LOGIC ============ //
 
-func (s *Service) ApproveTenant(ctx context.Context, userID uint, adminID uint) error {
-	// Check existence and current status
+// ApproveTenant activates a tenant user and marks the approval request.
+func (s *Service) ApproveTenant(ctx context.Context, userID, adminID uint) error {
 	user, err := s.repo.GetUserByID(ctx, userID)
 	if err != nil {
 		return errors.New("tenant not found")
 	}
 
-	if user.Status == "active" {
+	switch user.Status {
+	case "active":
 		return errors.New("tenant already approved")
-	}
-	if user.Status == "rejected" {
+	case "rejected":
 		return errors.New("tenant already rejected")
 	}
 
-	if err := s.repo.ApproveTenant(ctx, userID, adminID); err != nil {
-		return err
-	}
-	return s.repo.MarkTenantApprovalApproved(ctx, userID, adminID)
+	return s.repo.ApproveTenant(ctx, userID, adminID)
 }
 
-func (s *Service) RejectTenant(ctx context.Context, userID uint, adminID uint, reason string) error {
+// RejectTenant marks a tenant's request as rejected with a reason.
+func (s *Service) RejectTenant(ctx context.Context, userID, adminID uint, reason string) error {
 	if reason == "" {
 		return errors.New("rejection reason is required")
 	}
@@ -49,55 +48,34 @@ func (s *Service) RejectTenant(ctx context.Context, userID uint, adminID uint, r
 		return errors.New("tenant not found")
 	}
 
-	if user.Status == "rejected" {
+	switch user.Status {
+	case "rejected":
 		return errors.New("tenant already rejected")
-	}
-	if user.Status == "active" {
+	case "active":
 		return errors.New("tenant already approved")
 	}
 
 	return s.repo.RejectTenant(ctx, userID, adminID, reason)
 }
 
-func (s *Service) GetPendingTenants(ctx context.Context) ([]auth.User, error) {
-	return s.repo.GetPendingTenants(ctx)
-}
-
+// GetTenantsWithFilters fetches paginated tenants filtered by status.
 func (s *Service) GetTenantsWithFilters(ctx context.Context, status string, limit, page int) ([]auth.User, int64, error) {
 	return s.repo.GetTenantsWithFilters(ctx, status, limit, page)
 }
 
-func (s *Service) UpdateTenantApprovalStatus(ctx context.Context, userID, adminID uint, action string, reason string) error {
-	switch action {
-	case "approve":
-		return s.ApproveTenant(ctx, userID, adminID)
-	case "reject":
-		return s.RejectTenant(ctx, userID, adminID, reason)
-	default:
-		return errors.New("invalid action: must be approve or reject")
-	}
-}
+// ============ ENTITY LOGIC ============ //
 
-// ================== ENTITY ==================
-
-func (s *Service) GetPendingEntities(ctx context.Context) ([]entity.Entity, error) {
-	return s.repo.GetPendingEntities(ctx)
-}
-
-func (s *Service) GetEntitiesWithFilters(ctx context.Context, status string, limit, page int) ([]entity.Entity, int64, error) {
-	return s.repo.GetEntitiesWithFilters(ctx, status, limit, page)
-}
-
-func (s *Service) ApproveEntity(ctx context.Context, entityID uint, adminID uint) error {
+// ApproveEntity sets an entity as approved and links it to the user.
+func (s *Service) ApproveEntity(ctx context.Context, entityID, adminID uint) error {
 	ent, err := s.repo.GetEntityByID(ctx, entityID)
 	if err != nil {
 		return errors.New("entity not found")
 	}
 
-	if ent.Status == "approved" {
+	switch ent.Status {
+	case "approved":
 		return errors.New("entity already approved")
-	}
-	if ent.Status == "rejected" {
+	case "rejected":
 		return errors.New("entity already rejected")
 	}
 
@@ -105,10 +83,11 @@ func (s *Service) ApproveEntity(ctx context.Context, entityID uint, adminID uint
 		return err
 	}
 
-	return s.repo.LinkEntityToUser(ctx, ent.CreatedBy, ent.ID)
+	return s.repo.LinkEntityToUser(ctx, ent.CreatedBy, entityID)
 }
 
-func (s *Service) RejectEntity(ctx context.Context, entityID uint, adminID uint, reason string) error {
+// RejectEntity marks an entity as rejected with a reason.
+func (s *Service) RejectEntity(ctx context.Context, entityID, adminID uint, reason string) error {
 	if reason == "" {
 		return errors.New("rejection reason is required")
 	}
@@ -118,24 +97,24 @@ func (s *Service) RejectEntity(ctx context.Context, entityID uint, adminID uint,
 		return errors.New("entity not found")
 	}
 
-	if ent.Status == "rejected" {
+	switch ent.Status {
+	case "rejected":
 		return errors.New("entity already rejected")
-	}
-	if ent.Status == "approved" {
+	case "approved":
 		return errors.New("entity already approved")
 	}
 
-	rejectedAt := time.Now()
-	return s.repo.RejectEntity(ctx, entityID, adminID, reason, rejectedAt)
+	return s.repo.RejectEntity(ctx, entityID, adminID, reason)
 }
 
-func (s *Service) UpdateEntityApprovalStatus(ctx context.Context, entityID, adminID uint, action string, reason string) error {
-	switch action {
-	case "approve":
-		return s.ApproveEntity(ctx, entityID, adminID)
-	case "reject":
-		return s.RejectEntity(ctx, entityID, adminID, reason)
-	default:
-		return errors.New("invalid action: must be approve or reject")
-	}
+// GetEntitiesWithFilters returns paginated entities filtered by status.
+func (s *Service) GetEntitiesWithFilters(ctx context.Context, status string, limit, page int) ([]entity.Entity, int64, error) {
+	return s.repo.GetEntitiesWithFilters(ctx, status, limit, page)
+}
+
+// ============ DASHBOARD ============ //
+
+// GetDashboardMetrics provides overview metrics for the admin dashboard.
+func (s *Service) GetDashboardMetrics(ctx context.Context) (DashboardMetrics, error) {
+	return s.repo.GetDashboardMetrics(ctx)
 }

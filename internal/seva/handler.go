@@ -20,16 +20,18 @@ func NewHandler(service Service) *Handler {
 // ========================= REQUEST STRUCTS =============================
 
 type CreateSevaRequest struct {
-	Name              string             `json:"name" binding:"required"`
-	SevaType          string             `json:"seva_type" binding:"required"`
-	Description       string             `json:"description"`
-	Price             float64            `json:"price"`
-	Duration          int                `json:"duration" binding:"required"`
-	MaxBookingsPerDay int                `json:"max_bookings_per_day"`
-	Status            string             `json:"status"`
-	IsActive          bool               `json:"is_active"`
-	Availability      []SevaAvailability `json:"availability"`
+	Name              string    `json:"name" binding:"required"`
+	SevaType          string    `json:"seva_type" binding:"required"`
+	Description       string    `json:"description"`
+	Price             float64   `json:"price"`
+	Date              string    `json:"date"`
+	StartTime         string    `json:"start_time"`
+	EndTime           string    `json:"end_time"`
+	Duration          int       `json:"duration"`
+	MaxBookingsPerDay int       `json:"max_bookings_per_day"`
 }
+
+
 
 type BookSevaRequest struct {
 	SevaID          uint    `json:"seva_id" binding:"required"`
@@ -61,11 +63,13 @@ func (h *Handler) CreateSeva(c *gin.Context) {
 		SevaType:          input.SevaType,
 		Description:       input.Description,
 		Price:             input.Price,
+		Date:              input.Date,
+		StartTime:         input.StartTime,
+		EndTime:           input.EndTime,
 		Duration:          input.Duration,
 		MaxBookingsPerDay: input.MaxBookingsPerDay,
-		Status:            input.Status,
-		IsActive:          input.IsActive,
-		Availability:      input.Availability,
+		Status:            "upcoming",        // ✅ defaulted
+		IsActive:          true,              // ✅ defaulted
 	}
 
 	if err := h.service.CreateSeva(c, &seva, user.Role.RoleName, *user.EntityID); err != nil {
@@ -75,6 +79,7 @@ func (h *Handler) CreateSeva(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{"message": "Seva created successfully", "seva": seva})
 }
+
 
 func (h *Handler) GetSevas(c *gin.Context) {
 	user := c.MustGet("user").(auth.User)

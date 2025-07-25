@@ -57,8 +57,8 @@ func (h *Handler) UpdateTenantApprovalStatus(c *gin.Context) {
 	}
 
 	var body struct {
-		Status string `json:"status" binding:"required"` // "APPROVED" or "REJECTED"
-		Reason string `json:"reason"`                    // required if REJECTED
+		Status string `json:"status" binding:"required"`
+		Reason string `json:"reason"`
 	}
 
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -132,8 +132,8 @@ func (h *Handler) UpdateEntityApprovalStatus(c *gin.Context) {
 	}
 
 	var body struct {
-		Status string `json:"status" binding:"required"` // "APPROVED" or "REJECTED"
-		Reason string `json:"reason"`                    // required if REJECTED
+		Status string `json:"status" binding:"required"`
+		Reason string `json:"reason"`
 	}
 
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -164,4 +164,17 @@ func (h *Handler) UpdateEntityApprovalStatus(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Entity status updated successfully"})
+}
+
+// =========================== DASHBOARD METRICS ===========================
+
+// GET /superadmin/dashboard
+func (h *Handler) GetDashboardMetrics(c *gin.Context) {
+	metrics, err := h.service.GetDashboardMetrics(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch dashboard metrics"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": metrics})
 }

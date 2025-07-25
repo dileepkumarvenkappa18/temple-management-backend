@@ -84,18 +84,11 @@ func (r *Repository) ListEventsByEntity(entityID uint, limit, offset int, search
 
 // ===========================
 // 🛠 Update Event
-func (r *Repository) UpdateEvent(id uint, entityID uint, update *UpdateEventRequest) error {
-	return r.DB.Model(&Event{}).
-		Where("id = ? AND entity_id = ?", id, entityID).
-		Updates(map[string]interface{}{
-			"title":       update.Title,
-			"description": update.Description,
-			"event_date":  update.EventDate,
-			"event_time":  update.EventTime,
-			"location":    update.Location,
-			"event_type":  update.EventType,
-		}).Error
+// 🛠 Update Event
+func (r *Repository) UpdateEvent(e *Event) error {
+	return r.DB.Save(e).Error
 }
+
 
 // ===========================
 // ❌ Delete Event
