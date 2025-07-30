@@ -1,0 +1,306 @@
+{
+  "templates": [
+    {
+      "id": "welcome_devotee",
+      "name": "Welcome New Devotee",
+      "category": "onboarding",
+      "type": "email",
+      "subject": "🙏 Welcome to {{temple_name}} - Your Spiritual Journey Begins",
+      "body": "Namaste {{devotee_name}},\n\nWe are delighted to welcome you to our {{temple_name}} family! 🕉️\n\nYour registration has been successfully completed, and you are now part of our spiritual community. We look forward to serving you in your devotional journey.\n\n📱 What's Next:\n• Complete your profile to receive personalized recommendations\n• Browse our upcoming sevas and events\n• Connect with our community of devotees\n\nFor any assistance, please don't hesitate to contact us.\n\nWith divine blessings,\n{{temple_name}} Management Team\n\n📧 Email: {{temple_email}}\n📞 Phone: {{temple_phone}}",
+      "tags": ["welcome", "devotee", "onboarding"],
+      "is_active": true,
+      "created_at": "2024-01-15T10:30:00Z",
+      "updated_at": "2024-01-15T10:30:00Z"
+    },
+    {
+      "id": "seva_booking_confirmation",
+      "name": "Seva Booking Confirmation",
+      "category": "booking",
+      "type": "sms",
+      "subject": "",
+      "body": "🙏 Namaste {{devotee_name}}! Your seva booking is confirmed:\n\n📅 Date: {{seva_date}}\n🕐 Time: {{seva_time}}\n🙏 Seva: {{seva_name}}\n💰 Amount: ₹{{amount}}\n\nPlease arrive 15 minutes early. Booking ID: {{booking_id}}\n\n{{temple_name}}",
+      "tags": ["seva", "booking", "confirmation"],
+      "is_active": true,
+      "created_at": "2024-01-15T10:35:00Z",
+      "updated_at": "2024-01-15T10:35:00Z"
+    },
+    {
+      "id": "donation_receipt",
+      "name": "Donation Receipt",
+      "category": "donation",
+      "type": "email",
+      "subject": "🙏 Thank You for Your Generous Donation - Receipt #{{receipt_id}}",
+      "body": "Namaste {{devotee_name}},\n\nThank you for your generous donation to {{temple_name}}. Your contribution helps us continue our sacred services and community programs.\n\n💰 Donation Details:\n• Amount: ₹{{amount}}\n• Date: {{donation_date}}\n• Receipt ID: {{receipt_id}}\n• Purpose: {{donation_purpose}}\n• Payment Method: {{payment_method}}\n\nYour donation is eligible for tax benefits under Section 80G. Please keep this receipt for your records.\n\nMay the divine bless you abundantly for your generous heart.\n\nWith gratitude,\n{{temple_name}} Management\n\n📧 {{temple_email}} | 📞 {{temple_phone}}",
+      "tags": ["donation", "receipt", "gratitude"],
+      "is_active": true,
+      "created_at": "2024-01-15T10:40:00Z",
+      "updated_at": "2024-01-15T10:40:00Z"
+    },
+    {
+      "id": "event_reminder",
+      "name": "Upcoming Event Reminder",
+      "category": "event",
+      "type": "whatsapp",
+      "subject": "",
+      "body": "🎉 Namaste {{devotee_name}}!\n\nReminder: {{event_name}} is tomorrow!\n\n📅 Date: {{event_date}}\n🕐 Time: {{event_time}}\n📍 Venue: {{event_venue}}\n\n✨ Special Highlights:\n{{event_highlights}}\n\n🎯 Don't forget to:\n• Arrive 30 minutes early\n• Bring your RSVP confirmation\n• Dress code: {{dress_code}}\n\nWe look forward to your presence!\n\n{{temple_name}} 🙏",
+      "tags": ["event", "reminder", "notification"],
+      "is_active": true,
+      "created_at": "2024-01-15T10:45:00Z",
+      "updated_at": "2024-01-15T10:45:00Z"
+    },
+    {
+      "id": "festival_announcement",
+      "name": "Festival Celebration Announcement",
+      "category": "announcement",
+      "type": "email",
+      "subject": "🎊 Join Us for {{festival_name}} Celebrations at {{temple_name}}",
+      "body": "Namaste Dear Devotees,\n\n🎉 We are excited to invite you to celebrate {{festival_name}} with our temple family!\n\n📅 Celebration Details:\n• Date: {{festival_date}}\n• Time: {{festival_time}}\n• Special Programs: {{special_programs}}\n\n🙏 Featured Sevas:\n{{featured_sevas}}\n\n🍽️ Prasadam Distribution:\n• Breakfast: {{breakfast_time}}\n• Lunch: {{lunch_time}}\n• Dinner: {{dinner_time}}\n\n📝 How to Participate:\n• RSVP by {{rsvp_deadline}}\n• Book your preferred sevas in advance\n• Volunteer opportunities available\n\nLet's come together to celebrate this auspicious occasion with devotion and joy!\n\nSeeking your blessings,\n{{temple_name}} Management Team\n\n📱 For RSVP: {{temple_phone}}\n📧 Email: {{temple_email}}",
+      "tags": ["festival", "announcement", "celebration"],
+      "is_active": true,
+      "created_at": "2024-01-15T10:50:00Z",
+      "updated_at": "2024-01-15T10:50:00Z"
+    },
+    {
+      "id": "volunteer_assignment",
+      "name": "Volunteer Task Assignment",
+      "category": "volunteer",
+      "type": "sms",
+      "subject": "",
+      "body": "🙏 Namaste {{volunteer_name}}!\n\nYou've been assigned to help with:\n\n📋 Task: {{task_name}}\n📅 Date: {{task_date}}\n🕐 Time: {{task_time}}\n📍 Location: {{task_location}}\n👥 Coordinator: {{coordinator_name}}\n\nPlease confirm your availability by replying YES or NO.\n\nThank you for your service!\n{{temple_name}} 🙏",
+      "tags": ["volunteer", "assignment", "task"],
+      "is_active": true,
+      "created_at": "2024-01-15T10:55:00Z",
+      "updated_at": "2024-01-15T10:55:00Z"
+    },
+    {
+      "id": "monthly_newsletter",
+      "name": "Monthly Temple Newsletter",
+      "category": "newsletter",
+      "type": "email",
+      "subject": "📰 {{temple_name}} Monthly Newsletter - {{month}} {{year}}",
+      "body": "Namaste Dear Devotees,\n\n🌟 Welcome to our monthly newsletter! Here's what happened at {{temple_name}} this month:\n\n📊 Monthly Highlights:\n• Total Devotees Served: {{devotees_served}}\n• Sevas Conducted: {{sevas_count}}\n• Donations Received: ₹{{total_donations}}\n• Events Organized: {{events_count}}\n\n🎉 Major Events:\n{{major_events}}\n\n📅 Upcoming Events:\n{{upcoming_events}}\n\n🙏 Featured Seva of the Month:\n{{featured_seva}}\n\n💡 Temple Updates:\n{{temple_updates}}\n\n📸 Photo Gallery:\nCheck out photos from our recent events at {{gallery_link}}\n\n🤝 Volunteer Spotlight:\n{{volunteer_spotlight}}\n\n📞 Need Help? Contact Us:\n• Email: {{temple_email}}\n• Phone: {{temple_phone}}\n• Website: {{temple_website}}\n\nThank you for being part of our spiritual family!\n\nWith divine blessings,\n{{temple_name}} Team",
+      "tags": ["newsletter", "monthly", "update"],
+      "is_active": true,
+      "created_at": "2024-01-15T11:00:00Z",
+      "updated_at": "2024-01-15T11:00:00Z"
+    },
+    {
+      "id": "seva_reminder",
+      "name": "Seva Reminder",
+      "category": "reminder",
+      "type": "sms",
+      "subject": "",
+      "body": "🙏 Namaste {{devotee_name}}!\n\nReminder: Your seva is scheduled for tomorrow:\n\n📅 Date: {{seva_date}}\n🕐 Time: {{seva_time}}\n🙏 Seva: {{seva_name}}\n📍 Location: {{seva_location}}\n\nPlease arrive 15 minutes early. Booking ID: {{booking_id}}\n\nFor any changes, contact us at {{temple_phone}}\n\n{{temple_name}} 🕉️",
+      "tags": ["seva", "reminder", "booking"],
+      "is_active": true,
+      "created_at": "2024-01-15T11:05:00Z",
+      "updated_at": "2024-01-15T11:05:00Z"
+    },
+    {
+      "id": "birthday_wishes",
+      "name": "Birthday Wishes",
+      "category": "personal",
+      "type": "whatsapp",
+      "subject": "",
+      "body": "🎂 Happy Birthday {{devotee_name}}! 🎉\n\nOn this special day, may the divine shower you with abundant blessings, good health, prosperity, and spiritual growth.\n\n🙏 Special Birthday Seva:\nWe've arranged a special birthday seva for you. Please visit the temple at your convenience to receive divine blessings.\n\n🎁 Birthday Blessing:\n\"May your path be filled with devotion, your heart with peace, and your life with joy.\"\n\nCelebrate your special day with us!\n\nWith warm wishes,\n{{temple_name}} Family 🕉️\n\n📞 {{temple_phone}}",
+      "tags": ["birthday", "personal", "wishes"],
+      "is_active": true,
+      "created_at": "2024-01-15T11:10:00Z",
+      "updated_at": "2024-01-15T11:10:00Z"
+    },
+    {
+      "id": "payment_overdue",
+      "name": "Payment Overdue Notice",
+      "category": "payment",
+      "type": "email",
+      "subject": "⚠️ Payment Reminder - Seva Booking #{{booking_id}}",
+      "body": "Namaste {{devotee_name}},\n\nWe hope this message finds you in good health and spirits.\n\nThis is a gentle reminder that your payment for the following seva booking is overdue:\n\n📋 Booking Details:\n• Booking ID: {{booking_id}}\n• Seva Name: {{seva_name}}\n• Date: {{seva_date}}\n• Amount Due: ₹{{amount_due}}\n• Due Date: {{due_date}}\n• Days Overdue: {{days_overdue}}\n\n💳 Payment Options:\n• Online: {{payment_link}}\n• UPI: {{upi_id}}\n• Visit temple counter\n• Bank Transfer: {{bank_details}}\n\nIf you have already made the payment, please ignore this message or contact us with your payment reference.\n\nFor any assistance or to discuss payment options, please don't hesitate to reach out to us.\n\nThank you for your understanding.\n\nWith regards,\n{{temple_name}} Accounts Team\n\n📧 {{temple_email}} | 📞 {{temple_phone}}",
+      "tags": ["payment", "overdue", "reminder"],
+      "is_active": true,
+      "created_at": "2024-01-15T11:15:00Z",
+      "updated_at": "2024-01-15T11:15:00Z"
+    },
+    {
+      "id": "seva_cancelled",
+      "name": "Seva Cancellation Notice",
+      "category": "cancellation",
+      "type": "sms",
+      "subject": "",
+      "body": "🙏 Namaste {{devotee_name}},\n\nWe regret to inform you that your seva booking has been cancelled:\n\n📋 Booking ID: {{booking_id}}\n🙏 Seva: {{seva_name}}\n📅 Date: {{seva_date}}\n💰 Refund: ₹{{refund_amount}}\n\nReason: {{cancellation_reason}}\n\nRefund will be processed within 3-5 business days.\n\nWe apologize for any inconvenience.\n\n{{temple_name}} 📞 {{temple_phone}}",
+      "tags": ["seva", "cancellation", "refund"],
+      "is_active": true,
+      "created_at": "2024-01-15T11:20:00Z",
+      "updated_at": "2024-01-15T11:20:00Z"
+    },
+    {
+      "id": "special_darshan",
+      "name": "Special Darshan Invitation",
+      "category": "invitation",
+      "type": "whatsapp",
+      "subject": "",
+      "body": "🙏 Namaste {{devotee_name}}!\n\n✨ You are cordially invited to a Special Darshan:\n\n🕉️ Occasion: {{occasion}}\n📅 Date: {{darshan_date}}\n🕐 Time: {{darshan_time}}\n📍 Location: {{darshan_location}}\n\n🌟 Special Features:\n• {{special_feature_1}}\n• {{special_feature_2}}\n• {{special_feature_3}}\n\n📝 RSVP Required:\nPlease confirm your attendance by {{rsvp_date}}\n\n🎁 Prasadam will be distributed after darshan\n\nLimited seats available. First come, first served.\n\nFor confirmation: {{temple_phone}}\n\n{{temple_name}} 🙏",
+      "tags": ["darshan", "invitation", "special"],
+      "is_active": true,
+      "created_at": "2024-01-15T11:25:00Z",
+      "updated_at": "2024-01-15T11:25:00Z"
+    }
+  ],
+  "categories": [
+    {
+      "id": "onboarding",
+      "name": "Onboarding",
+      "description": "Templates for welcoming new members",
+      "color": "bg-indigo-100 text-indigo-800"
+    },
+    {
+      "id": "booking",
+      "name": "Booking",
+      "description": "Seva and event booking related messages",
+      "color": "bg-green-100 text-green-800"
+    },
+    {
+      "id": "donation",
+      "name": "Donation",
+      "description": "Donation receipts and acknowledgments",
+      "color": "bg-yellow-100 text-yellow-800"
+    },
+    {
+      "id": "event",
+      "name": "Event",
+      "description": "Event notifications and reminders",
+      "color": "bg-purple-100 text-purple-800"
+    },
+    {
+      "id": "announcement",
+      "name": "Announcement",
+      "description": "General announcements and news",
+      "color": "bg-blue-100 text-blue-800"
+    },
+    {
+      "id": "volunteer",
+      "name": "Volunteer",
+      "description": "Volunteer coordination and assignments",
+      "color": "bg-orange-100 text-orange-800"
+    },
+    {
+      "id": "newsletter",
+      "name": "Newsletter",
+      "description": "Monthly and quarterly newsletters",
+      "color": "bg-teal-100 text-teal-800"
+    },
+    {
+      "id": "reminder",
+      "name": "Reminder",
+      "description": "General reminders and notifications",
+      "color": "bg-red-100 text-red-800"
+    },
+    {
+      "id": "personal",
+      "name": "Personal",
+      "description": "Personal messages like birthday wishes",
+      "color": "bg-pink-100 text-pink-800"
+    },
+    {
+      "id": "payment",
+      "name": "Payment",
+      "description": "Payment related notifications",
+      "color": "bg-amber-100 text-amber-800"
+    },
+    {
+      "id": "cancellation",
+      "name": "Cancellation",
+      "description": "Booking cancellations and refunds",
+      "color": "bg-gray-100 text-gray-800"
+    },
+    {
+      "id": "invitation",
+      "name": "Invitation",
+      "description": "Special event invitations",
+      "color": "bg-emerald-100 text-emerald-800"
+    }
+  ],
+  "message_types": [
+    {
+      "id": "email",
+      "name": "Email",
+      "icon": "mail",
+      "description": "Detailed email messages with rich formatting"
+    },
+    {
+      "id": "sms",
+      "name": "SMS",
+      "icon": "message-square",
+      "description": "Short text messages (160 characters recommended)"
+    },
+    {
+      "id": "whatsapp",
+      "name": "WhatsApp",
+      "icon": "message-circle",
+      "description": "WhatsApp messages with emojis and formatting"
+    }
+  ],
+  "variables": {
+    "devotee": [
+      "{{devotee_name}}",
+      "{{devotee_phone}}",
+      "{{devotee_email}}",
+      "{{devotee_id}}"
+    ],
+    "temple": [
+      "{{temple_name}}",
+      "{{temple_phone}}",
+      "{{temple_email}}",
+      "{{temple_address}}",
+      "{{temple_website}}"
+    ],
+    "seva": [
+      "{{seva_name}}",
+      "{{seva_date}}",
+      "{{seva_time}}",
+      "{{seva_location}}",
+      "{{booking_id}}",
+      "{{amount}}"
+    ],
+    "event": [
+      "{{event_name}}",
+      "{{event_date}}",
+      "{{event_time}}",
+      "{{event_venue}}",
+      "{{event_highlights}}",
+      "{{dress_code}}"
+    ],
+    "donation": [
+      "{{amount}}",
+      "{{donation_date}}",
+      "{{receipt_id}}",
+      "{{donation_purpose}}",
+      "{{payment_method}}"
+    ],
+    "volunteer": [
+      "{{volunteer_name}}",
+      "{{task_name}}",
+      "{{task_date}}",
+      "{{task_time}}",
+      "{{task_location}}",
+      "{{coordinator_name}}"
+    ],
+    "common": [
+      "{{month}}",
+      "{{year}}",
+      "{{date}}",
+      "{{time}}",
+      "{{occasion}}"
+    ]
+  },
+  "settings": {
+    "default_sender_name": "Temple Management System",
+    "max_template_length": {
+      "sms": 160,
+      "whatsapp": 1000,
+      "email": 5000
+    },
+    "supported_languages": ["en", "hi", "ta", "te", "kn"],
+    "auto_save_drafts": true,
+    "template_approval_required": false
+  }
+}

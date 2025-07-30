@@ -1,0 +1,359 @@
+{
+  "donationTypes": [
+    {
+      "id": "general",
+      "name": "General Donation",
+      "description": "General temple maintenance and operations",
+      "category": "operations",
+      "isActive": true,
+      "icon": "temple",
+      "color": "indigo",
+      "minAmount": 10,
+      "suggestedAmounts": [51, 101, 251, 501, 1001],
+      "isRecurring": true,
+      "taxDeductible": true,
+      "displayOrder": 1,
+      "metadata": {
+        "purpose": "Temple maintenance, utilities, and daily operations",
+        "beneficiaries": "Temple community",
+        "impact": "Ensures smooth temple functioning"
+      }
+    },
+    {
+      "id": "seva",
+      "name": "Seva Donation",
+      "description": "Contribution for specific seva activities",
+      "category": "seva",
+      "isActive": true,
+      "icon": "hands",
+      "color": "indigo",
+      "minAmount": 25,
+      "suggestedAmounts": [51, 101, 251, 501],
+      "isRecurring": false,
+      "taxDeductible": true,
+      "displayOrder": 2,
+      "metadata": {
+        "purpose": "Supporting specific seva activities and rituals",
+        "beneficiaries": "Devotees participating in seva",
+        "impact": "Enhances spiritual experience and seva quality"
+      }
+    },
+    {
+      "id": "annadanam",
+      "name": "Annadanam",
+      "description": "Food offering and distribution to devotees",
+      "category": "charity",
+      "isActive": true,
+      "icon": "utensils",
+      "color": "orange",
+      "minAmount": 21,
+      "suggestedAmounts": [51, 101, 251, 501, 1001],
+      "isRecurring": true,
+      "taxDeductible": true,
+      "displayOrder": 3,
+      "metadata": {
+        "purpose": "Providing free meals to devotees and visitors",
+        "beneficiaries": "All temple visitors and devotees",
+        "impact": "Ensures no one leaves the temple hungry"
+      }
+    },
+    {
+      "id": "construction",
+      "name": "Temple Construction",
+      "description": "Infrastructure development and renovation",
+      "category": "development",
+      "isActive": true,
+      "icon": "building",
+      "color": "blue",
+      "minAmount": 100,
+      "suggestedAmounts": [501, 1001, 2501, 5001, 10001],
+      "isRecurring": true,
+      "taxDeductible": true,
+      "displayOrder": 4,
+      "metadata": {
+        "purpose": "Temple construction, renovation, and infrastructure",
+        "beneficiaries": "Future generations of devotees",
+        "impact": "Permanent legacy for temple development"
+      }
+    },
+    {
+      "id": "education",
+      "name": "Educational Programs",
+      "description": "Supporting temple education and cultural activities",
+      "category": "education",
+      "isActive": true,
+      "icon": "book",
+      "color": "green",
+      "minAmount": 50,
+      "suggestedAmounts": [101, 251, 501, 1001],
+      "isRecurring": true,
+      "taxDeductible": true,
+      "displayOrder": 5,
+      "metadata": {
+        "purpose": "Religious education, cultural programs, and workshops",
+        "beneficiaries": "Children and youth in the community",
+        "impact": "Preserves cultural heritage and spiritual knowledge"
+      }
+    },
+    {
+      "id": "festival",
+      "name": "Festival Celebration",
+      "description": "Supporting temple festivals and special events",
+      "category": "events",
+      "isActive": true,
+      "icon": "calendar",
+      "color": "purple",
+      "minAmount": 25,
+      "suggestedAmounts": [51, 101, 251, 501, 1001],
+      "isRecurring": false,
+      "taxDeductible": true,
+      "displayOrder": 6,
+      "metadata": {
+        "purpose": "Festival celebrations, decorations, and special events",
+        "beneficiaries": "Entire temple community",
+        "impact": "Creates memorable spiritual experiences"
+      }
+    },
+    {
+      "id": "deity_ornaments",
+      "name": "Deity Ornaments",
+      "description": "Jewelry and decorations for temple deities",
+      "category": "decoration",
+      "isActive": true,
+      "icon": "gem",
+      "color": "yellow",
+      "minAmount": 51,
+      "suggestedAmounts": [101, 251, 501, 1001, 2501],
+      "isRecurring": false,
+      "taxDeductible": true,
+      "displayOrder": 7,
+      "metadata": {
+        "purpose": "Beautiful ornaments, jewelry, and decorations for deities",
+        "beneficiaries": "Devotees enjoying enhanced deity darshan",
+        "impact": "Enhances the divine aesthetic and spiritual atmosphere"
+      }
+    },
+    {
+      "id": "maintenance",
+      "name": "Temple Maintenance",
+      "description": "Regular upkeep and repair work",
+      "category": "operations",
+      "isActive": true,
+      "icon": "wrench",
+      "color": "gray",
+      "minAmount": 25,
+      "suggestedAmounts": [51, 101, 251, 501],
+      "isRecurring": true,
+      "taxDeductible": true,
+      "displayOrder": 8,
+      "metadata": {
+        "purpose": "Regular maintenance, cleaning, and repair activities",
+        "beneficiaries": "All temple visitors",
+        "impact": "Maintains temple in pristine condition"
+      }
+    },
+    {
+      "id": "charity",
+      "name": "Charity & Welfare",
+      "description": "Supporting community welfare activities",
+      "category": "charity",
+      "isActive": true,
+      "icon": "heart",
+      "color": "red",
+      "minAmount": 21,
+      "suggestedAmounts": [51, 101, 251, 501, 1001],
+      "isRecurring": true,
+      "taxDeductible": true,
+      "displayOrder": 9,
+      "metadata": {
+        "purpose": "Community welfare, helping underprivileged, and charity work",
+        "beneficiaries": "Needy community members",
+        "impact": "Spreads compassion and supports those in need"
+      }
+    },
+    {
+      "id": "special_offering",
+      "name": "Special Offering",
+      "description": "Custom donations for specific purposes",
+      "category": "special",
+      "isActive": true,
+      "icon": "gift",
+      "color": "pink",
+      "minAmount": 11,
+      "suggestedAmounts": [51, 101, 251, 501],
+      "isRecurring": false,
+      "taxDeductible": true,
+      "displayOrder": 10,
+      "metadata": {
+        "purpose": "Special offerings for personal prayers and wishes",
+        "beneficiaries": "Individual devotees and their families",
+        "impact": "Personalized spiritual connection and blessings"
+      }
+    }
+  ],
+  "categories": [
+    {
+      "id": "operations",
+      "name": "Operations",
+      "description": "Day-to-day temple operations",
+      "color": "indigo",
+      "icon": "cog"
+    },
+    {
+      "id": "seva",
+      "name": "Seva Activities",
+      "description": "Religious services and rituals",
+      "color": "indigo",
+      "icon": "hands"
+    },
+    {
+      "id": "charity",
+      "name": "Charity & Welfare",
+      "description": "Community service and welfare",
+      "color": "orange",
+      "icon": "heart"
+    },
+    {
+      "id": "development",
+      "name": "Development",
+      "description": "Infrastructure and construction",
+      "color": "blue",
+      "icon": "building"
+    },
+    {
+      "id": "education",
+      "name": "Education",
+      "description": "Learning and cultural programs",
+      "color": "green",
+      "icon": "book"
+    },
+    {
+      "id": "events",
+      "name": "Events & Festivals",
+      "description": "Special celebrations and events",
+      "color": "purple",
+      "icon": "calendar"
+    },
+    {
+      "id": "decoration",
+      "name": "Decoration",
+      "description": "Temple beautification and ornaments",
+      "color": "yellow",
+      "icon": "gem"
+    },
+    {
+      "id": "special",
+      "name": "Special Offerings",
+      "description": "Custom and personal offerings",
+      "color": "pink",
+      "icon": "gift"
+    }
+  ],
+  "paymentMethods": [
+    {
+      "id": "upi",
+      "name": "UPI",
+      "description": "Unified Payments Interface",
+      "icon": "smartphone",
+      "isActive": true,
+      "processingFee": 0,
+      "maxAmount": 100000,
+      "instantReceipt": true
+    },
+    {
+      "id": "card",
+      "name": "Credit/Debit Card",
+      "description": "Visa, Mastercard, RuPay",
+      "icon": "credit-card",
+      "isActive": true,
+      "processingFee": 2.5,
+      "maxAmount": 500000,
+      "instantReceipt": true
+    },
+    {
+      "id": "netbanking",
+      "name": "Net Banking",
+      "description": "Direct bank transfer",
+      "icon": "bank",
+      "isActive": true,
+      "processingFee": 1.5,
+      "maxAmount": 1000000,
+      "instantReceipt": true
+    },
+    {
+      "id": "cash",
+      "name": "Cash",
+      "description": "Physical cash donation",
+      "icon": "banknotes",
+      "isActive": true,
+      "processingFee": 0,
+      "maxAmount": 50000,
+      "instantReceipt": false
+    },
+    {
+      "id": "cheque",
+      "name": "Cheque",
+      "description": "Bank cheque payment",
+      "icon": "document",
+      "isActive": true,
+      "processingFee": 0,
+      "maxAmount": 2000000,
+      "instantReceipt": false
+    }
+  ],
+  "receiptSettings": {
+    "autoGenerate": true,
+    "includeQR": true,
+    "emailReceipt": true,
+    "smsReceipt": true,
+    "printFormat": "A4",
+    "languages": ["en", "hi", "ta", "te", "kn"],
+    "taxDeductionInfo": {
+      "section": "80G",
+      "certificateRequired": true,
+      "minimumAmount": 500
+    }
+  },
+  "recurringOptions": [
+    {
+      "id": "monthly",
+      "name": "Monthly",
+      "description": "Every month",
+      "interval": 1,
+      "unit": "month"
+    },
+    {
+      "id": "quarterly",
+      "name": "Quarterly",
+      "description": "Every 3 months",
+      "interval": 3,
+      "unit": "month"
+    },
+    {
+      "id": "half_yearly",
+      "name": "Half Yearly",
+      "description": "Every 6 months",
+      "interval": 6,
+      "unit": "month"
+    },
+    {
+      "id": "yearly",
+      "name": "Yearly",
+      "description": "Every year",
+      "interval": 1,
+      "unit": "year"
+    }
+  ],
+  "defaultSettings": {
+    "currency": "INR",
+    "currencySymbol": "₹",
+    "minDonationAmount": 10,
+    "maxDonationAmount": 1000000,
+    "defaultCategory": "general",
+    "enableRecurring": true,
+    "enableTaxDeduction": true,
+    "requireDonorInfo": true,
+    "allowAnonymous": true,
+    "autoReceiptGeneration": true
+  }
+}

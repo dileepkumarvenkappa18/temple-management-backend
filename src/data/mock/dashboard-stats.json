@@ -1,0 +1,443 @@
+{
+  "superAdmin": {
+    "summary": {
+      "totalTenants": 124,
+      "pendingApprovals": 8,
+      "approvedTemples": 87,
+      "rejectedTemples": 12,
+      "totalUsers": 15420,
+      "monthlyGrowth": "+12.5%"
+    },
+    "recentActivity": [
+      {
+        "id": 1,
+        "type": "tenant_registration",
+        "message": "New tenant registration from 'Sri Venkateswara Temple'",
+        "timestamp": "2025-06-20T10:30:00Z",
+        "status": "pending"
+      },
+      {
+        "id": 2,
+        "type": "temple_approved",
+        "message": "Temple 'Radha Krishna Mandir' has been approved",
+        "timestamp": "2025-06-20T09:15:00Z",
+        "status": "approved"
+      },
+      {
+        "id": 3,
+        "type": "temple_rejected",
+        "message": "Temple 'Durga Mata Mandir' rejected - incomplete documents",
+        "timestamp": "2025-06-19T16:45:00Z",
+        "status": "rejected"
+      }
+    ],
+    "pendingApprovals": [
+      {
+        "id": 1,
+        "templeName": "Sri Hanuman Temple",
+        "tenantName": "Rajesh Kumar",
+        "submittedDate": "2025-06-18T14:20:00Z",
+        "location": "Bangalore, Karnataka",
+        "documentsCount": 4,
+        "status": "pending"
+      },
+      {
+        "id": 2,
+        "templeName": "Mata Vaishno Devi Shrine",
+        "tenantName": "Priya Sharma",
+        "submittedDate": "2025-06-17T11:30:00Z",
+        "location": "Mumbai, Maharashtra",
+        "documentsCount": 6,
+        "status": "pending"
+      }
+    ]
+  },
+  "tenant": {
+    "summary": {
+      "totalTemples": 3,
+      "approvedTemples": 2,
+      "pendingTemples": 1,
+      "rejectedTemples": 0,
+      "monthlyVisitors": 1250,
+      "growthRate": "+8.2%"
+    },
+    "temples": [
+      {
+        "id": 1,
+        "name": "Sri Lakshmi Narasimha Temple",
+        "status": "approved",
+        "devotees": 450,
+        "monthlyDonations": 125000,
+        "upcomingEvents": 3,
+        "approvedDate": "2025-05-15T10:00:00Z"
+      },
+      {
+        "id": 2,
+        "name": "Ganesha Temple",
+        "status": "approved",
+        "devotees": 320,
+        "monthlyDonations": 89000,
+        "upcomingEvents": 2,
+        "approvedDate": "2025-04-22T14:30:00Z"
+      },
+      {
+        "id": 3,
+        "name": "Shiva Parvati Mandir",
+        "status": "pending",
+        "devotees": 0,
+        "monthlyDonations": 0,
+        "upcomingEvents": 0,
+        "submittedDate": "2025-06-15T09:20:00Z"
+      }
+    ],
+    "recentActivity": [
+      {
+        "id": 1,
+        "type": "temple_approved",
+        "message": "Your temple 'Sri Lakshmi Narasimha Temple' has been approved!",
+        "timestamp": "2025-05-15T10:00:00Z"
+      },
+      {
+        "id": 2,
+        "type": "document_uploaded",
+        "message": "Documents uploaded for 'Shiva Parvati Mandir'",
+        "timestamp": "2025-06-15T09:20:00Z"
+      }
+    ]
+  },
+  "entityAdmin": {
+    "overview": {
+      "registeredDevotees": 450,
+      "todaySevaBookings": 12,
+      "monthlySevaBookings": 89,
+      "monthlyDonations": 125000,
+      "upcomingEvents": 3,
+      "activeVolunteers": 15,
+      "monthlyGrowth": "+15.3%"
+    },
+    "recentStats": {
+      "newDevoteesThisWeek": 8,
+      "totalDonationsToday": 12500,
+      "pendingSevaApprovals": 5,
+      "eventRSVPs": 67
+    },
+    "topDonors": [
+      {
+        "name": "Ramesh Gupta",
+        "amount": 25000,
+        "frequency": "Monthly",
+        "lastDonation": "2025-06-18T11:30:00Z"
+      },
+      {
+        "name": "Priya Devi",
+        "amount": 18000,
+        "frequency": "Weekly",
+        "lastDonation": "2025-06-19T16:45:00Z"
+      },
+      {
+        "name": "Suresh Kumar",
+        "amount": 15000,
+        "frequency": "Monthly",
+        "lastDonation": "2025-06-17T09:20:00Z"
+      }
+    ],
+    "upcomingEvents": [
+      {
+        "id": 1,
+        "name": "Ganesh Chaturthi Celebration",
+        "date": "2025-08-30T06:00:00Z",
+        "rsvpCount": 125,
+        "sevasAttached": 5,
+        "status": "active"
+      },
+      {
+        "id": 2,
+        "name": "Krishna Janmashtami",
+        "date": "2025-08-26T18:00:00Z",
+        "rsvpCount": 89,
+        "sevasAttached": 3,
+        "status": "active"
+      },
+      {
+        "id": 3,
+        "name": "Navaratri Festival",
+        "date": "2025-10-03T19:00:00Z",
+        "rsvpCount": 67,
+        "sevasAttached": 8,
+        "status": "planning"
+      }
+    ],
+    "recentActivity": [
+      {
+        "id": 1,
+        "type": "seva_booked",
+        "message": "Abhishek Seva booked by Rajesh Kumar",
+        "timestamp": "2025-06-20T11:15:00Z",
+        "amount": 2100
+      },
+      {
+        "id": 2,
+        "type": "donation_received",
+        "message": "₹5,000 donation received from Priya Devi",
+        "timestamp": "2025-06-20T10:45:00Z",
+        "amount": 5000
+      },
+      {
+        "id": 3,
+        "type": "event_rsvp",
+        "message": "New RSVP for Ganesh Chaturthi from 3 devotees",
+        "timestamp": "2025-06-20T09:30:00Z",
+        "count": 3
+      },
+      {
+        "id": 4,
+        "type": "devotee_joined",
+        "message": "New devotee Lakshmi Narayan joined the temple",
+        "timestamp": "2025-06-19T17:20:00Z"
+      }
+    ],
+    "sevaStats": {
+      "totalSevas": 25,
+      "activeSevas": 18,
+      "pendingApprovals": 5,
+      "completedThisMonth": 67,
+      "popularSevas": [
+        {
+          "name": "Abhishek Seva",
+          "bookings": 23,
+          "revenue": 48300
+        },
+        {
+          "name": "Archana Seva",
+          "bookings": 18,
+          "revenue": 9000
+        },
+        {
+          "name": "Annadana Seva",
+          "bookings": 15,
+          "revenue": 37500
+        }
+      ]
+    },
+    "communicationStats": {
+      "messagesSentThisMonth": 45,
+      "openRate": "78%",
+      "activeTemplates": 12,
+      "lastCampaign": "2025-06-18T14:30:00Z"
+    }
+  },
+  "devotee": {
+    "profile": {
+      "completionPercentage": 85,
+      "joinedDate": "2025-03-15T10:00:00Z",
+      "templeName": "Sri Lakshmi Narasimha Temple",
+      "membershipId": "DEV001450"
+    },
+    "activities": {
+      "totalSevasBooked": 12,
+      "totalDonations": 45000,
+      "eventsAttended": 8,
+      "favoriteSevas": ["Abhishek Seva", "Archana Seva"],
+      "lastVisit": "2025-06-18T06:30:00Z"
+    },
+    "upcomingBookings": [
+      {
+        "id": 1,
+        "sevaName": "Abhishek Seva",
+        "date": "2025-06-25T06:00:00Z",
+        "amount": 2100,
+        "status": "confirmed"
+      },
+      {
+        "id": 2,
+        "sevaName": "Archana Seva",
+        "date": "2025-06-28T18:00:00Z",
+        "amount": 500,
+        "status": "pending"
+      }
+    ],
+    "recentDonations": [
+      {
+        "id": 1,
+        "amount": 5000,
+        "purpose": "General Donation",
+        "date": "2025-06-18T11:30:00Z",
+        "receiptId": "RCP001234"
+      },
+      {
+        "id": 2,
+        "amount": 2100,
+        "purpose": "Abhishek Seva",
+        "date": "2025-06-15T09:45:00Z",
+        "receiptId": "RCP001235"
+      }
+    ],
+    "upcomingEvents": [
+      {
+        "id": 1,
+        "name": "Ganesh Chaturthi Celebration",
+        "date": "2025-08-30T06:00:00Z",
+        "rsvpStatus": "confirmed",
+        "sevasAvailable": 5
+      },
+      {
+        "id": 2,
+        "name": "Krishna Janmashtami",
+        "date": "2025-08-26T18:00:00Z",
+        "rsvpStatus": "pending",
+        "sevasAvailable": 3
+      }
+    ],
+    "notifications": [
+      {
+        "id": 1,
+        "type": "seva_reminder",
+        "message": "Reminder: Your Abhishek Seva is scheduled for tomorrow at 6:00 AM",
+        "timestamp": "2025-06-24T20:00:00Z",
+        "read": false
+      },
+      {
+        "id": 2,
+        "type": "event_update",
+        "message": "Ganesh Chaturthi: New seva options added",
+        "timestamp": "2025-06-20T14:30:00Z",
+        "read": false
+      },
+      {
+        "id": 3,
+        "type": "donation_receipt",
+        "message": "Receipt for your ₹5,000 donation is ready for download",
+        "timestamp": "2025-06-18T11:35:00Z",
+        "read": true
+      }
+    ]
+  },
+  "volunteer": {
+    "profile": {
+      "joinedDate": "2025-04-10T12:00:00Z",
+      "templeName": "Sri Lakshmi Narasimha Temple",
+      "volunteerId": "VOL001025",
+      "specialization": "Event Management"
+    },
+    "assignments": {
+      "activeAssignments": 3,
+      "completedThisMonth": 8,
+      "upcomingEvents": 2,
+      "totalHoursContributed": 45
+    },
+    "currentAssignments": [
+      {
+        "id": 1,
+        "task": "Ganesh Chaturthi Decoration Setup",
+        "event": "Ganesh Chaturthi Celebration",
+        "date": "2025-08-29T08:00:00Z",
+        "duration": "4 hours",
+        "status": "assigned"
+      },
+      {
+        "id": 2,
+        "task": "Devotee Registration Assistance",
+        "event": "Krishna Janmashtami",
+        "date": "2025-08-26T16:00:00Z",
+        "duration": "3 hours",
+        "status": "assigned"
+      },
+      {
+        "id": 3,
+        "task": "Audio System Management",
+        "event": "Daily Evening Aarti",
+        "date": "2025-06-21T18:00:00Z",
+        "duration": "1 hour",
+        "status": "recurring"
+      }
+    ],
+    "recentActivity": [
+      {
+        "id": 1,
+        "type": "assignment_completed",
+        "message": "Completed: Sound system setup for morning prayers",
+        "timestamp": "2025-06-20T07:30:00Z"
+      },
+      {
+        "id": 2,
+        "type": "new_assignment",
+        "message": "New assignment: Ganesh Chaturthi decoration setup",
+        "timestamp": "2025-06-19T15:20:00Z"
+      },
+      {
+        "id": 3,
+        "type": "event_update",
+        "message": "Krishna Janmashtami event details updated",
+        "timestamp": "2025-06-18T11:45:00Z"
+      }
+    ],
+    "upcomingEvents": [
+      {
+        "id": 1,
+        "name": "Ganesh Chaturthi Celebration",
+        "date": "2025-08-30T06:00:00Z",
+        "role": "Event Coordinator",
+        "tasksAssigned": 2
+      },
+      {
+        "id": 2,
+        "name": "Krishna Janmashtami",
+        "date": "2025-08-26T18:00:00Z",
+        "role": "Registration Assistant",
+        "tasksAssigned": 1
+      }
+    ],
+    "notifications": [
+      {
+        "id": 1,
+        "type": "assignment_reminder",
+        "message": "Reminder: Audio system management for evening aarti tomorrow",
+        "timestamp": "2025-06-20T16:00:00Z",
+        "read": false
+      },
+      {
+        "id": 2,
+        "type": "schedule_update",
+        "message": "Your schedule for Ganesh Chaturthi has been updated",
+        "timestamp": "2025-06-19T15:25:00Z",
+        "read": false
+      }
+    ]
+  },
+  "common": {
+    "timeRanges": ["Today", "This Week", "This Month", "Last Month", "This Year"],
+    "statusTypes": {
+      "approved": { "color": "green", "label": "Approved" },
+      "pending": { "color": "yellow", "label": "Pending" },
+      "rejected": { "color": "red", "label": "Rejected" },
+      "active": { "color": "green", "label": "Active" },
+      "inactive": { "color": "gray", "label": "Inactive" },
+      "confirmed": { "color": "blue", "label": "Confirmed" },
+      "cancelled": { "color": "red", "label": "Cancelled" }
+    },
+    "chartData": {
+      "monthlyDonations": [
+        { "month": "Jan", "amount": 85000 },
+        { "month": "Feb", "amount": 92000 },
+        { "month": "Mar", "amount": 78000 },
+        { "month": "Apr", "amount": 105000 },
+        { "month": "May", "amount": 118000 },
+        { "month": "Jun", "amount": 125000 }
+      ],
+      "sevaBookings": [
+        { "week": "Week 1", "bookings": 23 },
+        { "week": "Week 2", "bookings": 18 },
+        { "week": "Week 3", "bookings": 31 },
+        { "week": "Week 4", "bookings": 17 }
+      ],
+      "devoteeGrowth": [
+        { "month": "Jan", "devotees": 380 },
+        { "month": "Feb", "devotees": 392 },
+        { "month": "Mar", "devotees": 405 },
+        { "month": "Apr", "devotees": 425 },
+        { "month": "May", "devotees": 438 },
+        { "month": "Jun", "devotees": 450 }
+      ]
+    }
+  }
+}

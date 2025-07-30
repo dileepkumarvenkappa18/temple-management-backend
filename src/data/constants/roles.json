@@ -1,0 +1,107 @@
+{
+  "roles": {
+    "SUPER_ADMIN": {
+      "id": "SUPER_ADMIN",
+      "name": "Super Administrator",
+      "description": "Internal system administrator with full access",
+      "permissions": [
+        "manage_tenants",
+        "manage_temples", 
+        "approve_tenants",
+        "approve_temples",
+        "system_settings",
+        "view_all_data"
+      ],
+      "dashboard": "/admin/dashboard",
+      "allowRegistration": false,
+      "internal": true
+    },
+    "TENANT": {
+      "id": "TENANT",
+      "name": "Temple Administrator",
+      "description": "Creates and manages temples",
+      "permissions": [
+        "create_temple",
+        "manage_own_temples",
+        "view_temple_stats",
+        "upload_documents"
+      ],
+      "dashboard": "/tenant/dashboard",
+      "allowRegistration": true,
+      "requiresApproval": true,
+      "internal": false
+    },
+    "DEVOTEE": {
+      "id": "DEVOTEE", 
+      "name": "Devotee",
+      "description": "Temple member who can book sevas and donate",
+      "permissions": [
+        "join_temple",
+        "book_seva",
+        "make_donation",
+        "view_events",
+        "manage_profile",
+        "view_donation_history"
+      ],
+      "dashboard": "/entity/:id/devotee/dashboard",
+      "allowRegistration": true,
+      "requiresApproval": false,
+      "internal": false
+    },
+    "VOLUNTEER": {
+      "id": "VOLUNTEER",
+      "name": "Volunteer", 
+      "description": "Temple volunteer who assists with temple activities",
+      "permissions": [
+        "join_temple",
+        "view_assignments",
+        "view_events",
+        "manage_profile"
+      ],
+      "dashboard": "/entity/:id/volunteer/dashboard",
+      "allowRegistration": true,
+      "requiresApproval": false,
+      "internal": false
+    }
+  },
+  "statusTypes": {
+    "PENDING": {
+      "value": "PENDING",
+      "label": "Pending Approval",
+      "color": "bg-yellow-100 text-yellow-800",
+      "icon": "clock"
+    },
+    "APPROVED": {
+      "value": "APPROVED", 
+      "label": "Approved",
+      "color": "bg-green-100 text-green-800",
+      "icon": "check-circle"
+    },
+    "REJECTED": {
+      "value": "REJECTED",
+      "label": "Rejected", 
+      "color": "bg-red-100 text-red-800",
+      "icon": "x-circle"
+    }
+  },
+  "registrationFlow": {
+    "TENANT": {
+      "postRegistration": "PENDING",
+      "emailTemplate": "tenant_registration_received",
+      "approvalRequired": true,
+      "redirectAfterApproval": "/tenant/dashboard"
+    },
+    "DEVOTEE": {
+      "postRegistration": "ACTIVE",
+      "emailTemplate": "devotee_welcome", 
+      "approvalRequired": false,
+      "redirectAfterRegistration": "/devotee/temple-selection"
+    },
+    "VOLUNTEER": {
+      "postRegistration": "ACTIVE",
+      "emailTemplate": "volunteer_welcome",
+      "approvalRequired": false, 
+      "redirectAfterRegistration": "/volunteer/temple-selection"
+    }
+  }
+}

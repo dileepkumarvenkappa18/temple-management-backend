@@ -1,0 +1,434 @@
+{
+  "sevaCategories": {
+    "daily_rituals": {
+      "name": "Daily Rituals",
+      "description": "Regular daily worship services and rituals",
+      "color": "indigo",
+      "icon": "sunrise",
+      "priority": 1
+    },
+    "special_pujas": {
+      "name": "Special Pujas",
+      "description": "Specialized worship ceremonies and offerings",
+      "color": "purple",
+      "icon": "flame",
+      "priority": 2
+    },
+    "festivals": {
+      "name": "Festival Sevas",
+      "description": "Festival-specific worship and celebration services",
+      "color": "amber",
+      "icon": "sparkles",
+      "priority": 3
+    },
+    "personal_offerings": {
+      "name": "Personal Offerings",
+      "description": "Individual devotional services and offerings",
+      "color": "emerald",
+      "icon": "heart",
+      "priority": 4
+    },
+    "community_service": {
+      "name": "Community Service",
+      "description": "Voluntary community support and service activities",
+      "color": "blue",
+      "icon": "users",
+      "priority": 5
+    }
+  },
+  "sevaTypes": [
+    {
+      "id": "seva_001",
+      "name": "Mangala Aarti",
+      "category": "daily_rituals",
+      "description": "Morning worship ritual to invoke divine blessings for the day",
+      "duration": "30 minutes",
+      "price": {
+        "amount": 51,
+        "currency": "INR",
+        "isFixed": true
+      },
+      "timing": {
+        "preferredTime": "06:00",
+        "flexibility": "15 minutes"
+      },
+      "requirements": {
+        "devoteePresence": "optional",
+        "materials": ["flowers", "incense", "oil_lamp"],
+        "preparation": "15 minutes"
+      },
+      "benefits": [
+        "Removes negative energy",
+        "Brings peace and prosperity",
+        "Starts day with divine blessings"
+      ],
+      "availability": {
+        "frequency": "daily",
+        "maxBookings": 5,
+        "advanceBooking": "7 days"
+      },
+      "isActive": true,
+      "createdAt": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": "seva_002",
+      "name": "Abhishekam",
+      "category": "special_pujas",
+      "description": "Sacred bathing ritual of the deity with holy substances",
+      "duration": "45 minutes",
+      "price": {
+        "amount": 101,
+        "currency": "INR",
+        "isFixed": true
+      },
+      "timing": {
+        "preferredTime": "10:00",
+        "flexibility": "30 minutes"
+      },
+      "requirements": {
+        "devoteePresence": "recommended",
+        "materials": ["milk", "honey", "water", "flowers", "sandalwood"],
+        "preparation": "30 minutes"
+      },
+      "benefits": [
+        "Purifies mind and soul",
+        "Removes obstacles",
+        "Grants spiritual elevation"
+      ],
+      "availability": {
+        "frequency": "weekly",
+        "maxBookings": 3,
+        "advanceBooking": "14 days"
+      },
+      "isActive": true,
+      "createdAt": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": "seva_003",
+      "name": "Satyanarayana Puja",
+      "category": "special_pujas",
+      "description": "Comprehensive worship for prosperity and well-being",
+      "duration": "2 hours",
+      "price": {
+        "amount": 251,
+        "currency": "INR",
+        "isFixed": true
+      },
+      "timing": {
+        "preferredTime": "11:00",
+        "flexibility": "1 hour"
+      },
+      "requirements": {
+        "devoteePresence": "required",
+        "materials": ["fruits", "sweets", "flowers", "coconut", "rice"],
+        "preparation": "45 minutes"
+      },
+      "benefits": [
+        "Fulfills wishes and desires",
+        "Brings family harmony",
+        "Ensures prosperity"
+      ],
+      "availability": {
+        "frequency": "on_demand",
+        "maxBookings": 2,
+        "advanceBooking": "21 days"
+      },
+      "isActive": true,
+      "createdAt": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": "seva_004",
+      "name": "Annadanam",
+      "category": "community_service",
+      "description": "Food offering and distribution to devotees and community",
+      "duration": "3 hours",
+      "price": {
+        "amount": 501,
+        "currency": "INR",
+        "isFixed": false
+      },
+      "timing": {
+        "preferredTime": "12:00",
+        "flexibility": "2 hours"
+      },
+      "requirements": {
+        "devoteePresence": "optional",
+        "materials": ["rice", "vegetables", "pulses", "spices"],
+        "preparation": "2 hours"
+      },
+      "benefits": [
+        "Accumulates good karma",
+        "Feeds the hungry",
+        "Promotes community bonding"
+      ],
+      "availability": {
+        "frequency": "weekly",
+        "maxBookings": 1,
+        "advanceBooking": "30 days"
+      },
+      "isActive": true,
+      "createdAt": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": "seva_005",
+      "name": "Deepa Seva",
+      "category": "daily_rituals",
+      "description": "Lighting of sacred lamps for divine illumination",
+      "duration": "20 minutes",
+      "price": {
+        "amount": 21,
+        "currency": "INR",
+        "isFixed": true
+      },
+      "timing": {
+        "preferredTime": "18:00",
+        "flexibility": "30 minutes"
+      },
+      "requirements": {
+        "devoteePresence": "optional",
+        "materials": ["oil", "wicks", "ghee"],
+        "preparation": "10 minutes"
+      },
+      "benefits": [
+        "Removes darkness and ignorance",
+        "Brings clarity and wisdom",
+        "Creates positive energy"
+      ],
+      "availability": {
+        "frequency": "daily",
+        "maxBookings": 10,
+        "advanceBooking": "3 days"
+      },
+      "isActive": true,
+      "createdAt": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": "seva_006",
+      "name": "Archana",
+      "category": "personal_offerings",
+      "description": "Personal prayer with name chanting and flower offering",
+      "duration": "15 minutes",
+      "price": {
+        "amount": 11,
+        "currency": "INR",
+        "isFixed": true
+      },
+      "timing": {
+        "preferredTime": "flexible",
+        "flexibility": "4 hours"
+      },
+      "requirements": {
+        "devoteePresence": "not_required",
+        "materials": ["flowers", "kumkum", "turmeric"],
+        "preparation": "5 minutes"
+      },
+      "benefits": [
+        "Personal divine connection",
+        "Removes negativity",
+        "Brings peace of mind"
+      ],
+      "availability": {
+        "frequency": "daily",
+        "maxBookings": 50,
+        "advanceBooking": "1 day"
+      },
+      "isActive": true,
+      "createdAt": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": "seva_007",
+      "name": "Diwali Maha Lakshmi Puja",
+      "category": "festivals",
+      "description": "Grand Goddess Lakshmi worship during Diwali celebration",
+      "duration": "4 hours",
+      "price": {
+        "amount": 1001,
+        "currency": "INR",
+        "isFixed": true
+      },
+      "timing": {
+        "preferredTime": "19:00",
+        "flexibility": "1 hour"
+      },
+      "requirements": {
+        "devoteePresence": "recommended",
+        "materials": ["gold_items", "flowers", "sweets", "diyas", "rangoli"],
+        "preparation": "3 hours"
+      },
+      "benefits": [
+        "Attracts wealth and prosperity",
+        "Removes financial obstacles",
+        "Brings family blessings"
+      ],
+      "availability": {
+        "frequency": "annual",
+        "maxBookings": 1,
+        "advanceBooking": "60 days"
+      },
+      "isActive": true,
+      "createdAt": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": "seva_008",
+      "name": "Navagraha Puja",
+      "category": "special_pujas",
+      "description": "Nine planetary deities worship for cosmic harmony",
+      "duration": "90 minutes",
+      "price": {
+        "amount": 351,
+        "currency": "INR",
+        "isFixed": true
+      },
+      "timing": {
+        "preferredTime": "09:00",
+        "flexibility": "2 hours"
+      },
+      "requirements": {
+        "devoteePresence": "required",
+        "materials": ["nine_grains", "colored_flowers", "gemstones", "oils"],
+        "preparation": "45 minutes"
+      },
+      "benefits": [
+        "Balances planetary influences",
+        "Improves life circumstances",
+        "Brings cosmic harmony"
+      ],
+      "availability": {
+        "frequency": "monthly",
+        "maxBookings": 3,
+        "advanceBooking": "45 days"
+      },
+      "isActive": true,
+      "createdAt": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": "seva_009",
+      "name": "Pradakshina Seva",
+      "category": "personal_offerings",
+      "description": "Circumambulation service around the temple deity",
+      "duration": "30 minutes",
+      "price": {
+        "amount": 31,
+        "currency": "INR",
+        "isFixed": true
+      },
+      "timing": {
+        "preferredTime": "flexible",
+        "flexibility": "6 hours"
+      },
+      "requirements": {
+        "devoteePresence": "required",
+        "materials": ["flowers", "incense"],
+        "preparation": "5 minutes"
+      },
+      "benefits": [
+        "Purifies karma",
+        "Increases devotion",
+        "Brings mental peace"
+      ],
+      "availability": {
+        "frequency": "daily",
+        "maxBookings": 20,
+        "advanceBooking": "2 days"
+      },
+      "isActive": true,
+      "createdAt": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": "seva_010",
+      "name": "Temple Cleaning Seva",
+      "category": "community_service",
+      "description": "Voluntary temple premises cleaning and maintenance",
+      "duration": "2 hours",
+      "price": {
+        "amount": 0,
+        "currency": "INR",
+        "isFixed": true
+      },
+      "timing": {
+        "preferredTime": "07:00",
+        "flexibility": "3 hours"
+      },
+      "requirements": {
+        "devoteePresence": "required",
+        "materials": ["cleaning_supplies", "water", "brooms"],
+        "preparation": "15 minutes"
+      },
+      "benefits": [
+        "Accumulates spiritual merit",
+        "Develops humility",
+        "Serves the divine"
+      ],
+      "availability": {
+        "frequency": "weekly",
+        "maxBookings": 10,
+        "advanceBooking": "7 days"
+      },
+      "isActive": true,
+      "createdAt": "2024-01-01T00:00:00Z"
+    }
+  ],
+  "sevaSettings": {
+    "bookingRules": {
+      "maxAdvanceBooking": "90 days",
+      "minAdvanceBooking": "1 day",
+      "cancellationPolicy": "24 hours before",
+      "refundPolicy": "50% if cancelled 24 hours prior"
+    },
+    "paymentMethods": [
+      "cash",
+      "upi",
+      "card",
+      "net_banking",
+      "wallet"
+    ],
+    "notifications": {
+      "booking_confirmation": true,
+      "reminder_24h": true,
+      "reminder_1h": true,
+      "completion_receipt": true
+    },
+    "customization": {
+      "allowCustomSeva": true,
+      "requireApproval": true,
+      "customPricingEnabled": true
+    }
+  },
+  "sevaStatus": {
+    "PENDING": {
+      "label": "Pending Approval",
+      "color": "yellow",
+      "bgColor": "bg-yellow-100",
+      "textColor": "text-yellow-800",
+      "description": "Awaiting temple admin approval"
+    },
+    "APPROVED": {
+      "label": "Approved",
+      "color": "green",
+      "bgColor": "bg-green-100",
+      "textColor": "text-green-800",
+      "description": "Confirmed and scheduled"
+    },
+    "COMPLETED": {
+      "label": "Completed",
+      "color": "blue",
+      "bgColor": "bg-blue-100",
+      "textColor": "text-blue-800",
+      "description": "Seva has been performed"
+    },
+    "CANCELLED": {
+      "label": "Cancelled",
+      "color": "red",
+      "bgColor": "bg-red-100",
+      "textColor": "text-red-800",
+      "description": "Booking has been cancelled"
+    },
+    "IN_PROGRESS": {
+      "label": "In Progress",
+      "color": "indigo",
+      "bgColor": "bg-indigo-100",
+      "textColor": "text-indigo-800",
+      "description": "Currently being performed"
+    }
+  }
+}

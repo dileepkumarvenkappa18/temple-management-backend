@@ -1,0 +1,686 @@
+{
+  "events": [
+    {
+      "id": "evt_001",
+      "entityId": "temple_001",
+      "title": "Maha Shivaratri Celebration",
+      "description": "Join us for the grand celebration of Maha Shivaratri with special pujas, abhishekam, and cultural programs throughout the night.",
+      "type": "festival",
+      "category": "religious",
+      "startDate": "2025-02-26T18:00:00Z",
+      "endDate": "2025-02-27T06:00:00Z",
+      "venue": "Main Temple Hall",
+      "address": "123 Temple Street, Bengaluru, Karnataka 560001",
+      "maxAttendees": 500,
+      "currentAttendees": 287,
+      "registrationRequired": true,
+      "registrationDeadline": "2025-02-24T23:59:59Z",
+      "ticketPrice": 0,
+      "status": "upcoming",
+      "visibility": "public",
+      "organizer": {
+        "name": "Temple Management Committee",
+        "contact": "+91 9876543210",
+        "email": "events@shreeramtemple.org"
+      },
+      "attachedSevas": [
+        {
+          "sevaId": "seva_001",
+          "sevaName": "Maha Rudrabhishekam",
+          "price": 5100,
+          "slots": 11,
+          "bookedSlots": 8
+        },
+        {
+          "sevaId": "seva_002", 
+          "sevaName": "Panchamrita Abhishekam",
+          "price": 2100,
+          "slots": 21,
+          "bookedSlots": 15
+        }
+      ],
+      "schedule": [
+        {
+          "time": "18:00",
+          "activity": "Evening Aarti & Welcome",
+          "duration": "30 mins"
+        },
+        {
+          "time": "19:00",
+          "activity": "Maha Rudrabhishekam",
+          "duration": "2 hours"
+        },
+        {
+          "time": "22:00",
+          "activity": "Cultural Programs",
+          "duration": "2 hours"
+        },
+        {
+          "time": "01:00",
+          "activity": "Midnight Special Puja",
+          "duration": "1 hour"
+        },
+        {
+          "time": "05:30",
+          "activity": "Mangala Aarti",
+          "duration": "30 mins"
+        }
+      ],
+      "rsvpStats": {
+        "total": 287,
+        "confirmed": 245,
+        "pending": 42,
+        "declined": 15
+      },
+      "communications": [
+        {
+          "id": "comm_001",
+          "type": "invitation",
+          "sentDate": "2025-02-10T10:00:00Z",
+          "recipientCount": 450,
+          "subject": "Join us for Maha Shivaratri Celebration"
+        },
+        {
+          "id": "comm_002",
+          "type": "reminder",
+          "sentDate": "2025-02-20T09:00:00Z",
+          "recipientCount": 287,
+          "subject": "Reminder: Maha Shivaratri Tomorrow"
+        }
+      ],
+      "createdBy": "admin_001",
+      "createdAt": "2025-01-15T10:00:00Z",
+      "updatedAt": "2025-02-20T15:30:00Z"
+    },
+    {
+      "id": "evt_002",
+      "entityId": "temple_001",
+      "title": "Sri Rama Navami Utsavam",
+      "description": "9-day celebration of Lord Rama's birth with daily pujas, kalyanam, and special offerings.",
+      "type": "festival",
+      "category": "religious",
+      "startDate": "2025-04-05T06:00:00Z",
+      "endDate": "2025-04-13T20:00:00Z",
+      "venue": "Temple Complex",
+      "address": "123 Temple Street, Bengaluru, Karnataka 560001",
+      "maxAttendees": 800,
+      "currentAttendees": 156,
+      "registrationRequired": true,
+      "registrationDeadline": "2025-04-02T23:59:59Z",
+      "ticketPrice": 0,
+      "status": "upcoming",
+      "visibility": "public",
+      "organizer": {
+        "name": "Festival Committee",
+        "contact": "+91 9876543211",
+        "email": "festivals@shreeramtemple.org"
+      },
+      "attachedSevas": [
+        {
+          "sevaId": "seva_003",
+          "sevaName": "Sita Rama Kalyanam",
+          "price": 11000,
+          "slots": 5,
+          "bookedSlots": 2
+        },
+        {
+          "sevaId": "seva_004",
+          "sevaName": "Hanuman Chalisa Parayanam",
+          "price": 500,
+          "slots": 108,
+          "bookedSlots": 45
+        }
+      ],
+      "schedule": [
+        {
+          "time": "06:00",
+          "activity": "Suprabhatam & Morning Aarti",
+          "duration": "1 hour"
+        },
+        {
+          "time": "10:00",
+          "activity": "Special Abhishekam",
+          "duration": "2 hours"
+        },
+        {
+          "time": "16:00",
+          "activity": "Ramayana Parayanam",
+          "duration": "2 hours"
+        },
+        {
+          "time": "19:00",
+          "activity": "Evening Aarti & Prasadam",
+          "duration": "1 hour"
+        }
+      ],
+      "rsvpStats": {
+        "total": 156,
+        "confirmed": 134,
+        "pending": 22,
+        "declined": 8
+      },
+      "communications": [
+        {
+          "id": "comm_003",
+          "type": "invitation",
+          "sentDate": "2025-03-15T10:00:00Z",
+          "recipientCount": 600,
+          "subject": "Sri Rama Navami Utsavam - 9 Days of Divine Celebration"
+        }
+      ],
+      "createdBy": "admin_001",
+      "createdAt": "2025-02-01T10:00:00Z",
+      "updatedAt": "2025-03-15T12:00:00Z"
+    },
+    {
+      "id": "evt_003",
+      "entityId": "temple_002",
+      "title": "Ganesha Chaturthi Festival",
+      "description": "10-day Ganesha festival with daily aartis, cultural programs, and grand visarjan procession.",
+      "type": "festival",
+      "category": "religious",
+      "startDate": "2025-08-28T06:00:00Z",
+      "endDate": "2025-09-07T18:00:00Z",
+      "venue": "Sri Ganesha Temple",
+      "address": "456 Devotion Avenue, Mumbai, Maharashtra 400001",
+      "maxAttendees": 1000,
+      "currentAttendees": 0,
+      "registrationRequired": false,
+      "registrationDeadline": null,
+      "ticketPrice": 0,
+      "status": "draft",
+      "visibility": "public",
+      "organizer": {
+        "name": "Ganesha Utsav Committee",
+        "contact": "+91 9876543212",
+        "email": "ganpati@sriganesha.org"
+      },
+      "attachedSevas": [
+        {
+          "sevaId": "seva_005",
+          "sevaName": "Modaka Offering",
+          "price": 1100,
+          "slots": 50,
+          "bookedSlots": 0
+        },
+        {
+          "sevaId": "seva_006",
+          "sevaName": "Ganesha Abhishekam",
+          "price": 2100,
+          "slots": 20,
+          "bookedSlots": 0
+        }
+      ],
+      "schedule": [
+        {
+          "time": "06:00",
+          "activity": "Mangala Aarti",
+          "duration": "30 mins"
+        },
+        {
+          "time": "10:00",
+          "activity": "Ganesha Abhishekam",
+          "duration": "1 hour"
+        },
+        {
+          "time": "12:00",
+          "activity": "Modaka Distribution",
+          "duration": "1 hour"
+        },
+        {
+          "time": "18:00",
+          "activity": "Evening Aarti & Cultural Program",
+          "duration": "2 hours"
+        }
+      ],
+      "rsvpStats": {
+        "total": 0,
+        "confirmed": 0,
+        "pending": 0,
+        "declined": 0
+      },
+      "communications": [],
+      "createdBy": "admin_002",
+      "createdAt": "2025-06-01T10:00:00Z",
+      "updatedAt": "2025-06-01T10:00:00Z"
+    },
+    {
+      "id": "evt_004",
+      "entityId": "temple_001",
+      "title": "Monthly Satyanarayan Puja",
+      "description": "Monthly Satyanarayan Vratam with katha, puja, and prasadam distribution for devotees.",
+      "type": "monthly",
+      "category": "puja",
+      "startDate": "2025-07-15T10:00:00Z",
+      "endDate": "2025-07-15T12:30:00Z",
+      "venue": "Prayer Hall",
+      "address": "123 Temple Street, Bengaluru, Karnataka 560001",
+      "maxAttendees": 100,
+      "currentAttendees": 67,
+      "registrationRequired": true,
+      "registrationDeadline": "2025-07-13T18:00:00Z",
+      "ticketPrice": 0,
+      "status": "upcoming",
+      "visibility": "members_only",
+      "organizer": {
+        "name": "Puja Committee",
+        "contact": "+91 9876543213",
+        "email": "pujas@shreeramtemple.org"
+      },
+      "attachedSevas": [
+        {
+          "sevaId": "seva_007",
+          "sevaName": "Satyanarayan Vratam Sponsorship",
+          "price": 3100,
+          "slots": 5,
+          "bookedSlots": 3
+        }
+      ],
+      "schedule": [
+        {
+          "time": "10:00",
+          "activity": "Ganesh Puja & Kalasha Sthapana",
+          "duration": "30 mins"
+        },
+        {
+          "time": "10:30",
+          "activity": "Satyanarayan Katha",
+          "duration": "1 hour"
+        },
+        {
+          "time": "11:30",
+          "activity": "Aarti & Prayers",
+          "duration": "30 mins"
+        },
+        {
+          "time": "12:00",
+          "activity": "Prasadam Distribution",
+          "duration": "30 mins"
+        }
+      ],
+      "rsvpStats": {
+        "total": 67,
+        "confirmed": 58,
+        "pending": 9,
+        "declined": 2
+      },
+      "communications": [
+        {
+          "id": "comm_004",
+          "type": "invitation",
+          "sentDate": "2025-07-05T10:00:00Z",
+          "recipientCount": 150,
+          "subject": "Monthly Satyanarayan Puja - July 15th"
+        }
+      ],
+      "createdBy": "admin_001",
+      "createdAt": "2025-06-15T10:00:00Z",
+      "updatedAt": "2025-07-05T11:00:00Z"
+    },
+    {
+      "id": "evt_005",
+      "entityId": "temple_001",
+      "title": "Bhagavad Gita Study Circle",
+      "description": "Weekly study sessions on Bhagavad Gita with discussions, Q&A, and spiritual guidance.",
+      "type": "weekly",
+      "category": "educational",
+      "startDate": "2025-06-22T17:00:00Z",
+      "endDate": "2025-06-22T19:00:00Z",
+      "venue": "Study Hall",
+      "address": "123 Temple Street, Bengaluru, Karnataka 560001",
+      "maxAttendees": 50,
+      "currentAttendees": 23,
+      "registrationRequired": true,
+      "registrationDeadline": "2025-06-21T20:00:00Z",
+      "ticketPrice": 0,
+      "status": "ongoing",
+      "visibility": "public",
+      "organizer": {
+        "name": "Educational Committee",
+        "contact": "+91 9876543214",
+        "email": "education@shreeramtemple.org"
+      },
+      "attachedSevas": [],
+      "schedule": [
+        {
+          "time": "17:00",
+          "activity": "Opening Prayers",
+          "duration": "15 mins"
+        },
+        {
+          "time": "17:15",
+          "activity": "Chapter Reading & Explanation",
+          "duration": "1 hour"
+        },
+        {
+          "time": "18:15",
+          "activity": "Group Discussion",
+          "duration": "30 mins"
+        },
+        {
+          "time": "18:45",
+          "activity": "Q&A Session",
+          "duration": "15 mins"
+        }
+      ],
+      "rsvpStats": {
+        "total": 23,
+        "confirmed": 21,
+        "pending": 2,
+        "declined": 1
+      },
+      "communications": [
+        {
+          "id": "comm_005",
+          "type": "weekly_reminder",
+          "sentDate": "2025-06-20T09:00:00Z",
+          "recipientCount": 45,
+          "subject": "Bhagavad Gita Study Circle - This Sunday"
+        }
+      ],
+      "createdBy": "volunteer_001",
+      "createdAt": "2025-06-01T10:00:00Z",
+      "updatedAt": "2025-06-20T10:00:00Z"
+    },
+    {
+      "id": "evt_006",
+      "entityId": "temple_002",
+      "title": "Community Service - Food Distribution",
+      "description": "Monthly community service initiative to distribute free meals to underprivileged families.",
+      "type": "monthly",
+      "category": "service",
+      "startDate": "2025-07-01T11:00:00Z",
+      "endDate": "2025-07-01T15:00:00Z",
+      "venue": "Community Center",
+      "address": "789 Service Street, Mumbai, Maharashtra 400002",
+      "maxAttendees": 200,
+      "currentAttendees": 89,
+      "registrationRequired": false,
+      "registrationDeadline": null,
+      "ticketPrice": 0,
+      "status": "upcoming",
+      "visibility": "public",
+      "organizer": {
+        "name": "Service Committee",
+        "contact": "+91 9876543215",
+        "email": "service@sriganesha.org"
+      },
+      "attachedSevas": [
+        {
+          "sevaId": "seva_008",
+          "sevaName": "Annadanam Sponsorship",
+          "price": 5000,
+          "slots": 10,
+          "bookedSlots": 4
+        }
+      ],
+      "schedule": [
+        {
+          "time": "11:00",
+          "activity": "Volunteer Registration & Briefing",
+          "duration": "30 mins"
+        },
+        {
+          "time": "11:30",
+          "activity": "Food Preparation",
+          "duration": "2 hours"
+        },
+        {
+          "time": "13:30",
+          "activity": "Distribution Setup",
+          "duration": "30 mins"
+        },
+        {
+          "time": "14:00",
+          "activity": "Community Food Distribution",
+          "duration": "1 hour"
+        }
+      ],
+      "rsvpStats": {
+        "total": 89,
+        "confirmed": 76,
+        "pending": 13,
+        "declined": 5
+      },
+      "communications": [
+        {
+          "id": "comm_006",
+          "type": "volunteer_call",
+          "sentDate": "2025-06-20T08:00:00Z",
+          "recipientCount": 300,
+          "subject": "Join Our Community Service - Food Distribution Drive"
+        }
+      ],
+      "createdBy": "admin_002",
+      "createdAt": "2025-05-15T10:00:00Z",
+      "updatedAt": "2025-06-20T09:00:00Z"
+    },
+    {
+      "id": "evt_007",
+      "entityId": "temple_001",
+      "title": "Diwali Celebration & Lakshmi Puja",
+      "description": "Grand Diwali celebration with Lakshmi Puja, fireworks, cultural programs, and traditional feast.",
+      "type": "festival",
+      "category": "religious",
+      "startDate": "2025-10-31T17:00:00Z",
+      "endDate": "2025-10-31T22:00:00Z",
+      "venue": "Temple Courtyard",
+      "address": "123 Temple Street, Bengaluru, Karnataka 560001",
+      "maxAttendees": 600,
+      "currentAttendees": 0,
+      "registrationRequired": true,
+      "registrationDeadline": "2025-10-28T23:59:59Z",
+      "ticketPrice": 0,
+      "status": "draft",
+      "visibility": "public",
+      "organizer": {
+        "name": "Festival Committee",
+        "contact": "+91 9876543210",
+        "email": "festivals@shreeramtemple.org"
+      },
+      "attachedSevas": [
+        {
+          "sevaId": "seva_009",
+          "sevaName": "Lakshmi Puja Sponsorship",
+          "price": 7500,
+          "slots": 8,
+          "bookedSlots": 0
+        },
+        {
+          "sevaId": "seva_010",
+          "sevaName": "Diya Lighting Ceremony",
+          "price": 1100,
+          "slots": 50,
+          "bookedSlots": 0
+        }
+      ],
+      "schedule": [
+        {
+          "time": "17:00",
+          "activity": "Temple Decoration & Diya Lighting",
+          "duration": "1 hour"
+        },
+        {
+          "time": "18:00",
+          "activity": "Lakshmi Puja & Aarti",
+          "duration": "1.5 hours"
+        },
+        {
+          "time": "19:30",
+          "activity": "Cultural Programs",
+          "duration": "1.5 hours"
+        },
+        {
+          "time": "21:00",
+          "activity": "Traditional Feast & Sweets",
+          "duration": "1 hour"
+        }
+      ],
+      "rsvpStats": {
+        "total": 0,
+        "confirmed": 0,
+        "pending": 0,
+        "declined": 0
+      },
+      "communications": [],
+      "createdBy": "admin_001",
+      "createdAt": "2025-06-01T10:00:00Z",
+      "updatedAt": "2025-06-01T10:00:00Z"
+    },
+    {
+      "id": "evt_008",
+      "entityId": "temple_003",
+      "title": "Karthik Masa Celebrations",
+      "description": "Month-long celebrations during Karthik with daily Tulsi puja, Ganga aarti, and spiritual discourses.",
+      "type": "special",
+      "category": "religious",
+      "startDate": "2025-11-01T06:00:00Z",
+      "endDate": "2025-11-30T20:00:00Z",
+      "venue": "Riverside Temple",
+      "address": "321 Riverbank Road, Haridwar, Uttarakhand 249401",
+      "maxAttendees": 300,
+      "currentAttendees": 45,
+      "registrationRequired": false,
+      "registrationDeadline": null,
+      "ticketPrice": 0,
+      "status": "upcoming",
+      "visibility": "public",
+      "organizer": {
+        "name": "Spiritual Committee",
+        "contact": "+91 9876543216",
+        "email": "karthik@rivertemple.org"
+      },
+      "attachedSevas": [
+        {
+          "sevaId": "seva_011",
+          "sevaName": "Tulsi Vivah Sponsorship",
+          "price": 2500,
+          "slots": 15,
+          "bookedSlots": 6
+        },
+        {
+          "sevaId": "seva_012",
+          "sevaName": "Daily Ganga Aarti",  
+          "price": 500,
+          "slots": 30,
+          "bookedSlots": 12
+        }
+      ],
+      "schedule": [
+        {
+          "time": "06:00",
+          "activity": "Morning Tulsi Puja",
+          "duration": "30 mins"
+        },
+        {
+          "time": "18:00",
+          "activity": "Ganga Aarti",
+          "duration": "45 mins"
+        },
+        {
+          "time": "19:00",
+          "activity": "Spiritual Discourse",
+          "duration": "1 hour"
+        }
+      ],
+      "rsvpStats": {
+        "total": 45,
+        "confirmed": 38,
+        "pending": 7,
+        "declined": 3
+      },
+      "communications": [
+        {
+          "id": "comm_007",
+          "type": "invitation",
+          "sentDate": "2025-10-15T10:00:00Z",
+          "recipientCount": 200,
+          "subject": "Join Karthik Masa Celebrations - Month of Devotion"
+        }
+      ],
+      "createdBy": "admin_003",
+      "createdAt": "2025-09-01T10:00:00Z",
+      "updatedAt": "2025-10-15T11:00:00Z"
+    }
+  ],
+  "eventTypes": [
+    {
+      "id": "festival",
+      "name": "Festival",
+      "description": "Major religious festivals and celebrations",
+      "color": "bg-yellow-100 text-yellow-800"
+    },
+    {
+      "id": "monthly",
+      "name": "Monthly",
+      "description": "Regular monthly events and pujas",
+      "color": "bg-blue-100 text-blue-800"
+    },
+    {
+      "id": "weekly",
+      "name": "Weekly",
+      "description": "Weekly recurring events and study circles",
+      "color": "bg-green-100 text-green-800"
+    },
+    {
+      "id": "special",
+      "name": "Special",
+      "description": "Special occasions and seasonal celebrations",
+      "color": "bg-purple-100 text-purple-800"
+    }
+  ],
+  "eventCategories": [
+    {
+      "id": "religious", 
+      "name": "Religious",
+      "description": "Pujas, festivals, and religious ceremonies"
+    },
+    {
+      "id": "educational",
+      "name": "Educational", 
+      "description": "Study circles, workshops, and learning sessions"
+    },
+    {
+      "id": "service",
+      "name": "Community Service",
+      "description": "Social service and community outreach programs"
+    },
+    {
+      "id": "cultural",
+      "name": "Cultural",
+      "description": "Cultural programs, music, and art events"
+    }
+  ],
+  "eventStatuses": [
+    {
+      "id": "draft",
+      "name": "Draft",
+      "description": "Event is being planned",
+      "color": "bg-gray-100 text-gray-800"
+    },
+    {
+      "id": "upcoming",
+      "name": "Upcoming",
+      "description": "Event is scheduled and published",
+      "color": "bg-indigo-100 text-indigo-800"
+    },
+    {
+      "id": "ongoing",
+      "name": "Ongoing",
+      "description": "Event is currently happening",
+      "color": "bg-green-100 text-green-800"
+    },
+    {
+      "id": "completed",
+      "name": "Completed",
+      "description": "Event has finished",
+      "color": "bg-blue-100 text-blue-800"
+    },
+    {
+      "id": "cancelled",
+      "name": "Cancelled",
+      "description": "Event has been cancelled",
+      "color": "bg-red-100 text-red-800"
+    }
+  ]
+}

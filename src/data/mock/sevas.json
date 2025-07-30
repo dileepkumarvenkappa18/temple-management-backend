@@ -1,0 +1,970 @@
+{
+  "sevas": [
+    {
+      "id": "seva_001",
+      "entityId": "temple_001",
+      "templeName": "Sri Venkateswara Temple",
+      "sevaName": "Abhishekam",
+      "sevaNameSanskrit": "अभिषेकम्",
+      "description": "Sacred ritual of anointing the deity with holy substances including milk, honey, ghee, and sacred waters",
+      "detailedDescription": "The Abhishekam is a profound spiritual practice where the deity is bathed with various sacred substances. This ritual purifies the devotee's mind and soul while invoking divine blessings. The ceremony includes chanting of Vedic mantras and concludes with Aarti.",
+      "category": "Daily Seva",
+      "subcategory": "Ritual Seva",
+      "duration": 45,
+      "durationUnit": "minutes",
+      "cost": 501.00,
+      "currency": "INR",
+      "maxBookingsPerDay": 8,
+      "maxBookingsPerSlot": 2,
+      "isActive": true,
+      "requiresApproval": false,
+      "advanceBookingDays": 30,
+      "cancellationPolicy": "Can be cancelled up to 24 hours before the seva time",
+      "benefits": [
+        "Removes obstacles and negative energies",
+        "Brings peace and prosperity",
+        "Purifies mind and body",
+        "Grants divine blessings"
+      ],
+      "inclusions": [
+        "Sacred materials (milk, honey, ghee)",
+        "Vedic chanting by priests",
+        "Prasadam distribution",
+        "Archana with devotee's name"
+      ],
+      "requirements": [
+        "Devotee should be present during the seva",
+        "Appropriate traditional dress recommended",
+        "Mobile phones to be switched off"
+      ],
+      "availableTimeSlots": [
+        {
+          "slotId": "slot_001",
+          "startTime": "06:00",
+          "endTime": "06:45",
+          "isAvailable": true,
+          "bookedCount": 1,
+          "maxCapacity": 2
+        },
+        {
+          "slotId": "slot_002",
+          "startTime": "07:00",
+          "endTime": "07:45",
+          "isAvailable": true,
+          "bookedCount": 0,
+          "maxCapacity": 2
+        },
+        {
+          "slotId": "slot_003",
+          "startTime": "18:00",
+          "endTime": "18:45",
+          "isAvailable": true,
+          "bookedCount": 2,
+          "maxCapacity": 2
+        }
+      ],
+      "unavailableDates": [
+        "2025-07-15",
+        "2025-08-15",
+        "2025-10-02"
+      ],
+      "specialInstructions": "Please arrive 15 minutes before the scheduled time. Fasting is recommended but not mandatory.",
+      "createdBy": "priest_001",
+      "createdAt": "2025-01-15T10:30:00Z",
+      "updatedBy": "admin_001",
+      "updatedAt": "2025-06-01T14:22:00Z",
+      "tags": ["spiritual", "blessing", "ritual", "traditional"],
+      "imageUrl": "https://example.com/seva-images/abhishekam.jpg",
+      "status": "ACTIVE",
+      "priority": "HIGH",
+      "seasonalAvailability": "ALL_SEASONS"
+    },
+    {
+      "id": "seva_002",
+      "entityId": "temple_001",
+      "templeName": "Sri Venkateswara Temple",
+      "sevaName": "Sahasranama Archana",
+      "sevaNameSanskrit": "सहस्रनाम अर्चना",
+      "description": "Chanting of 1008 names of the deity with flower offerings for divine blessings",
+      "detailedDescription": "The Sahasranama Archana involves the melodious recitation of 1008 sacred names of Lord Venkateswara. Each name is offered with fresh flowers, creating a spiritually charged atmosphere. This seva is particularly powerful for removing sins and obstacles.",
+      "category": "Special Seva",
+      "subcategory": "Archana Seva",
+      "duration": 60,
+      "durationUnit": "minutes",
+      "cost": 251.00,
+      "currency": "INR",
+      "maxBookingsPerDay": 4,
+      "maxBookingsPerSlot": 1,
+      "isActive": true,
+      "requiresApproval": false,
+      "advanceBookingDays": 15,
+      "cancellationPolicy": "Can be cancelled up to 12 hours before the seva time",
+      "benefits": [
+        "Removes all forms of negativity",
+        "Brings success in endeavors",
+        "Enhances spiritual progress",
+        "Fulfills righteous desires"
+      ],
+      "inclusions": [
+        "1008 flower offerings",
+        "Sandalwood paste application",
+        "Kumkum and turmeric",
+        "Sacred prasadam",
+        "Personalized archana with family names"
+      ],
+      "requirements": [
+        "Provide complete family names in advance",
+        "Gotra details if known",
+        "Dress modestly and traditionally"
+      ],
+      "availableTimeSlots": [
+        {
+          "slotId": "slot_004",
+          "startTime": "08:30",
+          "endTime": "09:30",
+          "isAvailable": true,
+          "bookedCount": 0,
+          "maxCapacity": 1
+        },
+        {
+          "slotId": "slot_005",
+          "startTime": "16:30",
+          "endTime": "17:30",
+          "isAvailable": false,
+          "bookedCount": 1,
+          "maxCapacity": 1
+        }
+      ],
+      "unavailableDates": [],
+      "specialInstructions": "Provide a list of family members' names for whom the archana is to be performed. Vegetarian meals recommended on the day of seva.",
+      "createdBy": "priest_002",
+      "createdAt": "2025-02-10T09:15:00Z",
+      "updatedBy": "priest_002",
+      "updatedAt": "2025-05-20T16:45:00Z",
+      "tags": ["archana", "names", "flowers", "traditional"],
+      "imageUrl": "https://example.com/seva-images/sahasranama.jpg",
+      "status": "ACTIVE",
+      "priority": "MEDIUM",
+      "seasonalAvailability": "ALL_SEASONS"
+    },
+    {
+      "id": "seva_003",
+      "entityId": "temple_002",
+      "templeName": "Sri Lakshmi Narasimha Temple",
+      "sevaName": "Kalyanam",
+      "sevaNameSanskrit": "कल्याणम्",
+      "description": "Divine marriage ceremony of the deity, bringing marital bliss and harmony",
+      "detailedDescription": "The Kalyanam seva recreates the divine marriage of the deity with elaborate decorations, traditional music, and Vedic ceremonies. This seva is especially beneficial for unmarried individuals seeking a suitable life partner and married couples seeking harmony.",
+      "category": "Festival Seva",
+      "subcategory": "Ceremonial Seva",
+      "duration": 120,
+      "durationUnit": "minutes",
+      "cost": 1001.00,
+      "currency": "INR",
+      "maxBookingsPerDay": 2,
+      "maxBookingsPerSlot": 1,
+      "isActive": true,
+      "requiresApproval": true,
+      "advanceBookingDays": 45,
+      "cancellationPolicy": "Can be cancelled up to 7 days before the seva date with 50% refund",
+      "benefits": [
+        "Removes obstacles in marriage",
+        "Brings marital harmony",
+        "Blesses with progeny",
+        "Strengthens relationships"
+      ],
+      "inclusions": [
+        "Elaborate deity decoration",
+        "Traditional wedding rituals",
+        "Mangalasnanam",
+        "Vedic wedding mantras",
+        "Special prasadam feast",
+        "Wedding photographs of deities"
+      ],
+      "requirements": [
+        "Advance booking mandatory",
+        "Couples should participate together",
+        "Traditional attire mandatory",
+        "Fasting until seva completion recommended"
+      ],
+      "availableTimeSlots": [
+        {
+          "slotId": "slot_006",
+          "startTime": "10:00",
+          "endTime": "12:00",
+          "isAvailable": true,
+          "bookedCount": 0,
+          "maxCapacity": 1
+        },
+        {
+          "slotId": "slot_007",
+          "startTime": "15:00",
+          "endTime": "17:00",
+          "isAvailable": true,
+          "bookedCount": 0,
+          "maxCapacity": 1
+        }
+      ],
+      "unavailableDates": [
+        "2025-07-04",
+        "2025-08-22",
+        "2025-09-18"
+      ],
+      "specialInstructions": "This seva requires temple priest approval. Couples must provide their marriage certificate or engagement proof. Photography is allowed during specific portions only.",
+      "createdBy": "admin_002",
+      "createdAt": "2025-03-05T11:20:00Z",
+      "updatedBy": "admin_002",
+      "updatedAt": "2025-06-10T13:30:00Z",
+      "tags": ["marriage", "ceremony", "couples", "blessing"],
+      "imageUrl": "https://example.com/seva-images/kalyanam.jpg",
+      "status": "ACTIVE",
+      "priority": "HIGH",
+      "seasonalAvailability": "EXCLUDE_INAUSPICIOUS_PERIODS"
+    },
+    {
+      "id": "seva_004",
+      "entityId": "temple_001",
+      "templeName": "Sri Venkateswara Temple",
+      "sevaName": "Anna Prasadam",
+      "sevaNameSanskrit": "अन्न प्रसादम्",
+      "description": "Sacred food offering and distribution to devotees as divine prasadam",
+      "detailedDescription": "Anna Prasadam seva involves preparing and offering traditional South Indian vegetarian meals to the deity, followed by distribution to devotees. This seva is considered highly meritorious and helps devotees gain spiritual merit while serving the community.",
+      "category": "Service Seva",
+      "subcategory": "Food Seva",
+      "duration": 180,
+      "durationUnit": "minutes",
+      "cost": 2501.00,
+      "currency": "INR",
+      "maxBookingsPerDay": 1,
+      "maxBookingsPerSlot": 1,
+      "isActive": true,
+      "requiresApproval": true,
+      "advanceBookingDays": 21,
+      "cancellationPolicy": "Can be cancelled up to 3 days before the seva date with 25% refund",
+      "benefits": [
+        "Accumulates immense spiritual merit",
+        "Blesses with abundance",
+        "Removes food-related obstacles",
+        "Brings community blessings"
+      ],
+      "inclusions": [
+        "Complete meal preparation",
+        "Traditional banana leaf serving",
+        "Feeding of 100-200 devotees",
+        "Special offering to deity",
+        "Certificate of participation"
+      ],
+      "requirements": [
+        "Sponsor must be present during preparation",
+        "Vegetarian ingredients only",
+        "No onion, garlic in preparation",
+        "Traditional cooking methods preferred"
+      ],
+      "availableTimeSlots": [
+        {
+          "slotId": "slot_008",
+          "startTime": "11:00",
+          "endTime": "14:00",
+          "isAvailable": true,
+          "bookedCount": 0,
+          "maxCapacity": 1
+        }
+      ],
+      "unavailableDates": [
+        "2025-06-25",
+        "2025-07-20",
+        "2025-08-10"
+      ],
+      "specialInstructions": "The sponsor should discuss the menu with the temple kitchen staff at least 5 days in advance. High-quality ingredients will be procured based on the donation amount.",
+      "createdBy": "kitchen_admin_001",
+      "createdAt": "2025-01-20T08:45:00Z",
+      "updatedBy": "kitchen_admin_001",
+      "updatedAt": "2025-06-15T10:20:00Z",
+      "tags": ["food", "service", "community", "prasadam"],
+      "imageUrl": "https://example.com/seva-images/anna-prasadam.jpg",
+      "status": "ACTIVE",
+      "priority": "HIGH",
+      "seasonalAvailability": "ALL_SEASONS"
+    },
+    {
+      "id": "seva_005",
+      "entityId": "temple_003",
+      "templeName": "Sri Ganesha Temple",
+      "sevaName": "Ganapati Homam",
+      "sevaNameSanskrit": "गणपति होमम्",
+      "description": "Sacred fire ritual dedicated to Lord Ganesha for removing obstacles and new beginnings",
+      "detailedDescription": "The Ganapati Homam is a powerful Vedic fire ritual performed to invoke Lord Ganesha's blessings. Sacred offerings are made into the fire while chanting specific mantras, creating a spiritually charged atmosphere that removes obstacles and brings success in new ventures.",
+      "category": "Homam Seva",
+      "subcategory": "Fire Ritual",
+      "duration": 90,
+      "durationUnit": "minutes",
+      "cost": 751.00,
+      "currency": "INR",
+      "maxBookingsPerDay": 3,
+      "maxBookingsPerSlot": 1,
+      "isActive": true,
+      "requiresApproval": false,
+      "advanceBookingDays": 7,
+      "cancellationPolicy": "Can be cancelled up to 6 hours before the seva time",
+      "benefits": [
+        "Removes all obstacles",
+        "Brings success in new ventures",
+        "Enhances wisdom and intelligence",
+        "Provides protection from negative forces"
+      ],
+      "inclusions": [
+        "Sacred fire ceremony",
+        "Ghee and herbal offerings",
+        "Vedic mantra chanting",
+        "Blessed vibhuti (sacred ash)",
+        "Modak prasadam"
+      ],
+      "requirements": [
+        "Devotee participation preferred",
+        "Specific sankalpa (intention) to be stated",
+        "Avoid non-vegetarian food on the day"
+      ],
+      "availableTimeSlots": [
+        {
+          "slotId": "slot_009",
+          "startTime": "07:30",
+          "endTime": "09:00",
+          "isAvailable": true,
+          "bookedCount": 0,
+          "maxCapacity": 1
+        },
+        {
+          "slotId": "slot_010",
+          "startTime": "10:30",
+          "endTime": "12:00",
+          "isAvailable": true,
+          "bookedCount": 1,
+          "maxCapacity": 1
+        },
+        {
+          "slotId": "slot_011",
+          "startTime": "17:00",
+          "endTime": "18:30",
+          "isAvailable": true,
+          "bookedCount": 0,
+          "maxCapacity": 1
+        }
+      ],
+      "unavailableDates": [
+        "2025-07-01",
+        "2025-08-05"
+      ],
+      "specialInstructions": "Devotees should arrive 15 minutes early. The sankalpa (intention/wish) should be clearly stated before the homam begins. Pregnant women and children are welcome but should maintain safe distance from the fire.",
+      "createdBy": "priest_003",
+      "createdAt": "2025-04-10T12:30:00Z",
+      "updatedBy": "priest_003",
+      "updatedAt": "2025-06-18T09:15:00Z",
+      "tags": ["ganesha", "homam", "fire-ritual", "obstacles"],
+      "imageUrl": "https://example.com/seva-images/ganapati-homam.jpg",
+      "status": "ACTIVE",
+      "priority": "MEDIUM",
+      "seasonalAvailability": "ALL_SEASONS"
+    },
+    {
+      "id": "seva_006",
+      "entityId": "temple_002",
+      "templeName": "Sri Lakshmi Narasimha Temple",
+      "sevaName": "Sudarshana Homam",
+      "sevaNameSanskrit": "सुदर्शन होमम्",
+      "description": "Powerful fire ritual with Sudarshana Chakra mantras for protection and spiritual advancement",
+      "detailedDescription": "The Sudarshana Homam is one of the most powerful protective rituals in the Vedic tradition. It invokes the divine energy of Lord Narasimha's Sudarshana Chakra to create a protective shield around devotees, removing negative influences and providing spiritual strength.",
+      "category": "Homam Seva",
+      "subcategory": "Protection Ritual",
+      "duration": 150,
+      "durationUnit": "minutes",
+      "cost": 1501.00,
+      "currency": "INR",
+      "maxBookingsPerDay": 1,
+      "maxBookingsPerSlot": 1,
+      "isActive": true,
+      "requiresApproval": true,
+      "advanceBookingDays": 14,
+      "cancellationPolicy": "Can be cancelled up to 48 hours before the seva time with 20% cancellation fee",
+      "benefits": [
+        "Provides powerful protection",
+        "Removes black magic and evil eye",
+        "Destroys enemies and negative forces",
+        "Grants courage and strength",
+        "Accelerates spiritual growth"
+      ],
+      "inclusions": [
+        "Elaborate fire ceremony",
+        "Special herbal offerings",
+        "Sudarshana Chakra yantra",
+        "Protective kavach (amulet)",
+        "Blessed sacred ash",
+        "Special prasadam"
+      ],
+      "requirements": [
+        "Devotee must fast until completion",
+        "Avoid alcohol and non-veg for 3 days prior",
+        "Wear clean traditional clothes",
+        "Mental preparation and positive intention"
+      ],
+      "availableTimeSlots": [
+        {
+          "slotId": "slot_012",
+          "startTime": "09:00",
+          "endTime": "11:30",
+          "isAvailable": true,
+          "bookedCount": 0,
+          "maxCapacity": 1
+        }
+      ],
+      "unavailableDates": [
+        "2025-07-22",
+        "2025-08-18",
+        "2025-09-05"
+      ],
+      "specialInstructions": "This is an intensive spiritual practice. Devotees should be mentally prepared and maintain purity of thought throughout. The protective yantra provided should be kept in the home altar.",
+      "createdBy": "senior_priest_001",
+      "createdAt": "2025-02-28T14:45:00Z",
+      "updatedBy": "senior_priest_001",
+      "updatedAt": "2025-06-12T11:30:00Z",
+      "tags": ["protection", "homam", "narasimha", "sudarshana"],
+      "imageUrl": "https://example.com/seva-images/sudarshana-homam.jpg",
+      "status": "ACTIVE",
+      "priority": "HIGH",
+      "seasonalAvailability": "EXCLUDE_INAUSPICIOUS_PERIODS"
+    },
+    {
+      "id": "seva_007",
+      "entityId": "temple_001",
+      "templeName": "Sri Venkateswara Temple",
+      "sevaName": "Suprabhatam",
+      "sevaNameSanskrit": "सुप्रभातम्",
+      "description": "Early morning melodious hymns to wake up the deity with divine music",
+      "detailedDescription": "The Suprabhatam seva involves singing the famous Venkatesa Suprabhatam, beautiful Sanskrit verses that gently wake up Lord Venkateswara. This early morning seva fills the temple with divine vibrations and blesses devotees with a spiritually charged start to their day.",
+      "category": "Daily Seva",
+      "subcategory": "Musical Seva",
+      "duration": 30,
+      "durationUnit": "minutes",
+      "cost": 151.00,
+      "currency": "INR",
+      "maxBookingsPerDay": 12,
+      "maxBookingsPerSlot": 3,
+      "isActive": true,
+      "requiresApproval": false,
+      "advanceBookingDays": 10,
+      "cancellationPolicy": "Can be cancelled up to 2 hours before the seva time",
+      "benefits": [
+        "Brings divine blessings for the entire day",
+        "Creates positive energy",
+        "Removes morning negativity",
+        "Enhances spiritual awareness"
+      ],
+      "inclusions": [
+        "Melodious Suprabhatam recitation",
+        "Gentle bell ringing",
+        "Morning aarti",
+        "Fresh flower offerings",
+        "Morning prasadam"
+      ],
+      "requirements": [
+        "Early morning attendance required",
+        "Maintain silence during the seva",
+        "Traditional attire preferred"
+      ],
+      "availableTimeSlots": [
+        {
+          "slotId": "slot_013",
+          "startTime": "05:30",
+          "endTime": "06:00",
+          "isAvailable": true,
+          "bookedCount": 2,
+          "maxCapacity": 3
+        },
+        {
+          "slotId": "slot_014",
+          "startTime": "06:00",
+          "endTime": "06:30",
+          "isAvailable": true,
+          "bookedCount": 1,
+          "maxCapacity": 3
+        }
+      ],
+      "unavailableDates": [],
+      "specialInstructions": "This seva starts very early in the morning. Devotees should reach the temple by 5:15 AM. The atmosphere should be maintained peacefully and meditatively.",
+      "createdBy": "music_director_001",
+      "createdAt": "2025-01-05T06:00:00Z",
+      "updatedBy": "music_director_001",
+      "updatedAt": "2025-05-30T07:45:00Z",
+      "tags": ["morning", "music", "suprabhatam", "daily"],
+      "imageUrl": "https://example.com/seva-images/suprabhatam.jpg",
+      "status": "ACTIVE",
+      "priority": "MEDIUM",
+      "seasonalAvailability": "ALL_SEASONS"
+    },
+    {
+      "id": "seva_008",
+      "entityId": "temple_003",
+      "templeName": "Sri Ganesha Temple",
+      "sevaName": "Modak Offering",
+      "sevaNameSanskrit": "मोदक निवेदनम्",
+      "description": "Special sweet offering of modaks, Lord Ganesha's favorite prasadam",
+      "detailedDescription": "The Modak Offering seva involves preparing and offering traditional modaks (sweet dumplings) to Lord Ganesha. These delicious sweets are prepared with pure ingredients and offered with devotion. Genesha is especially pleased with modak offerings, making this seva highly auspicious.",
+      "category": "Food Seva",
+      "subcategory": "Sweet Offering",
+      "duration": 30,
+      "durationUnit": "minutes",
+      "cost": 301.00,
+      "currency": "INR",
+      "maxBookingsPerDay": 6,
+      "maxBookingsPerSlot": 2,
+      "isActive": true,
+      "requiresApproval": false,
+      "advanceBookingDays": 5,
+      "cancellationPolicy": "Can be cancelled up to 4 hours before the seva time",
+      "benefits": [
+        "Removes obstacles in endeavors",
+        "Brings sweetness to life",
+        "Fulfills desires quickly",
+        "Enhances prosperity"
+      ],
+      "inclusions": [
+        "21 fresh modaks",
+        "Coconut and jaggery filling",
+        "Special offering ceremony",
+        "Modak prasadam distribution",
+        "Blessed kumkum and vibhuti"
+      ],
+      "requirements": [
+        "No specific requirements",
+        "Children especially welcome",
+        "Can be offered for special occasions"
+      ],
+      "availableTimeSlots": [
+        {
+          "slotId": "slot_015",
+          "startTime": "08:00",
+          "endTime": "08:30",
+          "isAvailable": true,
+          "bookedCount": 0,
+          "maxCapacity": 2
+        },
+        {
+          "slotId": "slot_016",
+          "startTime": "11:30",
+          "endTime": "12:00",
+          "isAvailable": true,
+          "bookedCount": 1,
+          "maxCapacity": 2
+        },
+        {
+          "slotId": "slot_017",
+          "startTime": "16:00",
+          "endTime": "16:30",
+          "isAvailable": true,
+          "bookedCount": 0,
+          "maxCapacity": 2
+        }
+      ],
+      "unavailableDates": [],
+      "specialInstructions": "Perfect seva for birthdays, new ventures, and festivals. Children love this seva as they get to taste Lord Ganesha's favorite sweet. The modaks are prepared fresh on the day of offering.",
+      "createdBy": "kitchen_staff_002",
+      "createdAt": "2025-03-15T10:30:00Z",
+      "updatedBy": "kitchen_staff_002",
+      "updatedAt": "2025-06-08T15:20:00Z",
+      "tags": ["ganesha", "modak", "sweet", "children"],
+      "imageUrl": "https://example.com/seva-images/modak-offering.jpg",
+      "status": "ACTIVE",
+      "priority": "LOW",
+      "seasonalAvailability": "ALL_SEASONS"
+    }
+  ],
+  "sevaCategories": [
+    {
+      "id": "daily_seva",
+      "name": "Daily Seva",
+      "description": "Regular daily ritual services",
+      "displayOrder": 1,
+      "isActive": true
+    },
+    {
+      "id": "special_seva",
+      "name": "Special Seva",
+      "description": "Special occasion and customized services",
+      "displayOrder": 2,
+      "isActive": true
+    },
+    {
+      "id": "festival_seva",
+      "name": "Festival Seva",
+      "description": "Festival and celebration services",
+      "displayOrder": 3,
+      "isActive": true
+    },
+    {
+      "id": "homam_seva",
+      "name": "Homam Seva",
+      "description": "Fire ritual and homam services",
+      "displayOrder": 4,
+      "isActive": true
+    },
+    {
+      "id": "service_seva",
+      "name": "Service Seva",
+      "description": "Community service and charitable activities",
+      "displayOrder": 5,
+      "isActive": true
+    },
+    {
+      "id": "food_seva",
+      "name": "Food Seva",
+      "description": "Food offerings and prasadam services",
+      "displayOrder": 6,
+      "isActive": true
+    }
+  ],
+  "sevaSubcategories": [
+    {
+      "id": "ritual_seva",
+      "name": "Ritual Seva",
+      "categoryId": "daily_seva",
+      "description": "Traditional ritual services"
+    },
+    {
+      "id": "archana_seva",
+      "name": "Archana Seva",
+      "categoryId": "special_seva",
+      "description": "Name-based worship services"
+    },
+    {
+      "id": "ceremonial_seva",
+      "name": "Ceremonial Seva",
+      "categoryId": "festival_seva",
+      "description": "Ceremonial and celebration services"
+    },
+    {
+      "id": "fire_ritual",
+      "name": "Fire Ritual",
+      "categoryId": "homam_seva",
+      "description": "Sacred fire ceremonies"
+    },
+    {
+      "id": "protection_ritual",
+      "name": "Protection Ritual",
+      "categoryId": "homam_seva",
+      "description": "Protective spiritual services"
+    },
+    {
+      "id": "musical_seva",
+      "name": "Musical Seva",
+      "categoryId": "daily_seva",
+      "description": "Devotional music and singing"
+    },
+    {
+      "id": "sweet_offering",
+      "name": "Sweet Offering",
+      "categoryId": "food_seva",
+      "description": "Sweet prasadam offerings"
+    }
+  ],
+  "sevaStatuses": [
+    {
+      "status": "ACTIVE",
+      "description": "Seva is available for booking",
+      "color": "green"
+    },
+    {
+      "status": "INACTIVE",
+      "description": "Seva is temporarily unavailable",
+      "color": "red"
+    },
+    {
+      "status": "DRAFT",
+      "description": "Seva is being prepared",
+      "color": "yellow"
+    },
+    {
+      "status": "ARCHIVED",
+      "description": "Seva is no longer offered",
+      "color": "gray"
+    }
+  ],
+  "sevaBookings": [
+    {
+      "id": "booking_001",
+      "sevaId": "seva_001",
+      "devoteeId": "devotee_001",
+      "devoteeName": "Ramesh Kumar",
+      "devoteePhone": "+91-9876543210",
+      "devoteeEmail": "ramesh.kumar@email.com",
+      "bookingDate": "2025-06-25",
+      "sevaDate": "2025-07-01",
+      "timeSlotId": "slot_001",
+      "timeSlot": "06:00 - 06:45",
+      "amount": 501.00,
+      "currency": "INR",
+      "paymentStatus": "PAID",
+      "paymentId": "pay_abc123",
+      "bookingStatus": "CONFIRMED",
+      "specialRequests": "Please include my mother's name in the archana - Lakshmi Devi",
+      "familyMembers": ["Ramesh Kumar", "Lakshmi Devi", "Priya Ramesh"],
+      "gotra": "Bharadwaja",
+      "nakshatra": "Rohini",
+      "createdAt": "2025-06-20T10:30:00Z",
+      "updatedAt": "2025-06-20T10:35:00Z"
+    },
+    {
+      "id": "booking_002",
+      "sevaId": "seva_005",
+      "devoteeId": "devotee_002",
+      "devoteeName": "Suresh Reddy",
+      "devoteePhone": "+91-9123456789",
+      "devoteeEmail": "suresh.reddy@email.com",
+      "bookingDate": "2025-06-18",
+      "sevaDate": "2025-06-28",
+      "timeSlotId": "slot_010",
+      "timeSlot": "10:30 - 12:00",
+      "amount": 751.00,
+      "currency": "INR",
+      "paymentStatus": "PAID",
+      "paymentId": "pay_def456",
+      "bookingStatus": "CONFIRMED",
+      "specialRequests": "Starting new business, need blessings for success",
+      "familyMembers": ["Suresh Reddy", "Manjula Reddy"],
+      "gotra": "Kashyapa",
+      "nakshatra": "Pushya",
+      "createdAt": "2025-06-18T14:20:00Z",
+      "updatedAt": "2025-06-18T14:25:00Z"
+    },
+    {
+      "id": "booking_003",
+      "sevaId": "seva_003",
+      "devoteeId": "devotee_003",
+      "devoteeName": "Arjun & Kavitha",
+      "devoteePhone": "+91-9988776655",
+      "devoteeEmail": "arjun.kavitha@email.com",
+      "bookingDate": "2025-06-15",
+      "sevaDate": "2025-07-15",
+      "timeSlotId": "slot_006",
+      "timeSlot": "10:00 - 12:00",
+      "amount": 1001.00,
+      "currency": "INR",
+      "paymentStatus": "PENDING",
+      "paymentId": "pay_pending_001",
+      "bookingStatus": "PENDING_APPROVAL",
+      "specialRequests": "First wedding anniversary celebration",
+      "familyMembers": ["Arjun Sharma", "Kavitha Arjun"],
+      "gotra": "Vasishta",
+      "nakshatra": "Anuradha",
+      "createdAt": "2025-06-15T16:45:00Z",
+      "updatedAt": "2025-06-15T16:50:00Z"
+    }
+  ],
+  "sevaBookingStatuses": [
+    {
+      "status": "PENDING_APPROVAL",
+      "description": "Booking awaiting temple approval",
+      "color": "yellow"
+    },
+    {
+      "status": "CONFIRMED",
+      "description": "Booking confirmed and scheduled",
+      "color": "green"
+    },
+    {
+      "status": "COMPLETED",
+      "description": "Seva has been completed",
+      "color": "blue"
+    },
+    {
+      "status": "CANCELLED",
+      "description": "Booking has been cancelled",
+      "color": "red"
+    },
+    {
+      "status": "NO_SHOW",
+      "description": "Devotee did not attend the seva",
+      "color": "orange"
+    }
+  ],
+  "paymentStatuses": [
+    {
+      "status": "PENDING",
+      "description": "Payment is pending",
+      "color": "yellow"
+    },
+    {
+      "status": "PAID",
+      "description": "Payment completed successfully",
+      "color": "green"
+    },
+    {
+      "status": "FAILED",
+      "description": "Payment failed",
+      "color": "red"
+    },
+    {
+      "status": "REFUNDED",
+      "description": "Payment has been refunded",
+      "color": "blue"
+    },
+    {
+      "status": "PARTIAL_REFUND",
+      "description": "Partial refund processed",
+      "color": "orange"
+    }
+  ],
+  "sevaStats": {
+    "totalSevas": 8,
+    "activeSevas": 8,
+    "inactiveSevas": 0,
+    "totalBookings": 3,
+    "confirmedBookings": 2,
+    "pendingApprovals": 1,
+    "totalRevenue": 2253.00,
+    "avgSevaPrice": 751.88,
+    "mostPopularSeva": {
+      "sevaId": "seva_001",
+      "sevaName": "Abhishekam",
+      "bookingCount": 1
+    },
+    "revenueByCategory": [
+      {
+        "category": "Daily Seva",
+        "revenue": 652.00,
+        "bookingCount": 1
+      },
+      {
+        "category": "Homam Seva",
+        "revenue": 751.00,
+        "bookingCount": 1
+      },
+      {
+        "category": "Festival Seva",
+        "revenue": 1001.00,
+        "bookingCount": 1
+      }
+    ],
+    "monthlyStats": [
+      {
+        "month": "2025-06",
+        "bookings": 3,
+        "revenue": 2253.00,
+        "completedSevas": 0,
+        "upcomingSevas": 3
+      },
+      {
+        "month": "2025-05",
+        "bookings": 5,
+        "revenue": 3755.00,
+        "completedSevas": 5,
+        "upcomingSevas": 0
+      },
+      {
+        "month": "2025-04",
+        "bookings": 8,
+        "revenue": 6010.00,
+        "completedSevas": 8,
+        "upcomingSevas": 0
+      }
+    ]
+  },
+  "sevaTemplates": [
+    {
+      "id": "template_001",
+      "name": "Basic Archana Template",
+      "description": "Standard template for simple archana sevas",
+      "category": "Special Seva",
+      "defaultDuration": 30,
+      "defaultCost": 201.00,
+      "defaultBenefits": [
+        "Divine blessings",
+        "Peace of mind",
+        "Spiritual progress"
+      ],
+      "defaultInclusions": [
+        "Name-based archana",
+        "Flower offerings",
+        "Prasadam distribution"
+      ],
+      "isActive": true
+    },
+    {
+      "id": "template_002",
+      "name": "Homam Template",
+      "description": "Standard template for fire ritual sevas",
+      "category": "Homam Seva",
+      "defaultDuration": 90,
+      "defaultCost": 751.00,
+      "defaultBenefits": [
+        "Removes obstacles",
+        "Protection from negative forces",
+        "Spiritual purification"
+      ],
+      "defaultInclusions": [
+        "Sacred fire ceremony",
+        "Vedic mantras",
+        "Sacred ash (vibhuti)",
+        "Special prasadam"
+      ],
+      "isActive": true
+    }
+  ],
+  "sevaFeedback": [
+    {
+      "id": "feedback_001",
+      "bookingId": "booking_001",
+      "sevaId": "seva_001",
+      "devoteeId": "devotee_001",
+      "devoteeName": "Ramesh Kumar",
+      "rating": 5,
+      "comment": "Excellent seva experience. The priest was very knowledgeable and the atmosphere was divine. Will definitely book again.",
+      "serviceRating": 5,
+      "facilitiesRating": 4,
+      "overallExperience": "EXCELLENT",
+      "wouldRecommend": true,
+      "submittedAt": "2025-06-10T18:30:00Z"
+    },
+    {
+      "id": "feedback_002",
+      "bookingId": "booking_002",
+      "sevaId": "seva_005",
+      "devoteeId": "devotee_002",
+      "devoteeName": "Suresh Reddy",
+      "rating": 4,
+      "comment": "Good homam seva. Felt very positive energy. The priest explained the significance well.",
+      "serviceRating": 4,
+      "facilitiesRating": 4,
+      "overallExperience": "GOOD",
+      "wouldRecommend": true,
+      "submittedAt": "2025-06-12T20:15:00Z"
+    }
+  ],
+  "experienceRatings": [
+    {
+      "rating": "EXCELLENT",
+      "description": "Outstanding spiritual experience",
+      "color": "green"
+    },
+    {
+      "rating": "GOOD",
+      "description": "Satisfactory spiritual experience",
+      "color": "blue"
+    },
+    {
+      "rating": "AVERAGE",
+      "description": "Average spiritual experience",
+      "color": "yellow"
+    },
+    {
+      "rating": "POOR",
+      "description": "Below expectations",
+      "color": "red"
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "lastUpdated": "2025-06-20T12:00:00Z",
+    "totalRecords": 8,
+    "dataSource": "Temple SaaS Mock Data",
+    "description": "Comprehensive seva management data including categories, bookings, statistics, and feedback for multi-tenant temple SaaS platform"
+  }
+}

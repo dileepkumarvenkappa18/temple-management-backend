@@ -1,0 +1,760 @@
+{
+  "roles": {
+    "superadmin": {
+      "name": "Super Admin",
+      "description": "Internal admin with full system access",
+      "level": 4,
+      "permissions": [
+        "system.manage",
+        "system.analytics",
+        "tenants.view_all",
+        "tenants.approve",
+        "tenants.reject",
+        "tenants.delete",
+        "temples.view_all",
+        "temples.approve",
+        "temples.reject",
+        "temples.delete",
+        "users.view_all",
+        "users.manage",
+        "users.impersonate",
+        "reports.system_wide",
+        "notifications.system_wide",
+        "audit.view_all",
+        "settings.system"
+      ]
+    },
+    "tenant": {
+      "name": "Temple Admin",
+      "description": "Temple owner/administrator",
+      "level": 3,
+      "permissions": [
+        "temple.create",
+        "temple.edit_own",
+        "temple.view_own",
+        "temple.manage_own",
+        "temple.upload_documents",
+        "temple.view_approval_status",
+        "entity.create",
+        "entity.manage_own",
+        "devotees.view_own_temple",
+        "devotees.manage_own_temple",
+        "devotees.export_own_temple",
+        "sevas.view_own_temple",
+        "sevas.manage_own_temple",
+        "sevas.approve_own_temple",
+        "donations.view_own_temple",
+        "donations.manage_own_temple",
+        "donations.reports_own_temple",
+        "events.view_own_temple",
+        "events.manage_own_temple",
+        "events.create_own_temple",
+        "volunteers.view_own_temple",
+        "volunteers.manage_own_temple",
+        "volunteers.assign_own_temple",
+        "communication.send_own_temple",
+        "communication.templates_own_temple",
+        "reports.own_temple",
+        "analytics.own_temple",
+        "profile.edit_own",
+        "settings.own_temple"
+      ]
+    },
+    "devotee": {
+      "name": "Devotee",
+      "description": "End user who can join temples and book services",
+      "level": 2,
+      "permissions": [
+        "temple.search",
+        "temple.join",
+        "temple.view_joined",
+        "profile.create",
+        "profile.edit_own",
+        "profile.view_own",
+        "profile.complete_steps",
+        "sevas.view_available",
+        "sevas.book",
+        "sevas.view_own_bookings",
+        "sevas.cancel_own_bookings",
+        "donations.make",
+        "donations.view_own_history",
+        "donations.download_own_receipts",
+        "events.view_available",
+        "events.rsvp",
+        "events.view_own_rsvps",
+        "family.add_members",
+        "family.manage_own",
+        "notifications.view_own",
+        "dashboard.view_own"
+      ]
+    },
+    "volunteer": {
+      "name": "Volunteer",
+      "description": "Temple volunteer with limited access",
+      "level": 1,
+      "permissions": [
+        "temple.search",
+        "temple.join",
+        "temple.view_joined",
+        "sevas.view_assigned",
+        "sevas.update_assigned_status",
+        "events.view_available",
+        "events.view_assigned",
+        "volunteers.view_own_assignments",
+        "volunteers.update_own_availability",
+        "notifications.view_own",
+        "dashboard.view_own",
+        "profile.view_basic"
+      ]
+    }
+  },
+  "permissions": {
+    "system": {
+      "manage": {
+        "name": "System Management",
+        "description": "Full system administration",
+        "category": "system"
+      },
+      "analytics": {
+        "name": "System Analytics",
+        "description": "View system-wide analytics",
+        "category": "system"
+      }
+    },
+    "tenants": {
+      "view_all": {
+        "name": "View All Tenants",
+        "description": "View all registered tenants",
+        "category": "tenants"
+      },
+      "approve": {
+        "name": "Approve Tenants",
+        "description": "Approve pending tenant registrations",
+        "category": "tenants"
+      },
+      "reject": {
+        "name": "Reject Tenants",
+        "description": "Reject tenant registrations",
+        "category": "tenants"
+      },
+      "delete": {
+        "name": "Delete Tenants",
+        "description": "Delete tenant accounts",
+        "category": "tenants"
+      }
+    },
+    "temples": {
+      "view_all": {
+        "name": "View All Temples",
+        "description": "View all temples in system",
+        "category": "temples"
+      },
+      "approve": {
+        "name": "Approve Temples",
+        "description": "Approve temple registrations",
+        "category": "temples"
+      },
+      "reject": {
+        "name": "Reject Temples",
+        "description": "Reject temple registrations",
+        "category": "temples"
+      },
+      "delete": {
+        "name": "Delete Temples",
+        "description": "Delete temple records",
+        "category": "temples"
+      },
+      "create": {
+        "name": "Create Temple",
+        "description": "Create new temple",
+        "category": "temples"
+      },
+      "edit_own": {
+        "name": "Edit Own Temple",
+        "description": "Edit own temple details",
+        "category": "temples"
+      },
+      "view_own": {
+        "name": "View Own Temple",
+        "description": "View own temple details",
+        "category": "temples"
+      },
+      "manage_own": {
+        "name": "Manage Own Temple",
+        "description": "Full management of own temple",
+        "category": "temples"
+      },
+      "upload_documents": {
+        "name": "Upload Documents",
+        "description": "Upload temple verification documents",
+        "category": "temples"
+      },
+      "view_approval_status": {
+        "name": "View Approval Status",
+        "description": "View temple approval status",
+        "category": "temples"
+      },
+      "search": {
+        "name": "Search Temples",
+        "description": "Search and browse temples",
+        "category": "temples"
+      },
+      "join": {
+        "name": "Join Temple",
+        "description": "Join approved temples",
+        "category": "temples"
+      },
+      "view_joined": {
+        "name": "View Joined Temples",
+        "description": "View temples user has joined",
+        "category": "temples"
+      }
+    },
+    "users": {
+      "view_all": {
+        "name": "View All Users",
+        "description": "View all system users",
+        "category": "users"
+      },
+      "manage": {
+        "name": "Manage Users",
+        "description": "Create, edit, delete users",
+        "category": "users"
+      },
+      "impersonate": {
+        "name": "Impersonate Users",
+        "description": "Login as other users for support",
+        "category": "users"
+      }
+    },
+    "entity": {
+      "create": {
+        "name": "Create Entity",
+        "description": "Create temple entity",
+        "category": "entity"
+      },
+      "manage_own": {
+        "name": "Manage Own Entity",
+        "description": "Manage own temple entity",
+        "category": "entity"
+      }
+    },
+    "devotees": {
+      "view_own_temple": {
+        "name": "View Temple Devotees",
+        "description": "View devotees of own temple",
+        "category": "devotees"
+      },
+      "manage_own_temple": {
+        "name": "Manage Temple Devotees",
+        "description": "Manage devotees of own temple",
+        "category": "devotees"
+      },
+      "export_own_temple": {
+        "name": "Export Temple Devotees",
+        "description": "Export devotee data of own temple",
+        "category": "devotees"
+      }
+    },
+    "sevas": {
+      "view_own_temple": {
+        "name": "View Temple Sevas",
+        "description": "View sevas of own temple",
+        "category": "sevas"
+      },
+      "manage_own_temple": {
+        "name": "Manage Temple Sevas",
+        "description": "Manage sevas of own temple",
+        "category": "sevas"
+      },
+      "approve_own_temple": {
+        "name": "Approve Temple Sevas",
+        "description": "Approve seva bookings in own temple",
+        "category": "sevas"
+      },
+      "view_available": {
+        "name": "View Available Sevas",
+        "description": "View available sevas to book",
+        "category": "sevas"
+      },
+      "book": {
+        "name": "Book Sevas",
+        "description": "Book seva services",
+        "category": "sevas"
+      },
+      "view_own_bookings": {
+        "name": "View Own Bookings",
+        "description": "View own seva bookings",
+        "category": "sevas"
+      },
+      "cancel_own_bookings": {
+        "name": "Cancel Own Bookings",
+        "description": "Cancel own seva bookings",
+        "category": "sevas"
+      },
+      "view_assigned": {
+        "name": "View Assigned Sevas",
+        "description": "View assigned seva duties",
+        "category": "sevas"
+      },
+      "update_assigned_status": {
+        "name": "Update Assigned Status",
+        "description": "Update status of assigned sevas",
+        "category": "sevas"
+      }
+    },
+    "donations": {
+      "view_own_temple": {
+        "name": "View Temple Donations",
+        "description": "View donations to own temple",
+        "category": "donations"
+      },
+      "manage_own_temple": {
+        "name": "Manage Temple Donations",
+        "description": "Manage donations to own temple",
+        "category": "donations"
+      },
+      "reports_own_temple": {
+        "name": "Temple Donation Reports",
+        "description": "Generate donation reports for own temple",
+        "category": "donations"
+      },
+      "make": {
+        "name": "Make Donations",
+        "description": "Make donations to temple",
+        "category": "donations"
+      },
+      "view_own_history": {
+        "name": "View Own Donation History",
+        "description": "View personal donation history",
+        "category": "donations"
+      },
+      "download_own_receipts": {
+        "name": "Download Own Receipts",
+        "description": "Download personal donation receipts",
+        "category": "donations"
+      }
+    },
+    "events": {
+      "view_own_temple": {
+        "name": "View Temple Events",
+        "description": "View events of own temple",
+        "category": "events"
+      },
+      "manage_own_temple": {
+        "name": "Manage Temple Events",
+        "description": "Manage events of own temple",
+        "category": "events"
+      },
+      "create_own_temple": {
+        "name": "Create Temple Events",
+        "description": "Create events for own temple",
+        "category": "events"
+      },
+      "view_available": {
+        "name": "View Available Events",
+        "description": "View available events to attend",
+        "category": "events"
+      },
+      "rsvp": {
+        "name": "RSVP to Events",
+        "description": "RSVP to temple events",
+        "category": "events"
+      },
+      "view_own_rsvps": {
+        "name": "View Own RSVPs",
+        "description": "View personal event RSVPs",
+        "category": "events"
+      },
+      "view_assigned": {
+        "name": "View Assigned Events",
+        "description": "View assigned event duties",
+        "category": "events"
+      }
+    },
+    "volunteers": {
+      "view_own_temple": {
+        "name": "View Temple Volunteers",
+        "description": "View volunteers of own temple",
+        "category": "volunteers"
+      },
+      "manage_own_temple": {
+        "name": "Manage Temple Volunteers",
+        "description": "Manage volunteers of own temple",
+        "category": "volunteers"
+      },
+      "assign_own_temple": {
+        "name": "Assign Temple Volunteers",
+        "description": "Assign tasks to temple volunteers",
+        "category": "volunteers"
+      },
+      "view_own_assignments": {
+        "name": "View Own Assignments",
+        "description": "View personal volunteer assignments",
+        "category": "volunteers"
+      },
+      "update_own_availability": {
+        "name": "Update Own Availability",
+        "description": "Update personal volunteer availability",
+        "category": "volunteers"
+      }
+    },
+    "communication": {
+      "send_own_temple": {
+        "name": "Send Temple Communications",
+        "description": "Send messages to temple members",
+        "category": "communication"
+      },
+      "templates_own_temple": {
+        "name": "Manage Temple Templates",
+        "description": "Manage message templates for temple",
+        "category": "communication"
+      }
+    },
+    "reports": {
+      "system_wide": {
+        "name": "System Wide Reports",
+        "description": "Generate system-wide reports",
+        "category": "reports"
+      },
+      "own_temple": {
+        "name": "Own Temple Reports",
+        "description": "Generate reports for own temple",
+        "category": "reports"
+      }
+    },
+    "analytics": {
+      "own_temple": {
+        "name": "Own Temple Analytics",
+        "description": "View analytics for own temple",
+        "category": "analytics"
+      }
+    },
+    "profile": {
+      "create": {
+        "name": "Create Profile",
+        "description": "Create user profile",
+        "category": "profile"
+      },
+      "edit_own": {
+        "name": "Edit Own Profile",
+        "description": "Edit personal profile",
+        "category": "profile"
+      },
+      "view_own": {
+        "name": "View Own Profile",
+        "description": "View personal profile",
+        "category": "profile"
+      },
+      "complete_steps": {
+        "name": "Complete Profile Steps",
+        "description": "Complete multi-step profile creation",
+        "category": "profile"
+      },
+      "view_basic": {
+        "name": "View Basic Profile",
+        "description": "View basic profile information",
+        "category": "profile"
+      }
+    },
+    "family": {
+      "add_members": {
+        "name": "Add Family Members",
+        "description": "Add family members to profile",
+        "category": "family"
+      },
+      "manage_own": {
+        "name": "Manage Own Family",
+        "description": "Manage own family details",
+        "category": "family"
+      }
+    },
+    "notifications": {
+      "system_wide": {
+        "name": "System Wide Notifications",
+        "description": "Send system-wide notifications",
+        "category": "notifications"
+      },
+      "view_own": {
+        "name": "View Own Notifications",
+        "description": "View personal notifications",
+        "category": "notifications"
+      }
+    },
+    "dashboard": {
+      "view_own": {
+        "name": "View Own Dashboard",
+        "description": "View personal dashboard",
+        "category": "dashboard"
+      }
+    },
+    "audit": {
+      "view_all": {
+        "name": "View All Audit Logs",
+        "description": "View all system audit logs",
+        "category": "audit"
+      }
+    },
+    "settings": {
+      "system": {
+        "name": "System Settings",
+        "description": "Manage system-wide settings",
+        "category": "settings"
+      },
+      "own_temple": {
+        "name": "Own Temple Settings",
+        "description": "Manage own temple settings",
+        "category": "settings"
+      }
+    }
+  },
+  "permission_categories": {
+    "system": {
+      "name": "System Administration",
+      "description": "Core system management permissions",
+      "color": "red"
+    },
+    "tenants": {
+      "name": "Tenant Management",
+      "description": "Manage temple administrators",
+      "color": "purple"
+    },
+    "temples": {
+      "name": "Temple Management",
+      "description": "Manage temple entities and operations",
+      "color": "indigo"
+    },
+    "users": {
+      "name": "User Management",
+      "description": "Manage system users",
+      "color": "blue"
+    },
+    "entity": {
+      "name": "Entity Management",
+      "description": "Manage temple entities",
+      "color": "indigo"
+    },
+    "devotees": {
+      "name": "Devotee Management",
+      "description": "Manage temple devotees",
+      "color": "green"
+    },
+    "sevas": {
+      "name": "Seva Management",
+      "description": "Manage temple services and bookings",
+      "color": "yellow"
+    },
+    "donations": {
+      "name": "Donation Management",
+      "description": "Manage temple donations",
+      "color": "emerald"
+    },
+    "events": {
+      "name": "Event Management",
+      "description": "Manage temple events and festivals",
+      "color": "orange"
+    },
+    "volunteers": {
+      "name": "Volunteer Management",
+      "description": "Manage temple volunteers",
+      "color": "teal"
+    },
+    "communication": {
+      "name": "Communication",
+      "description": "Manage temple communications",
+      "color": "cyan"
+    },
+    "reports": {
+      "name": "Reports & Analytics",
+      "description": "Generate reports and analytics",
+      "color": "slate"
+    },
+    "analytics": {
+      "name": "Analytics",
+      "description": "View analytics and insights",
+      "color": "slate"
+    },
+    "profile": {
+      "name": "Profile Management",
+      "description": "Manage user profiles",
+      "color": "pink"
+    },
+    "family": {
+      "name": "Family Management",
+      "description": "Manage family information",
+      "color": "rose"
+    },
+    "notifications": {
+      "name": "Notifications",
+      "description": "Manage notifications and alerts",
+      "color": "amber"
+    },
+    "dashboard": {
+      "name": "Dashboard Access",
+      "description": "Access to dashboard views",
+      "color": "lime"
+    },
+    "audit": {
+      "name": "Audit & Logging",
+      "description": "Access to audit logs and system tracking",
+      "color": "gray"
+    },
+    "settings": {
+      "name": "Settings Management",
+      "description": "Manage system and temple settings",
+      "color": "violet"
+    }
+  },
+  "role_hierarchy": {
+    "superadmin": {
+      "level": 4,
+      "can_manage": ["tenant", "devotee", "volunteer"]
+    },
+    "tenant": {
+      "level": 3,
+      "can_manage": ["devotee", "volunteer"]
+    },
+    "devotee": {
+      "level": 2,
+      "can_manage": []
+    },
+    "volunteer": {
+      "level": 1,
+      "can_manage": []
+    }
+  },
+  "status_types": {
+    "user_status": {
+      "active": {
+        "name": "Active",
+        "color": "green",
+        "description": "User is active and can access the system"
+      },
+      "inactive": {
+        "name": "Inactive",
+        "color": "gray",
+        "description": "User is inactive and cannot access the system"
+      },
+      "pending": {
+        "name": "Pending",
+        "color": "yellow",
+        "description": "User registration is pending approval"
+      },
+      "suspended": {
+        "name": "Suspended",
+        "color": "red",
+        "description": "User account is temporarily suspended"
+      }
+    },
+    "temple_status": {
+      "pending": {
+        "name": "Pending",
+        "color": "yellow",
+        "description": "Temple registration is pending approval"
+      },
+      "approved": {
+        "name": "Approved",
+        "color": "green",
+        "description": "Temple is approved and active"
+      },
+      "rejected": {
+        "name": "Rejected",
+        "color": "red",
+        "description": "Temple registration was rejected"
+      },
+      "suspended": {
+        "name": "Suspended",
+        "color": "orange",
+        "description": "Temple is temporarily suspended"
+      }
+    },
+    "seva_status": {
+      "available": {
+        "name": "Available",
+        "color": "green",
+        "description": "Seva is available for booking"
+      },
+      "booked": {
+        "name": "Booked",
+        "color": "blue",
+        "description": "Seva has been booked"
+      },
+      "completed": {
+        "name": "Completed",
+        "color": "gray",
+        "description": "Seva has been completed"
+      },
+      "cancelled": {
+        "name": "Cancelled",
+        "color": "red",
+        "description": "Seva booking was cancelled"
+      }
+    },
+    "donation_status": {
+      "pending": {
+        "name": "Pending",
+        "color": "yellow",
+        "description": "Donation is being processed"
+      },
+      "completed": {
+        "name": "Completed",
+        "color": "green",
+        "description": "Donation was successful"
+      },
+      "failed": {
+        "name": "Failed",
+        "color": "red",
+        "description": "Donation failed"
+      },
+      "refunded": {
+        "name": "Refunded",
+        "color": "orange",
+        "description": "Donation was refunded"
+      }
+    },
+    "event_status": {
+      "upcoming": {
+        "name": "Upcoming",
+        "color": "blue",
+        "description": "Event is scheduled for the future"
+      },
+      "ongoing": {
+        "name": "Ongoing",
+        "color": "green",
+        "description": "Event is currently happening"
+      },
+      "completed": {
+        "name": "Completed",
+        "color": "gray",
+        "description": "Event has been completed"
+      },
+      "cancelled": {
+        "name": "Cancelled",
+        "color": "red",
+        "description": "Event was cancelled"
+      }
+    },
+    "volunteer_status": {
+      "available": {
+        "name": "Available",
+        "color": "green",
+        "description": "Volunteer is available for assignments"
+      },
+      "assigned": {
+        "name": "Assigned",
+        "color": "blue",
+        "description": "Volunteer has been assigned tasks"
+      },
+      "busy": {
+        "name": "Busy",
+        "color": "yellow",
+        "description": "Volunteer is currently busy"
+      },
+      "unavailable": {
+        "name": "Unavailable",
+        "color": "gray",
+        "description": "Volunteer is not available"
+      }
+    }
+  }
+}

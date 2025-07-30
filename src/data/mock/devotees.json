@@ -1,0 +1,713 @@
+{
+  "devotees": [
+    {
+      "id": "dev_001",
+      "userId": "usr_001",
+      "templeId": "temple_001",
+      "templeName": "Sri Venkateshwara Temple",
+      "registrationDate": "2024-01-15T10:30:00Z",
+      "lastLogin": "2024-06-18T14:22:00Z",
+      "status": "active",
+      "profileCompletion": 100,
+      "personalDetails": {
+        "fullName": "Ravi Shankar Patel",
+        "email": "ravi.patel@example.com",
+        "phone": "+91 9876543210",
+        "dateOfBirth": "1985-03-22",
+        "gender": "male",
+        "bloodGroup": "B+",
+        "occupation": "Software Engineer",
+        "address": {
+          "street": "123, MG Road",
+          "city": "Bengaluru",
+          "state": "Karnataka",
+          "pincode": "560001",
+          "country": "India"
+        },
+        "emergencyContact": {
+          "name": "Priya Patel",
+          "relationship": "spouse",
+          "phone": "+91 9876543211"
+        }
+      },
+      "spiritualInfo": {
+        "devotionLevel": "devoted",
+        "preferredDeity": "Lord Vishnu",
+        "spiritualGuru": "Sri Ramana Maharshi",
+        "dailyPractices": ["meditation", "chanting", "reading_scriptures"],
+        "fastingDays": ["ekadashi", "pradosham"],
+        "specialObservances": ["Vaikunta Ekadashi", "Janmashtami"],
+        "languagesKnown": ["English", "Hindi", "Kannada", "Sanskrit"],
+        "scripturesStudied": ["Bhagavad Gita", "Vishnu Sahasranamam"]
+      },
+      "familyLineage": {
+        "gotra": "Bharadwaja",
+        "nakshatra": "Rohini",
+        "rashi": "Vrishabha",
+        "ancestralPlace": "Tirupati, Andhra Pradesh",
+        "familyTraditions": ["Annual Kalyanam", "Monthly Satyanarayana Puja"],
+        "caste": "Brahmin",
+        "subcaste": "Iyengar"
+      },
+      "sevaPreferences": {
+        "preferredSevas": ["abhishekam", "alankaram", "anna_daanam"],
+        "availableDays": ["saturday", "sunday"],
+        "timeSlots": ["morning", "evening"],
+        "skillsOffered": ["cooking", "decoration", "music"],
+        "maxCommitmentHours": 8,
+        "travelDistance": 25,
+        "previousExperience": "5 years of temple service"
+      },
+      "familyMembers": [
+        {
+          "id": "fm_001",
+          "name": "Priya Patel",
+          "relationship": "spouse",
+          "dateOfBirth": "1988-07-15",
+          "gender": "female",
+          "isDevotee": true,
+          "devoteeId": "dev_002"
+        },
+        {
+          "id": "fm_002",
+          "name": "Arjun Patel",
+          "relationship": "son",
+          "dateOfBirth": "2015-12-10",
+          "gender": "male",
+          "isDevotee": false,
+          "specialNeeds": "None"
+        },
+        {
+          "id": "fm_003",
+          "name": "Lakshmi Patel",
+          "relationship": "daughter",
+          "dateOfBirth": "2018-04-25",
+          "gender": "female",
+          "isDevotee": false,
+          "specialNeeds": "None"
+        }
+      ],
+      "notes": {
+        "specialRequests": "Prefer morning sevas due to work schedule",
+        "medicalConditions": "Mild diabetes - no sweets in prasadam",
+        "accessibilityNeeds": "None",
+        "communicationPreferences": ["email", "whatsapp"],
+        "volunteerInterests": ["Teaching children", "Event organization"],
+        "additionalComments": "Available for major festivals and special occasions"
+      },
+      "attachments": [
+        {
+          "id": "att_001",
+          "type": "profile_photo",
+          "filename": "ravi_photo.jpg",
+          "url": "/uploads/devotees/dev_001/profile_photo.jpg",
+          "uploadDate": "2024-01-15T10:45:00Z"
+        },
+        {
+          "id": "att_002",
+          "type": "identity_proof",
+          "filename": "aadhar_card.pdf",
+          "url": "/uploads/devotees/dev_001/aadhar_card.pdf",
+          "uploadDate": "2024-01-15T10:50:00Z"
+        }
+      ],
+      "sevaHistory": [
+        {
+          "sevaId": "seva_001",
+          "sevaName": "Abhishekam",
+          "date": "2024-06-15T06:00:00Z",
+          "status": "completed",
+          "feedback": "Very peaceful experience"
+        },
+        {
+          "sevaId": "seva_002",
+          "sevaName": "Anna Daanam",
+          "date": "2024-06-10T12:00:00Z",
+          "status": "completed",
+          "feedback": "Happy to serve devotees"
+        }
+      ],
+      "donationHistory": [
+        {
+          "donationId": "don_001",
+          "amount": 5000,
+          "currency": "INR",
+          "date": "2024-06-01T09:00:00Z",
+          "purpose": "Temple Maintenance",
+          "paymentMethod": "UPI",
+          "receiptNumber": "RCP_001"
+        },
+        {
+          "donationId": "don_002",
+          "amount": 2500,
+          "currency": "INR",
+          "date": "2024-05-15T10:30:00Z",
+          "purpose": "Anna Daanam",
+          "paymentMethod": "Card",
+          "receiptNumber": "RCP_002"
+        }
+      ],
+      "eventParticipation": [
+        {
+          "eventId": "evt_001",
+          "eventName": "Janmashtami Celebration",
+          "rsvpStatus": "attending",
+          "rsvpDate": "2024-08-15T12:00:00Z",
+          "guestCount": 4
+        }
+      ]
+    },
+    {
+      "id": "dev_002",
+      "userId": "usr_002",
+      "templeId": "temple_001",
+      "templeName": "Sri Venkateshwara Temple",
+      "registrationDate": "2024-01-20T15:45:00Z",
+      "lastLogin": "2024-06-19T09:15:00Z",
+      "status": "active",
+      "profileCompletion": 85,
+      "personalDetails": {
+        "fullName": "Priya Patel",
+        "email": "priya.patel@example.com",
+        "phone": "+91 9876543211",
+        "dateOfBirth": "1988-07-15",
+        "gender": "female",
+        "bloodGroup": "A+",
+        "occupation": "Teacher",
+        "address": {
+          "street": "123, MG Road",
+          "city": "Bengaluru",
+          "state": "Karnataka",
+          "pincode": "560001",
+          "country": "India"
+        },
+        "emergencyContact": {
+          "name": "Ravi Shankar Patel",
+          "relationship": "spouse",
+          "phone": "+91 9876543210"
+        }
+      },
+      "spiritualInfo": {
+        "devotionLevel": "devoted",
+        "preferredDeity": "Goddess Lakshmi",
+        "spiritualGuru": "Sri Amma",
+        "dailyPractices": ["meditation", "bhajans", "puja"],
+        "fastingDays": ["fridays", "ekadashi"],
+        "specialObservances": ["Diwali", "Varalakshmi Vratam"],
+        "languagesKnown": ["English", "Hindi", "Kannada", "Tamil"],
+        "scripturesStudied": ["Lalita Sahasranamam", "Vishnu Sahasranamam"]
+      },
+      "familyLineage": {
+        "gotra": "Bharadwaja",
+        "nakshatra": "Punarvasu",
+        "rashi": "Mithuna",
+        "ancestralPlace": "Chennai, Tamil Nadu",
+        "familyTraditions": ["Golu Festival", "Varalakshmi Vratam"],
+        "caste": "Brahmin",
+        "subcaste": "Iyengar"
+      },
+      "sevaPreferences": {
+        "preferredSevas": ["alankaram", "homam", "teaching"],
+        "availableDays": ["saturday", "sunday", "friday"],
+        "timeSlots": ["morning", "afternoon"],
+        "skillsOffered": ["teaching", "singing", "decoration"],
+        "maxCommitmentHours": 6,
+        "travelDistance": 20,
+        "previousExperience": "3 years of children's Sunday school"
+      },
+      "familyMembers": [
+        {
+          "id": "fm_004",
+          "name": "Ravi Shankar Patel",
+          "relationship": "spouse",
+          "dateOfBirth": "1985-03-22",
+          "gender": "male",
+          "isDevotee": true,
+          "devoteeId": "dev_001"
+        },
+        {
+          "id": "fm_005",
+          "name": "Arjun Patel",
+          "relationship": "son",
+          "dateOfBirth": "2015-12-10",
+          "gender": "male",
+          "isDevotee": false,
+          "specialNeeds": "None"
+        },
+        {
+          "id": "fm_006",
+          "name": "Lakshmi Patel",
+          "relationship": "daughter",
+          "dateOfBirth": "2018-04-25",
+          "gender": "female",
+          "isDevotee": false,
+          "specialNeeds": "None"
+        }
+      ],
+      "notes": {
+        "specialRequests": "Interested in teaching children's classes",
+        "medicalConditions": "None",
+        "accessibilityNeeds": "None",
+        "communicationPreferences": ["email", "whatsapp", "sms"],
+        "volunteerInterests": ["Children's education", "Cultural programs"],
+        "additionalComments": "Available for weekend activities and special occasions"
+      },
+      "attachments": [
+        {
+          "id": "att_003",
+          "type": "profile_photo",
+          "filename": "priya_photo.jpg",
+          "url": "/uploads/devotees/dev_002/profile_photo.jpg",
+          "uploadDate": "2024-01-20T16:00:00Z"
+        }
+      ],
+      "sevaHistory": [
+        {
+          "sevaId": "seva_003",
+          "sevaName": "Alankaram",
+          "date": "2024-06-12T17:00:00Z",
+          "status": "completed",
+          "feedback": "Enjoyed decorating the deity"
+        }
+      ],
+      "donationHistory": [
+        {
+          "donationId": "don_003",
+          "amount": 3000,
+          "currency": "INR",
+          "date": "2024-05-20T11:00:00Z",
+          "purpose": "Cultural Programs",
+          "paymentMethod": "UPI",
+          "receiptNumber": "RCP_003"
+        }
+      ],
+      "eventParticipation": [
+        {
+          "eventId": "evt_001",
+          "eventName": "Janmashtami Celebration",
+          "rsvpStatus": "attending",
+          "rsvpDate": "2024-08-15T12:30:00Z",
+          "guestCount": 4
+        }
+      ]
+    },
+    {
+      "id": "dev_003",
+      "userId": "usr_003",
+      "templeId": "temple_002",
+      "templeName": "Sri Ganesha Temple",
+      "registrationDate": "2024-02-10T08:20:00Z",
+      "lastLogin": "2024-06-17T16:45:00Z",
+      "status": "active",
+      "profileCompletion": 75,
+      "personalDetails": {
+        "fullName": "Suresh Kumar Reddy",
+        "email": "suresh.reddy@example.com",
+        "phone": "+91 9988776655",
+        "dateOfBirth": "1975-11-08",
+        "gender": "male",
+        "bloodGroup": "O+",
+        "occupation": "Business Owner",
+        "address": {
+          "street": "456, Brigade Road",
+          "city": "Bengaluru",
+          "state": "Karnataka",
+          "pincode": "560025",
+          "country": "India"
+        },
+        "emergencyContact": {
+          "name": "Manjula Reddy",
+          "relationship": "spouse",
+          "phone": "+91 9988776656"
+        }
+      },
+      "spiritualInfo": {
+        "devotionLevel": "moderate",
+        "preferredDeity": "Lord Ganesha",
+        "spiritualGuru": "Sri Satya Sai Baba",
+        "dailyPractices": ["chanting", "charity"],
+        "fastingDays": ["chaturthi"],
+        "specialObservances": ["Ganesh Chaturthi", "Sankashti Chaturthi"],
+        "languagesKnown": ["English", "Telugu", "Kannada"],
+        "scripturesStudied": ["Ganesha Purana"]
+      },
+      "familyLineage": {
+        "gotra": "Kasyapa",
+        "nakshatra": "Anuradha",
+        "rashi": "Vrischika",
+        "ancestralPlace": "Hyderabad, Telangana",
+        "familyTraditions": ["Ganesh Chaturthi Celebrations"],
+        "caste": "Reddy",
+        "subcaste": "Kapu"
+      },
+      "sevaPreferences": {
+        "preferredSevas": ["sponsorship", "anna_daanam", "cleaning"],
+        "availableDays": ["tuesday", "thursday", "sunday"],
+        "timeSlots": ["evening"],
+        "skillsOffered": ["management", "coordination"],
+        "maxCommitmentHours": 4,
+        "travelDistance": 30,
+        "previousExperience": "Temple committee member for 2 years"
+      },
+      "familyMembers": [
+        {
+          "id": "fm_007",
+          "name": "Manjula Reddy",
+          "relationship": "spouse",
+          "dateOfBirth": "1978-05-30",
+          "gender": "female",
+          "isDevotee": false,
+          "specialNeeds": "None"
+        },
+        {
+          "id": "fm_008",
+          "name": "Rakesh Reddy",
+          "relationship": "son",
+          "dateOfBirth": "2005-09-12",
+          "gender": "male",
+          "isDevotee": false,
+          "specialNeeds": "None"
+        }
+      ],
+      "notes": {
+        "specialRequests": "Prefer evening sevas due to business commitments",
+        "medicalConditions": "Mild hypertension",
+        "accessibilityNeeds": "None",
+        "communicationPreferences": ["phone", "whatsapp"],
+        "volunteerInterests": ["Temple management", "Fund raising"],
+        "additionalComments": "Willing to sponsor major events and festivals"
+      },
+      "attachments": [
+        {
+          "id": "att_004",
+          "type": "profile_photo",
+          "filename": "suresh_photo.jpg",
+          "url": "/uploads/devotees/dev_003/profile_photo.jpg",
+          "uploadDate": "2024-02-10T08:35:00Z"
+        }
+      ],
+      "sevaHistory": [
+        {
+          "sevaId": "seva_004",
+          "sevaName": "Anna Daanam Sponsorship",
+          "date": "2024-06-05T12:00:00Z",
+          "status": "completed",
+          "feedback": "Happy to serve the community"
+        }
+      ],
+      "donationHistory": [
+        {
+          "donationId": "don_004",
+          "amount": 25000,
+          "currency": "INR",
+          "date": "2024-06-01T14:00:00Z",
+          "purpose": "Ganesh Chaturthi Celebration",
+          "paymentMethod": "Cheque",
+          "receiptNumber": "RCP_004"
+        },
+        {
+          "donationId": "don_005",
+          "amount": 10000,
+          "currency": "INR",
+          "date": "2024-04-15T16:00:00Z",
+          "purpose": "Temple Renovation",
+          "paymentMethod": "Bank Transfer",
+          "receiptNumber": "RCP_005"
+        }
+      ],
+      "eventParticipation": [
+        {
+          "eventId": "evt_002",
+          "eventName": "Ganesh Chaturthi Celebration",
+          "rsvpStatus": "attending",
+          "rsvpDate": "2024-08-20T10:00:00Z",
+          "guestCount": 3
+        }
+      ]
+    },
+    {
+      "id": "dev_004",
+      "userId": "usr_004",
+      "templeId": "temple_001",
+      "templeName": "Sri Venkateshwara Temple",
+      "registrationDate": "2024-03-05T12:15:00Z",
+      "lastLogin": "2024-06-20T07:30:00Z",
+      "status": "active",
+      "profileCompletion": 60,
+      "personalDetails": {
+        "fullName": "Anitha Krishnamurthy",
+        "email": "anitha.k@example.com",
+        "phone": "+91 9123456789",
+        "dateOfBirth": "1992-01-25",
+        "gender": "female",
+        "bloodGroup": "AB+",
+        "occupation": "IT Consultant",
+        "address": {
+          "street": "789, Indiranagar",
+          "city": "Bengaluru",
+          "state": "Karnataka",
+          "pincode": "560038",
+          "country": "India"
+        },
+        "emergencyContact": {
+          "name": "Rajesh Krishnamurthy",
+          "relationship": "father",
+          "phone": "+91 9123456780"
+        }
+      },
+      "spiritualInfo": {
+        "devotionLevel": "new_devotee",
+        "preferredDeity": "Lord Krishna",
+        "spiritualGuru": "None",
+        "dailyPractices": ["meditation"],
+        "fastingDays": ["ekadashi"],
+        "specialObservances": ["Janmashtami"],
+        "languagesKnown": ["English", "Kannada", "Tamil"],
+        "scripturesStudied": ["Bhagavad Gita"]
+      },
+      "familyLineage": {
+        "gotra": "Angirasa",
+        "nakshatra": "Dhanishta",
+        "rashi": "Kumbha",
+        "ancestralPlace": "Mysore, Karnataka",
+        "familyTraditions": ["Navaratri Celebrations"],
+        "caste": "Brahmin",
+        "subcaste": "Smartha"
+      },
+      "sevaPreferences": {
+        "preferredSevas": ["cleaning", "flower_arrangement"],
+        "availableDays": ["saturday", "sunday"],
+        "timeSlots": ["morning"],
+        "skillsOffered": ["organization", "computer_skills"],
+        "maxCommitmentHours": 3,
+        "travelDistance": 15,
+        "previousExperience": "New to temple service"
+      },
+      "familyMembers": [],
+      "notes": {
+        "specialRequests": "New to temple activities, would like guidance",
+        "medicalConditions": "None",
+        "accessibilityNeeds": "None",
+        "communicationPreferences": ["email", "whatsapp"],
+        "volunteerInterests": ["Digital services", "Youth programs"],
+        "additionalComments": "Interested in learning more about temple traditions"
+      },
+      "attachments": [
+        {
+          "id": "att_005",
+          "type": "profile_photo",
+          "filename": "anitha_photo.jpg",
+          "url": "/uploads/devotees/dev_004/profile_photo.jpg",
+          "uploadDate": "2024-03-05T12:30:00Z"
+        }
+      ],
+      "sevaHistory": [],
+      "donationHistory": [
+        {
+          "donationId": "don_006",
+          "amount": 1000,
+          "currency": "INR",
+          "date": "2024-03-15T18:00:00Z",
+          "purpose": "General Donation",
+          "paymentMethod": "UPI",
+          "receiptNumber": "RCP_006"
+        }
+      ],
+      "eventParticipation": []
+    },
+    {
+      "id": "dev_005",
+      "userId": "usr_005",
+      "templeId": "temple_003",
+      "templeName": "Sri Rama Temple",
+      "registrationDate": "2024-01-08T14:00:00Z",
+      "lastLogin": "2024-06-19T20:15:00Z",
+      "status": "inactive",
+      "profileCompletion": 95,
+      "personalDetails": {
+        "fullName": "Venkatesh Iyer",
+        "email": "venkatesh.iyer@example.com",
+        "phone": "+91 9876501234",
+        "dateOfBirth": "1968-12-03",
+        "gender": "male",
+        "bloodGroup": "B-",
+        "occupation": "Retired Government Officer",
+        "address": {
+          "street": "321, Jayanagar",
+          "city": "Bengaluru",
+          "state": "Karnataka",
+          "pincode": "560041",
+          "country": "India"
+        },
+        "emergencyContact": {
+          "name": "Shanti Iyer",
+          "relationship": "spouse",
+          "phone": "+91 9876501235"
+        }
+      },
+      "spiritualInfo": {
+        "devotionLevel": "highly_devoted",
+        "preferredDeity": "Lord Rama",
+        "spiritualGuru": "Sri Raghavendra Swamy",
+        "dailyPractices": ["puja", "reading_scriptures", "meditation", "chanting"],
+        "fastingDays": ["ekadashi", "pradosham", "monday"],
+        "specialObservances": ["Ram Navami", "Hanuman Jayanti", "Dussehra"],
+        "languagesKnown": ["English", "Hindi", "Kannada", "Tamil", "Sanskrit"],
+        "scripturesStudied": ["Ramayana", "Bhagavad Gita", "Vishnu Sahasranamam", "Hanuman Chalisa"]
+      },
+      "familyLineage": {
+        "gotra": "Vishwamitra",
+        "nakshatra": "Mula",
+        "rashi": "Dhanu",
+        "ancestralPlace": "Kumbakonam, Tamil Nadu",
+        "familyTraditions": ["Daily Ramayana Parayana", "Annual Rama Navami Celebration"],
+        "caste": "Brahmin",
+        "subcaste": "Iyer"
+      },
+      "sevaPreferences": {
+        "preferredSevas": ["abhishekam", "homam", "teaching", "reading_scriptures"],
+        "availableDays": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+        "timeSlots": ["early_morning", "morning", "evening"],
+        "skillsOffered": ["sanskrit_recitation", "teaching", "puja_rituals", "cooking"],
+        "maxCommitmentHours": 12,
+        "travelDistance": 40,
+        "previousExperience": "40+ years of temple service and ritual knowledge"
+      },
+      "familyMembers": [
+        {
+          "id": "fm_009",
+          "name": "Shanti Iyer",
+          "relationship": "spouse",
+          "dateOfBirth": "1972-08-18",
+          "gender": "female",
+          "isDevotee": true,
+          "devoteeId": "dev_006"
+        },
+        {
+          "id": "fm_010",
+          "name": "Ramesh Iyer",
+          "relationship": "son",
+          "dateOfBirth": "1995-06-22",
+          "gender": "male",
+          "isDevotee": false,
+          "specialNeeds": "Lives in USA"
+        },
+        {
+          "id": "fm_011",
+          "name": "Divya Iyer",
+          "relationship": "daughter",
+          "dateOfBirth": "1998-11-14",
+          "gender": "female",
+          "isDevotee": true,
+          "devoteeId": "dev_007"
+        }
+      ],
+      "notes": {
+        "specialRequests": "Can conduct religious ceremonies and teach Sanskrit",
+        "medicalConditions": "Mild arthritis in knees",
+        "accessibilityNeeds": "Prefers ground floor activities",
+        "communicationPreferences": ["phone", "in_person"],
+        "volunteerInterests": ["Teaching scriptures", "Conducting pujas", "Mentoring youth"],
+        "additionalComments": "Senior devotee with extensive knowledge of rituals and traditions"
+      },
+      "attachments": [
+        {
+          "id": "att_006",
+          "type": "profile_photo",
+          "filename": "venkatesh_photo.jpg",
+          "url": "/uploads/devotees/dev_005/profile_photo.jpg",
+          "uploadDate": "2024-01-08T14:15:00Z"
+        },
+        {
+          "id": "att_007",
+          "type": "certificate",
+          "filename": "sanskrit_certificate.pdf",
+          "url": "/uploads/devotees/dev_005/sanskrit_certificate.pdf",
+          "uploadDate": "2024-01-08T14:20:00Z"
+        }
+      ],
+      "sevaHistory": [
+        {
+          "sevaId": "seva_005",
+          "sevaName": "Ram Navami Abhishekam",
+          "date": "2024-04-17T05:30:00Z",
+          "status": "completed",
+          "feedback": "Conducted the ceremony with proper rituals"
+        },
+        {
+          "sevaId": "seva_006",
+          "sevaName": "Hanuman Chalisa Teaching",
+          "date": "2024-04-20T16:00:00Z",
+          "status": "completed",
+          "feedback": "Students learned with great enthusiasm"
+        }
+      ],
+      "donationHistory": [
+        {
+          "donationId": "don_007",
+          "amount": 15000,
+          "currency": "INR",
+          "date": "2024-04-15T12:00:00Z",
+          "purpose": "Ram Navami Celebration",
+          "paymentMethod": "Bank Transfer",
+          "receiptNumber": "RCP_007"
+        }
+      ],
+      "eventParticipation": [
+        {
+          "eventId": "evt_003",
+          "eventName": "Ram Navami Celebration",
+          "rsvpStatus": "attending",
+          "rsvpDate": "2024-04-10T10:00:00Z",
+          "guestCount": 2,
+          "role": "ceremony_conductor"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "totalDevotees": 5,
+    "totalActiveDevotees": 4,
+    "totalInactiveDevotees": 1,
+    "averageProfileCompletion": 83,
+    "temples": [
+      {
+        "templeId": "temple_001",
+        "templeName": "Sri Venkateshwara Temple",
+        "devoteeCount": 3
+      },
+      {
+        "templeId": "temple_002",
+        "templeName": "Sri Ganesha Temple",
+        "devoteeCount": 1
+      },
+      {
+        "templeId": "temple_003",
+        "templeName": "Sri Rama Temple",
+        "devoteeCount": 1
+      }
+    ],
+    "devotionLevels": {
+      "new_devotee": 1,
+      "moderate": 1,
+      "devoted": 2,
+      "highly_devoted": 1
+    },
+    "genderDistribution": {
+      "male": 3,
+      "female": 2
+    },
+    "ageGroups": {
+      "18-30": 1,
+      "31-45": 2,
+      "46-60": 1,
+      "60+": 1
+    },
+    "completionStats": {
+      "100%": 1,
+      "80-99%": 2,
+      "60-79%": 2,
+      "below_60%": 0
+    }
+  }
+}

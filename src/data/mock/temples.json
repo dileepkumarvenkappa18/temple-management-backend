@@ -1,0 +1,376 @@
+{
+  "temples": [
+    {
+      "id": "temple_001",
+      "entityId": "entity_001",
+      "name": "Sri Venkateswara Temple",
+      "description": "Ancient temple dedicated to Lord Venkateswara, serving devotees for over 200 years with traditional rituals and modern facilities.",
+      "address": {
+        "street": "Temple Street, Gandhi Nagar",
+        "city": "Bengaluru",
+        "state": "Karnataka",
+        "pincode": "560009",
+        "country": "India"
+      },
+      "contact": {
+        "phone": "+91 80 2234 5678",
+        "email": "admin@srivenkateswara.org",
+        "website": "https://srivenkateswara.org"
+      },
+      "adminDetails": {
+        "tenantId": "tenant_001",
+        "adminName": "Pandit Raghunath Sharma",
+        "adminEmail": "raghunath@srivenkateswara.org",
+        "adminPhone": "+91 98450 12345"
+      },
+      "status": "APPROVED",
+      "approvalDate": "2024-01-15T10:30:00Z",
+      "registrationDate": "2024-01-10T14:20:00Z",
+      "approvedBy": "superadmin_001",
+      "category": "Hindu Temple",
+      "deity": "Lord Venkateswara",
+      "specialties": ["Daily Pujas", "Abhishekam", "Kalyanam", "Annadanam"],
+      "timings": {
+        "morning": "06:00 - 12:00",
+        "evening": "16:00 - 21:00",
+        "specialDays": "05:30 - 22:00"
+      },
+      "facilities": ["Parking", "Prasadam Counter", "Donation Counter", "Guest House", "Wedding Hall"],
+      "images": [
+        "/api/images/temples/temple_001_main.jpg",
+        "/api/images/temples/temple_001_deity.jpg",
+        "/api/images/temples/temple_001_hall.jpg"
+      ],
+      "documents": {
+        "registrationCertificate": "/api/documents/temple_001_reg_cert.pdf",
+        "taxExemption": "/api/documents/temple_001_tax_cert.pdf"
+      },
+      "stats": {
+        "devoteeCount": 1250,
+        "activeVolunteers": 45,
+        "monthlyDonations": 125000,
+        "sevasCompleted": 2340
+      },
+      "location": {
+        "latitude": 12.9716,
+        "longitude": 77.5946
+      },
+      "isActive": true,
+      "createdAt": "2024-01-10T14:20:00Z",
+      "updatedAt": "2024-06-15T09:15:00Z"
+    },
+    {
+      "id": "temple_002",
+      "entityId": "entity_002",
+      "name": "Shree Hanuman Mandir",
+      "description": "Vibrant temple dedicated to Lord Hanuman, known for Tuesday special prayers and community service activities.",
+      "address": {
+        "street": "MG Road, Jayanagar",
+        "city": "Bengaluru",
+        "state": "Karnataka",
+        "pincode": "560041",
+        "country": "India"
+      },
+      "contact": {
+        "phone": "+91 80 2657 8901",
+        "email": "contact@hanumanmandir.org",
+        "website": "https://hanumanmandir.org"
+      },
+      "adminDetails": {
+        "tenantId": "tenant_002",
+        "adminName": "Sri Krishnamurthy",
+        "adminEmail": "krishna@hanumanmandir.org",
+        "adminPhone": "+91 99860 23456"
+      },
+      "status": "APPROVED",
+      "approvalDate": "2024-02-20T11:45:00Z",
+      "registrationDate": "2024-02-18T09:30:00Z",
+      "approvedBy": "superadmin_001",
+      "category": "Hindu Temple",
+      "deity": "Lord Hanuman",
+      "specialties": ["Tuesday Special", "Chalisa Recitation", "Community Kitchen", "Health Camps"],
+      "timings": {
+        "morning": "05:30 - 12:30",
+        "evening": "17:00 - 21:30",
+        "specialDays": "05:00 - 22:00"
+      },
+      "facilities": ["Community Hall", "Free Medical Camp", "Library", "Parking"],
+      "images": [
+        "/api/images/temples/temple_002_main.jpg",
+        "/api/images/temples/temple_002_hanuman.jpg"
+      ],
+      "documents": {
+        "registrationCertificate": "/api/documents/temple_002_reg_cert.pdf",
+        "taxExemption": "/api/documents/temple_002_tax_cert.pdf"
+      },
+      "stats": {
+        "devoteeCount": 890,
+        "activeVolunteers": 32,
+        "monthlyDonations": 85000,
+        "sevasCompleted": 1540
+      },
+      "location": {
+        "latitude": 12.9279,
+        "longitude": 77.6271
+      },
+      "isActive": true,
+      "createdAt": "2024-02-18T09:30:00Z",
+      "updatedAt": "2024-06-14T16:20:00Z"
+    },
+    {
+      "id": "temple_003",
+      "entityId": "entity_003",
+      "name": "Maa Durga Temple",
+      "description": "Sacred temple of Goddess Durga, famous for Navratri celebrations and women empowerment programs.",
+      "address": {
+        "street": "Temple Road, Rajajinagar",
+        "city": "Bengaluru",
+        "state": "Karnataka",
+        "pincode": "560010",
+        "country": "India"
+      },
+      "contact": {
+        "phone": "+91 80 2334 5678",
+        "email": "info@maadurga.org",
+        "website": "https://maadurga.org"
+      },
+      "adminDetails": {
+        "tenantId": "tenant_003",
+        "adminName": "Smt. Lakshmi Devi",
+        "adminEmail": "lakshmi@maadurga.org",
+        "adminPhone": "+91 97310 34567"
+      },
+      "status": "PENDING",
+      "approvalDate": null,
+      "registrationDate": "2024-06-10T15:45:00Z",
+      "approvedBy": null,
+      "category": "Hindu Temple",
+      "deity": "Goddess Durga",
+      "specialties": ["Navratri Festival", "Women Programs", "Cultural Events", "Skill Development"],
+      "timings": {
+        "morning": "06:00 - 12:00",
+        "evening": "16:30 - 21:00",
+        "specialDays": "05:30 - 22:30"
+      },
+      "facilities": ["Cultural Center", "Training Rooms", "Parking", "Canteen"],
+      "images": [
+        "/api/images/temples/temple_003_main.jpg",
+        "/api/images/temples/temple_003_durga.jpg"
+      ],
+      "documents": {
+        "registrationCertificate": "/api/documents/temple_003_reg_cert.pdf",
+        "taxExemption": "/api/documents/temple_003_tax_cert.pdf"
+      },
+      "stats": {
+        "devoteeCount": 0,
+        "activeVolunteers": 0,
+        "monthlyDonations": 0,
+        "sevasCompleted": 0
+      },
+      "location": {
+        "latitude": 12.9698,
+        "longitude": 77.5553
+      },
+      "isActive": false,
+      "createdAt": "2024-06-10T15:45:00Z",
+      "updatedAt": "2024-06-10T15:45:00Z"
+    },
+    {
+      "id": "temple_004",
+      "entityId": "entity_004",
+      "name": "Sri Ganesha Temple",
+      "description": "Beautiful temple dedicated to Lord Ganesha, offering special pujas for new beginnings and prosperity.",
+      "address": {
+        "street": "Commercial Street, Shivajinagar",
+        "city": "Bengaluru",
+        "state": "Karnataka",
+        "pincode": "560001",
+        "country": "India"
+      },
+      "contact": {
+        "phone": "+91 80 2559 7890",
+        "email": "admin@sriganesha.org",
+        "website": "https://sriganesha.org"
+      },
+      "adminDetails": {
+        "tenantId": "tenant_004",
+        "adminName": "Dr. Venkatesh Rao",
+        "adminEmail": "venkatesh@sriganesha.org",
+        "adminPhone": "+91 98451 45678"
+      },
+      "status": "APPROVED",
+      "approvalDate": "2024-03-05T14:20:00Z",
+      "registrationDate": "2024-03-01T10:15:00Z",
+      "approvedBy": "superadmin_001",
+      "category": "Hindu Temple",
+      "deity": "Lord Ganesha",
+      "specialties": ["Vinayaka Chaturthi", "New Venture Blessings", "Education Programs", "Youth Activities"],
+      "timings": {
+        "morning": "06:30 - 12:30",
+        "evening": "17:00 - 21:00",
+        "specialDays": "06:00 - 22:00"
+      },
+      "facilities": ["Study Hall", "Computer Center", "Parking", "Prasadam Counter"],
+      "images": [
+        "/api/images/temples/temple_004_main.jpg",
+        "/api/images/temples/temple_004_ganesha.jpg"
+      ],
+      "documents": {
+        "registrationCertificate": "/api/documents/temple_004_reg_cert.pdf",
+        "taxExemption": "/api/documents/temple_004_tax_cert.pdf"
+      },
+      "stats": {
+        "devoteeCount": 670,
+        "activeVolunteers": 28,
+        "monthlyDonations": 95000,
+        "sevasCompleted": 1120
+      },
+      "location": {
+        "latitude": 12.9844,
+        "longitude": 77.6031
+      },
+      "isActive": true,
+      "createdAt": "2024-03-01T10:15:00Z",
+      "updatedAt": "2024-06-12T11:30:00Z"
+    },
+    {
+      "id": "temple_005",
+      "entityId": "entity_005",
+      "name": "Shree Krishna Mandir",
+      "description": "Divine temple of Lord Krishna, renowned for bhajan sessions, spiritual discourses, and youth engagement programs.",
+      "address": {
+        "street": "Krishna Layout, Girinagar",
+        "city": "Bengaluru",
+        "state": "Karnataka",
+        "pincode": "560085",
+        "country": "India"
+      },
+      "contact": {
+        "phone": "+91 80 2672 3456",
+        "email": "contact@shreekrishna.org",
+        "website": "https://shreekrishna.org"
+      },
+      "adminDetails": {
+        "tenantId": "tenant_005",
+        "adminName": "Swami Govindaswamy",
+        "adminEmail": "swami@shreekrishna.org",
+        "adminPhone": "+91 99020 56789"
+      },
+      "status": "REJECTED",
+      "approvalDate": null,
+      "registrationDate": "2024-05-15T12:00:00Z",
+      "approvedBy": null,
+      "rejectionReason": "Incomplete documentation. Please submit valid tax exemption certificate and updated registration documents.",
+      "rejectionDate": "2024-05-25T16:30:00Z",
+      "rejectedBy": "superadmin_001",
+      "category": "Hindu Temple",
+      "deity": "Lord Krishna",
+      "specialties": ["Bhajan Sessions", "Spiritual Discourses", "Youth Programs", "Goshala"],
+      "timings": {
+        "morning": "05:00 - 12:00",
+        "evening": "16:00 - 21:30",
+        "specialDays": "04:30 - 22:30"
+      },
+      "facilities": ["Satsang Hall", "Goshala", "Organic Garden", "Parking"],
+      "images": [
+        "/api/images/temples/temple_005_main.jpg",
+        "/api/images/temples/temple_005_krishna.jpg"
+      ],
+      "documents": {
+        "registrationCertificate": "/api/documents/temple_005_reg_cert.pdf",
+        "taxExemption": null
+      },
+      "stats": {
+        "devoteeCount": 0,
+        "activeVolunteers": 0,
+        "monthlyDonations": 0,
+        "sevasCompleted": 0
+      },
+      "location": {
+        "latitude": 12.9352,
+        "longitude": 77.5454
+      },
+      "isActive": false,
+      "canReapply": true,
+      "createdAt": "2024-05-15T12:00:00Z",
+      "updatedAt": "2024-05-25T16:30:00Z"
+    },
+    {
+      "id": "temple_006",
+      "entityId": "entity_006",
+      "name": "Shree Saibaba Temple",
+      "description": "Peaceful temple of Sai Baba, offering daily aarti, prasadam distribution, and community service programs.",
+      "address": {
+        "street": "Sai Nagar, Electronic City",
+        "city": "Bengaluru",
+        "state": "Karnataka",
+        "pincode": "560100",
+        "country": "India"
+      },
+      "contact": {
+        "phone": "+91 80 2783 4567",
+        "email": "admin@saibaba.org",
+        "website": "https://saibaba.org"
+      },
+      "adminDetails": {
+        "tenantId": "tenant_006",
+        "adminName": "Sri Ramesh Kumar",
+        "adminEmail": "ramesh@saibaba.org",
+        "adminPhone": "+91 98860 67890"
+      },
+      "status": "APPROVED",
+      "approvalDate": "2024-04-10T13:45:00Z",
+      "registrationDate": "2024-04-05T11:20:00Z",
+      "approvedBy": "superadmin_001",
+      "category": "Hindu Temple",
+      "deity": "Sai Baba",
+      "specialties": ["Thursday Aarti", "Free Meals", "Medical Camps", "Educational Support"],
+      "timings": {
+        "morning": "05:30 - 12:00",
+        "evening": "18:00 - 21:30",
+        "specialDays": "05:00 - 22:00"
+      },
+      "facilities": ["Community Kitchen", "Medical Center", "Library", "Parking", "Guest Rooms"],
+      "images": [
+        "/api/images/temples/temple_006_main.jpg",
+        "/api/images/temples/temple_006_saibaba.jpg"
+      ],
+      "documents": {
+        "registrationCertificate": "/api/documents/temple_006_reg_cert.pdf",
+        "taxExemption": "/api/documents/temple_006_tax_cert.pdf"
+      },
+      "stats": {
+        "devoteeCount": 1450,
+        "activeVolunteers": 52,
+        "monthlyDonations": 165000,
+        "sevasCompleted": 2890
+      },
+      "location": {
+        "latitude": 12.8456,
+        "longitude": 77.6632
+      },
+      "isActive": true,
+      "createdAt": "2024-04-05T11:20:00Z",
+      "updatedAt": "2024-06-18T14:25:00Z"
+    }
+  ],
+  "filters": {
+    "cities": ["Bengaluru", "Mysuru", "Hubli", "Mangalore", "Davangere"],
+    "states": ["Karnataka", "Tamil Nadu", "Andhra Pradesh", "Telangana", "Kerala"],
+    "categories": ["Hindu Temple", "Jain Temple", "Buddhist Temple", "Spiritual Center"],
+    "deities": ["Lord Venkateswara", "Lord Hanuman", "Goddess Durga", "Lord Ganesha", "Lord Krishna", "Sai Baba", "Goddess Lakshmi", "Lord Shiva"],
+    "facilities": ["Parking", "Community Hall", "Guest House", "Medical Center", "Library", "Computer Center", "Wedding Hall", "Prasadam Counter", "Canteen"],
+    "statuses": ["APPROVED", "PENDING", "REJECTED"]
+  },
+  "meta": {
+    "totalTemples": 6,
+    "approvedTemples": 4,
+    "pendingTemples": 1,
+    "rejectedTemples": 1,
+    "totalDevotees": 4260,
+    "totalVolunteers": 157,
+    "monthlyDonationsTotal": 470000,
+    "lastUpdated": "2024-06-20T10:30:00Z",
+    "version": "1.0.0"
+  }
+}

@@ -1,0 +1,474 @@
+{
+  "donations": [
+    {
+      "id": "don_001",
+      "entityId": "temple_001",
+      "devoteeId": "dev_001",
+      "donorName": "Rajesh Kumar",
+      "donorEmail": "rajesh.kumar@email.com",
+      "donorPhone": "+91 9876543210",
+      "donorAddress": {
+        "street": "123 Temple Street",
+        "city": "Bengaluru",
+        "state": "Karnataka",
+        "pincode": "560001",
+        "country": "India"
+      },
+      "amount": 5000,
+      "currency": "INR",
+      "donationType": "general",
+      "donationCategory": "temple_maintenance",
+      "purpose": "Temple renovation fund",
+      "paymentMethod": "online",
+      "paymentGateway": "razorpay",
+      "transactionId": "txn_razorpay_001",
+      "gatewayTransactionId": "pay_MkV8X9z1pQR2sF",
+      "receiptNumber": "REC/2025/001",
+      "donationDate": "2025-06-15T10:30:00Z",
+      "financialYear": "2025-26",
+      "status": "completed",
+      "isAnonymous": false,
+      "taxExemptionApplicable": true,
+      "taxExemptionAmount": 5000,
+      "panNumber": "ABCDE1234F",
+      "aadharNumber": "1234 5678 9012",
+      "receiptGenerated": true,
+      "receiptGeneratedAt": "2025-06-15T10:32:00Z",
+      "receiptUrl": "/receipts/REC_2025_001.pdf",
+      "notes": "Monthly donation for temple upkeep",
+      "isRecurring": true,
+      "recurringFrequency": "monthly",
+      "nextDonationDate": "2025-07-15T10:30:00Z",
+      "createdAt": "2025-06-15T10:30:00Z",
+      "updatedAt": "2025-06-15T10:32:00Z",
+      "createdBy": "dev_001",
+      "tags": ["regular_donor", "monthly", "temple_maintenance"]
+    },
+    {
+      "id": "don_002",
+      "entityId": "temple_001",
+      "devoteeId": "dev_002",
+      "donorName": "Priya Sharma",
+      "donorEmail": "priya.sharma@email.com",
+      "donorPhone": "+91 9876543211",
+      "donorAddress": {
+        "street": "456 Garden Road",
+        "city": "Mumbai",
+        "state": "Maharashtra",
+        "pincode": "400001",
+        "country": "India"
+      },
+      "amount": 10000,
+      "currency": "INR",
+      "donationType": "seva_specific",
+      "donationCategory": "seva_sponsorship",
+      "purpose": "Abhishekam seva sponsorship",
+      "sevaId": "seva_001",
+      "sevaName": "Daily Abhishekam",
+      "paymentMethod": "online",
+      "paymentGateway": "payu",
+      "transactionId": "txn_payu_002",
+      "gatewayTransactionId": "PayU123456789",
+      "receiptNumber": "REC/2025/002",
+      "donationDate": "2025-06-14T14:15:00Z",
+      "financialYear": "2025-26",
+      "status": "completed",
+      "isAnonymous": false,
+      "taxExemptionApplicable": true,
+      "taxExemptionAmount": 10000,
+      "panNumber": "FGHIJ5678K",
+      "aadharNumber": "9876 5432 1098",
+      "receiptGenerated": true,
+      "receiptGeneratedAt": "2025-06-14T14:17:00Z",
+      "receiptUrl": "/receipts/REC_2025_002.pdf",
+      "notes": "Sponsoring daily abhishekam for Lord Ganesha",
+      "isRecurring": false,
+      "recurringFrequency": null,
+      "nextDonationDate": null,
+      "createdAt": "2025-06-14T14:15:00Z",
+      "updatedAt": "2025-06-14T14:17:00Z",
+      "createdBy": "dev_002",
+      "tags": ["seva_sponsor", "abhishekam", "one_time"]
+    },
+    {
+      "id": "don_003",
+      "entityId": "temple_002",
+      "devoteeId": "dev_003",
+      "donorName": "Anonymous Donor",
+      "donorEmail": null,
+      "donorPhone": null,
+      "donorAddress": null,
+      "amount": 2500,
+      "currency": "INR",
+      "donationType": "general",
+      "donationCategory": "annadanam",
+      "purpose": "Free meal distribution",
+      "paymentMethod": "cash",
+      "paymentGateway": null,
+      "transactionId": "txn_cash_003",
+      "gatewayTransactionId": null,
+      "receiptNumber": "REC/2025/003",
+      "donationDate": "2025-06-13T16:45:00Z",
+      "financialYear": "2025-26",
+      "status": "completed",
+      "isAnonymous": true,
+      "taxExemptionApplicable": false,
+      "taxExemptionAmount": 0,
+      "panNumber": null,
+      "aadharNumber": null,
+      "receiptGenerated": true,
+      "receiptGeneratedAt": "2025-06-13T16:47:00Z",
+      "receiptUrl": "/receipts/REC_2025_003.pdf",
+      "notes": "Cash donation for annadanam",
+      "isRecurring": false,
+      "recurringFrequency": null,
+      "nextDonationDate": null,
+      "createdAt": "2025-06-13T16:45:00Z",
+      "updatedAt": "2025-06-13T16:47:00Z",
+      "createdBy": "admin_001",
+      "tags": ["anonymous", "annadanam", "cash"]
+    },
+    {
+      "id": "don_004",
+      "entityId": "temple_001",
+      "devoteeId": "dev_004",
+      "donorName": "Vikram Reddy",
+      "donorEmail": "vikram.reddy@email.com",
+      "donorPhone": "+91 9876543212",
+      "donorAddress": {
+        "street": "789 Temple Avenue",
+        "city": "Hyderabad",
+        "state": "Telangana",
+        "pincode": "500001",
+        "country": "India"
+      },
+      "amount": 25000,
+      "currency": "INR",
+      "donationType": "festival_specific",
+      "donationCategory": "festival_celebration",
+      "purpose": "Diwali celebration fund",
+      "festivalId": "festival_001",
+      "festivalName": "Diwali 2025",
+      "paymentMethod": "bank_transfer",
+      "paymentGateway": null,
+      "transactionId": "txn_bank_004",
+      "gatewayTransactionId": "HDFC1234567890",
+      "receiptNumber": "REC/2025/004",
+      "donationDate": "2025-06-12T11:20:00Z",
+      "financialYear": "2025-26",
+      "status": "completed",
+      "isAnonymous": false,
+      "taxExemptionApplicable": true,
+      "taxExemptionAmount": 25000,
+      "panNumber": "KLMNO9012P",
+      "aadharNumber": "1357 2468 9024",
+      "receiptGenerated": true,
+      "receiptGeneratedAt": "2025-06-12T11:22:00Z",
+      "receiptUrl": "/receipts/REC_2025_004.pdf",
+      "notes": "Major contribution for Diwali festivities",
+      "isRecurring": false,
+      "recurringFrequency": null,
+      "nextDonationDate": null,
+      "createdAt": "2025-06-12T11:20:00Z",
+      "updatedAt": "2025-06-12T11:22:00Z",
+      "createdBy": "dev_004",
+      "tags": ["major_donor", "festival", "diwali"]
+    },
+    {
+      "id": "don_005",
+      "entityId": "temple_001",
+      "devoteeId": "dev_005",
+      "donorName": "Meera Iyer",
+      "donorEmail": "meera.iyer@email.com",
+      "donorPhone": "+91 9876543213",
+      "donorAddress": {
+        "street": "321 Devotee Lane",
+        "city": "Chennai",
+        "state": "Tamil Nadu",
+        "pincode": "600001",
+        "country": "India"
+      },
+      "amount": 1000,
+      "currency": "INR",
+      "donationType": "general",
+      "donationCategory": "deity_decoration",
+      "purpose": "Flowers and decorations for daily puja",
+      "paymentMethod": "upi",
+      "paymentGateway": "phonepe",
+      "transactionId": "txn_phonepe_005",
+      "gatewayTransactionId": "PhonePe987654321",
+      "receiptNumber": "REC/2025/005",
+      "donationDate": "2025-06-11T09:10:00Z",
+      "financialYear": "2025-26",
+      "status": "completed",
+      "isAnonymous": false,
+      "taxExemptionApplicable": true,
+      "taxExemptionAmount": 1000,
+      "panNumber": "PQRST3456U",
+      "aadharNumber": "2468 1357 9024",
+      "receiptGenerated": true,
+      "receiptGeneratedAt": "2025-06-11T09:12:00Z",
+      "receiptUrl": "/receipts/REC_2025_005.pdf",
+      "notes": "Regular small donation for daily temple needs",
+      "isRecurring": true,
+      "recurringFrequency": "weekly",
+      "nextDonationDate": "2025-06-18T09:10:00Z",
+      "createdAt": "2025-06-11T09:10:00Z",
+      "updatedAt": "2025-06-11T09:12:00Z",
+      "createdBy": "dev_005",
+      "tags": ["regular_donor", "weekly", "deity_decoration"]
+    },
+    {
+      "id": "don_006",
+      "entityId": "temple_002",
+      "devoteeId": null,
+      "donorName": "Krishna Murthy",
+      "donorEmail": "krishna.murthy@email.com",
+      "donorPhone": "+91 9876543214",
+      "donorAddress": {
+        "street": "654 Spiritual Street",
+        "city": "Mysuru",
+        "state": "Karnataka",
+        "pincode": "570001",
+        "country": "India"
+      },
+      "amount": 7500,
+      "currency": "INR",
+      "donationType": "construction",
+      "donationCategory": "infrastructure",
+      "purpose": "New prayer hall construction",
+      "paymentMethod": "cheque",
+      "paymentGateway": null,
+      "transactionId": "txn_cheque_006",
+      "gatewayTransactionId": null,
+      "chequeNumber": "CHQ123456",
+      "bankName": "State Bank of India",
+      "receiptNumber": "REC/2025/006",
+      "donationDate": "2025-06-10T13:30:00Z",
+      "financialYear": "2025-26",
+      "status": "pending_clearance",
+      "isAnonymous": false,
+      "taxExemptionApplicable": true,
+      "taxExemptionAmount": 7500,
+      "panNumber": "UVWXY6789Z",
+      "aadharNumber": "3579 2468 1357",
+      "receiptGenerated": false,
+      "receiptGeneratedAt": null,
+      "receiptUrl": null,
+      "notes": "Cheque pending clearance for construction fund",
+      "isRecurring": false,
+      "recurringFrequency": null,
+      "nextDonationDate": null,
+      "createdAt": "2025-06-10T13:30:00Z",
+      "updatedAt": "2025-06-10T13:30:00Z",
+      "createdBy": "admin_002",
+      "tags": ["construction", "cheque", "pending"]
+    }
+  ],
+  "donationSummary": {
+    "totalDonations": 6,
+    "totalAmount": 51000,
+    "currentMonth": {
+      "totalDonations": 6,
+      "totalAmount": 51000,
+      "averageDonation": 8500
+    },
+    "previousMonth": {
+      "totalDonations": 4,
+      "totalAmount": 35000,
+      "averageDonation": 8750
+    },
+    "growthPercentage": 45.7,
+    "byCategory": {
+      "temple_maintenance": 5000,
+      "seva_sponsorship": 10000,
+      "annadanam": 2500,
+      "festival_celebration": 25000,
+      "deity_decoration": 1000,
+      "infrastructure": 7500
+    },
+    "byPaymentMethod": {
+      "online": 15000,
+      "cash": 2500,
+      "bank_transfer": 25000,
+      "upi": 1000,
+      "cheque": 7500
+    },
+    "topDonors": [
+      {
+        "donorName": "Vikram Reddy",
+        "totalAmount": 25000,
+        "donationCount": 1,
+        "lastDonation": "2025-06-12T11:20:00Z"
+      },
+      {
+        "donorName": "Priya Sharma",
+        "totalAmount": 10000,
+        "donationCount": 1,
+        "lastDonation": "2025-06-14T14:15:00Z"
+      },
+      {
+        "donorName": "Krishna Murthy",
+        "totalAmount": 7500,
+        "donationCount": 1,
+        "lastDonation": "2025-06-10T13:30:00Z"
+      }
+    ]
+  },
+  "donationTypes": [
+    {
+      "id": "general",
+      "name": "General Donation",
+      "description": "General temple fund contribution",
+      "isActive": true
+    },
+    {
+      "id": "seva_specific",
+      "name": "Seva Sponsorship",
+      "description": "Sponsorship for specific seva activities",
+      "isActive": true
+    },
+    {
+      "id": "festival_specific",
+      "name": "Festival Celebration",
+      "description": "Donations for festival celebrations",
+      "isActive": true
+    },
+    {
+      "id": "construction",
+      "name": "Construction & Infrastructure",
+      "description": "Temple construction and infrastructure development",
+      "isActive": true
+    },
+    {
+      "id": "annadanam",
+      "name": "Annadanam",
+      "description": "Free meal distribution program",
+      "isActive": true
+    }
+  ],
+  "donationCategories": [
+    {
+      "id": "temple_maintenance",
+      "name": "Temple Maintenance",
+      "description": "Regular temple upkeep and maintenance",
+      "donationType": "general"
+    },
+    {
+      "id": "seva_sponsorship",
+      "name": "Seva Sponsorship",
+      "description": "Sponsoring specific seva activities",
+      "donationType": "seva_specific"
+    },
+    {
+      "id": "annadanam",
+      "name": "Annadanam",
+      "description": "Free meal distribution",
+      "donationType": "annadanam"
+    },
+    {
+      "id": "festival_celebration",
+      "name": "Festival Celebration",
+      "description": "Special festival celebrations",
+      "donationType": "festival_specific"
+    },
+    {
+      "id": "deity_decoration",
+      "name": "Deity Decoration",
+      "description": "Flowers, ornaments and decorations",
+      "donationType": "general"
+    },
+    {
+      "id": "infrastructure",
+      "name": "Infrastructure Development",
+      "description": "Construction and infrastructure projects",
+      "donationType": "construction"
+    }
+  ],
+  "paymentMethods": [
+    {
+      "id": "online",
+      "name": "Online Payment",
+      "isActive": true,
+      "supportedGateways": ["razorpay", "payu", "stripe"]
+    },
+    {
+      "id": "upi",
+      "name": "UPI Payment",
+      "isActive": true,
+      "supportedGateways": ["phonepe", "googlepay", "paytm"]
+    },
+    {
+      "id": "bank_transfer",
+      "name": "Bank Transfer",
+      "isActive": true,
+      "supportedGateways": null
+    },
+    {
+      "id": "cash",
+      "name": "Cash Payment",
+      "isActive": true,
+      "supportedGateways": null
+    },
+    {
+      "id": "cheque",
+      "name": "Cheque Payment",
+      "isActive": true,
+      "supportedGateways": null
+    }
+  ],
+  "recurringFrequencies": [
+    {
+      "id": "weekly",
+      "name": "Weekly",
+      "intervalDays": 7
+    },
+    {
+      "id": "monthly",
+      "name": "Monthly",
+      "intervalDays": 30
+    },
+    {
+      "id": "quarterly",
+      "name": "Quarterly",
+      "intervalDays": 90
+    },
+    {
+      "id": "yearly",
+      "name": "Yearly",
+      "intervalDays": 365
+    }
+  ],
+  "donationStatuses": [
+    {
+      "id": "pending",
+      "name": "Pending",
+      "description": "Payment initiated but not completed",
+      "color": "warning"
+    },
+    {
+      "id": "completed",
+      "name": "Completed",
+      "description": "Payment successful and confirmed",
+      "color": "success"
+    },
+    {
+      "id": "failed",
+      "name": "Failed",
+      "description": "Payment failed or rejected",
+      "color": "error"
+    },
+    {
+      "id": "pending_clearance",
+      "name": "Pending Clearance",
+      "description": "Cheque or bank transfer pending clearance",
+      "color": "info"
+    },
+    {
+      "id": "refunded",
+      "name": "Refunded",
+      "description": "Payment refunded to donor",
+      "color": "secondary"
+    }
+  ]
+}
