@@ -11,6 +11,8 @@
       <!-- Welcome Banner -->
       <WelcomeBanner 
         :user="currentUser"
+        :userName="currentUser?.fullName || ''"
+        :userRole="currentUser?.role || 'devotee'"
         title="My Temple Events"
         :subtitle="`Explore upcoming events and festivals at ${templeName}`"
       />
@@ -39,35 +41,8 @@
             >
               <option value="all">All Events</option>
               <option value="upcoming">Upcoming</option>
-              <option value="attending">My RSVPs</option>
               <option value="past">Past Events</option>
             </select>
-          </div>
-
-          <!-- View Toggle -->
-          <div class="flex bg-gray-100 rounded-xl p-1">
-            <button
-              @click="viewMode = 'grid'"
-              :class="[
-                'px-3 py-1 rounded-lg text-sm font-medium transition-all duration-200',
-                viewMode === 'grid' 
-                  ? 'bg-white text-indigo-600 shadow-sm' 
-                  : 'text-gray-600 hover:text-gray-800'
-              ]"
-            >
-              <Grid3x3 class="h-4 w-4" />
-            </button>
-            <button
-              @click="viewMode = 'list'"
-              :class="[
-                'px-3 py-1 rounded-lg text-sm font-medium transition-all duration-200',
-                viewMode === 'list' 
-                  ? 'bg-white text-indigo-600 shadow-sm' 
-                  : 'text-gray-600 hover:text-gray-800'
-              ]"
-            >
-              <List class="h-4 w-4" />
-            </button>
           </div>
         </div>
       </BaseCard>
@@ -77,94 +52,50 @@
         <BaseLoader />
       </div>
 
-      <!-- Events Display -->
-      <div v-else-if="filteredEvents.length > 0">
-        <!-- Grid View -->
-        <div v-if="viewMode === 'grid'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <EventCard
-            v-for="event in filteredEvents"
-            :key="event.id"
-            :event="event"
-            :show-rsvp="true"
-            :user-rsvp="getUserRSVP(event.id)"
-            @rsvp="handleRSVP"
-            @view-details="openEventModal"
-            class="transform hover:scale-105 transition-all duration-200"
-          />
-        </div>
-
-        <!-- List View -->
-        <div v-else class="space-y-4">
-          <BaseCard
-            v-for="event in filteredEvents"
-            :key="event.id"
-            class="p-6 hover:shadow-lg transition-all duration-200"
-          >
-            <div class="flex flex-col lg:flex-row gap-6">
-              <!-- Event Image -->
-              <div class="flex-shrink-0">
-                <img
-                  :src="event.image || '/api/placeholder/120/120'"
-                  :alt="event.title"
-                  class="w-full lg:w-32 h-48 lg:h-32 object-cover rounded-xl"
-                />
-              </div>
-
-              <!-- Event Details -->
-              <div class="flex-1 min-w-0">
-                <div class="flex flex-col sm:flex-row gap-4 justify-between">
-                  <div class="flex-1">
-                    <h3 class="text-xl font-bold text-gray-900 mb-2">{{ event.title }}</h3>
-                    <p class="text-gray-600 mb-3 line-clamp-2">{{ event.description }}</p>
-                    
-                    <div class="flex flex-wrap gap-4 text-sm text-gray-500">
-                      <div class="flex items-center gap-1">
-                        <Calendar class="h-4 w-4" />
-                        {{ formatDate(event.date) }}
-                      </div>
-                      <div class="flex items-center gap-1">
-                        <Clock class="h-4 w-4" />
-                        {{ event.time }}
-                      </div>
-                      <div class="flex items-center gap-1">
-                        <MapPin class="h-4 w-4" />
-                        {{ event.venue || 'Temple Premises' }}
-                      </div>
+      <!-- Events Display - List View Only -->
+      <div v-else-if="filteredEvents.length > 0" class="space-y-4">
+        <BaseCard
+          v-for="event in filteredEvents"
+          :key="event.id"
+          class="p-6 hover:shadow-lg transition-all duration-200 cursor-pointer"
+          @click="openEventModal(event)"
+        >
+          <div class="flex flex-col">
+            <!-- Event Details -->
+            <div class="flex-1 min-w-0">
+              <div class="flex flex-col sm:flex-row gap-4 justify-between">
+                <div class="flex-1">
+                  <h3 class="text-xl font-bold text-gray-900 mb-2">{{ event.title }}</h3>
+                  <p class="text-gray-600 mb-3 line-clamp-2">{{ event.description }}</p>
+                  
+                  <div class="flex flex-wrap gap-4 text-sm text-gray-500">
+                    <div class="flex items-center gap-1">
+                      <Calendar class="h-4 w-4" />
+                      {{ formatDate(event.date) }}
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <Clock class="h-4 w-4" />
+                      {{ formatTime(event.time) }}
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <MapPin class="h-4 w-4" />
+                      {{ event.venue || 'Temple Premises' }}
                     </div>
                   </div>
+                </div>
 
-                  <!-- RSVP Actions -->
-                  <div class="flex flex-col gap-2 items-start sm:items-end">
-                    <div class="flex items-center gap-2">
-                      <span :class="getEventStatusClass(event)">
-                        {{ getEventStatus(event) }}
-                      </span>
-                    </div>
-                    
-                    <div class="flex gap-2">
-                      <BaseButton
-                        variant="outline"
-                        size="sm"
-                        @click="openEventModal(event)"
-                      >
-                        View Details
-                      </BaseButton>
-                      
-                      <BaseButton
-                        v-if="canRSVP(event)"
-                        :variant="getUserRSVP(event.id) ? 'danger' : 'primary'"
-                        size="sm"
-                        @click="handleRSVP(event.id, !getUserRSVP(event.id))"
-                      >
-                        {{ getUserRSVP(event.id) ? 'Cancel RSVP' : 'RSVP' }}
-                      </BaseButton>
-                    </div>
+                <!-- Status Badge -->
+                <div class="flex flex-col gap-2 items-start sm:items-end">
+                  <div class="flex items-center gap-2">
+                    <span :class="getEventStatusClass(event)">
+                      {{ getEventStatus(event) }}
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
-          </BaseCard>
-        </div>
+          </div>
+        </BaseCard>
       </div>
 
       <!-- Empty State -->
@@ -183,27 +114,6 @@
           </BaseButton>
         </BaseCard>
       </div>
-
-      <!-- My RSVPs Summary -->
-      <DashboardWidget
-        title="My Event Participation"
-        class="mt-8"
-      >
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div class="bg-indigo-50 rounded-xl p-4 text-center">
-            <div class="text-2xl font-bold text-indigo-600">{{ rsvpStats.attending }}</div>
-            <div class="text-sm text-indigo-600">Attending</div>
-          </div>
-          <div class="bg-green-50 rounded-xl p-4 text-center">
-            <div class="text-2xl font-bold text-green-600">{{ rsvpStats.attended }}</div>
-            <div class="text-sm text-green-600">Attended</div>
-          </div>
-          <div class="bg-blue-50 rounded-xl p-4 text-center">
-            <div class="text-2xl font-bold text-blue-600">{{ rsvpStats.upcoming }}</div>
-            <div class="text-sm text-blue-600">Upcoming</div>
-          </div>
-        </div>
-      </DashboardWidget>
     </div>
 
     <!-- Event Details Modal -->
@@ -225,7 +135,7 @@
               </div>
               <div class="flex items-center gap-1">
                 <Clock class="h-4 w-4" />
-                {{ selectedEvent.time }}
+                {{ formatTime(selectedEvent.time) }}
               </div>
               <div class="flex items-center gap-1">
                 <MapPin class="h-4 w-4" />
@@ -239,15 +149,6 @@
           >
             <X class="h-6 w-6" />
           </button>
-        </div>
-
-        <!-- Event Image -->
-        <div v-if="selectedEvent.image" class="mb-6">
-          <img
-            :src="selectedEvent.image"
-            :alt="selectedEvent.title"
-            class="w-full h-64 object-cover rounded-xl"
-          />
         </div>
 
         <!-- Event Description -->
@@ -315,11 +216,12 @@ import {
   Clock, 
   MapPin, 
   Search, 
-  Grid3x3, 
   List, 
   X,
   Users
 } from 'lucide-vue-next'
+import { apiClient } from '@/plugins/axios'
+import eventService from '@/services/event.service'
 
 // Layout Components
 import DashboardLayout from '@/layouts/DashboardLayout.vue'
@@ -346,74 +248,14 @@ const { showToast } = useToast()
 const loading = ref(true)
 const searchQuery = ref('')
 const selectedFilter = ref('all')
-const viewMode = ref('grid')
+const viewMode = ref('list') // Default to list view and keep it fixed
 const showEventModal = ref(false)
 const selectedEvent = ref(null)
 
-// Mock data - replace with API calls
+// Temple data
 const templeName = ref('Sri Venkateswara Temple')
 const events = ref([])
 const userRSVPs = ref(new Set())
-
-// Mock events data
-const mockEvents = [
-  {
-    id: 1,
-    title: 'Maha Shivaratri Celebration',
-    description: 'Grand celebration of Lord Shiva with special poojas, abhishekam, and cultural programs throughout the night.',
-    date: '2024-03-08',
-    time: '6:00 PM - 6:00 AM',
-    venue: 'Main Temple Hall',
-    image: '/api/placeholder/400/250',
-    status: 'upcoming',
-    attendees: 150,
-    maxAttendees: 200,
-    sevas: [
-      { id: 1, name: 'Rudrabhishek', amount: 251 },
-      { id: 2, name: 'Maha Aarti', amount: 101 }
-    ]
-  },
-  {
-    id: 2,
-    title: 'Holi Festival',
-    description: 'Colorful celebration of Holi with traditional colors, sweets, and community gathering.',
-    date: '2024-03-25',
-    time: '10:00 AM - 2:00 PM',
-    venue: 'Temple Courtyard',
-    image: '/api/placeholder/400/250',
-    status: 'upcoming',
-    attendees: 80,
-    maxAttendees: 100,
-    sevas: [
-      { id: 3, name: 'Holika Dahan', amount: 151 }
-    ]
-  },
-  {
-    id: 3,
-    title: 'Ram Navami Celebration',
-    description: 'Celebrating the birth of Lord Rama with special kirtans, bhajans, and prasadam distribution.',
-    date: '2024-04-17',
-    time: '9:00 AM - 12:00 PM',
-    venue: 'Main Temple',
-    status: 'upcoming',
-    attendees: 95,
-    maxAttendees: 120
-  },
-  {
-    id: 4,
-    title: 'Diwali Celebration',
-    description: 'Festival of lights celebrated with diyas, rangoli, and special prayers.',
-    date: '2023-11-12',
-    time: '6:00 PM - 10:00 PM',
-    venue: 'Temple Complex',
-    status: 'past',
-    attendees: 200,
-    maxAttendees: 200
-  }
-]
-
-// Initialize user RSVPs (mock data)
-const mockUserRSVPs = new Set([1, 3]) // User has RSVP'd to events 1 and 3
 
 // Computed properties
 const filteredEvents = computed(() => {
@@ -439,6 +281,10 @@ const filteredEvents = computed(() => {
     case 'past':
       filtered = filtered.filter(event => event.status === 'past')
       break
+    case 'all':
+    default:
+      filtered = filtered.filter(e => e.status) // or just return filtered
+      break
   }
 
   return filtered
@@ -463,112 +309,209 @@ const rsvpStats = computed(() => {
 // Methods
 const loadEvents = async () => {
   try {
-    loading.value = true
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    events.value = mockEvents
-    userRSVPs.value = mockUserRSVPs
+    loading.value = true;
+    
+    // Use eventService instead of direct apiClient calls
+    const data = await eventService.getEvents();
+    console.log("🔍 Events Response:", data);
+    
+    const today = new Date();
+
+    // Map API response to our UI model
+    events.value = (Array.isArray(data) ? data : []).map(event => {
+      const eventDate = new Date(event.event_date);
+      let status = 'upcoming';
+      if (!isNaN(eventDate)) {
+        status = eventDate < today ? 'past' : 'upcoming';
+      }
+
+      return {
+        id: event.id,
+        title: event.title,
+        description: event.description,
+        date: event.event_date,
+        time: event.event_time || null,
+        venue: event.location || 'Temple Premises',
+        status,
+        attendees: event.rsvp_count || 0,
+        eventType: event.event_type,
+        maxAttendees: 200 // Default placeholder
+      };
+    });
+    
+    try {
+      // Skip RSVP fetching for now as it's not working correctly
+      // We'll implement this later when we have the correct API structure
+      
+      /* 
+      // This doesn't work:
+      const rsvpResponse = await apiClient.get('/api/v1/event-rsvps/my');
+      console.log("🔍 User RSVPs:", rsvpResponse);
+      
+      if (rsvpResponse && rsvpResponse.data && Array.isArray(rsvpResponse.data)) {
+        userRSVPs.value = new Set(
+          rsvpResponse.data.map(rsvp => rsvp.event_id)
+        );
+      }
+      */
+    } catch (rsvpError) {
+      console.error('Error fetching RSVPs:', rsvpError);
+    }
+
+    console.log('✅ Mapped Events:', events.value);
+    console.log('✅ User RSVPs:', userRSVPs.value);
+
   } catch (error) {
-    showToast('Failed to load events', 'error')
+    console.error('❌ Error fetching events:', error);
+    showToast('Failed to load events', 'error');
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 const handleRSVP = async (eventId, isRSVP) => {
   try {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
     if (isRSVP) {
-      userRSVPs.value.add(eventId)
-      showToast('RSVP confirmed successfully!', 'success')
+      // Try to use eventService if available for RSVP
+      if (typeof eventService.registerForEvent === 'function') {
+        await eventService.registerForEvent(eventId);
+        userRSVPs.value.add(eventId);
+        showToast('RSVP confirmed successfully!', 'success');
+      } else {
+        // Fall back to showing error
+        showToast('RSVP functionality not available', 'error');
+      }
     } else {
-      userRSVPs.value.delete(eventId)
-      showToast('RSVP cancelled successfully!', 'success')
+      // There's no cancel RSVP endpoint in your API, so we'll show an error
+      showToast('RSVP cancellation is not supported yet', 'error');
+      return;
     }
   } catch (error) {
-    showToast('Failed to update RSVP', 'error')
+    console.error('Error updating RSVP:', error);
+    showToast('Failed to update RSVP', 'error');
   }
 }
 
 const openEventModal = (event) => {
-  selectedEvent.value = event
-  showEventModal.value = true
+  selectedEvent.value = event;
+  showEventModal.value = true;
 }
 
 const closeEventModal = () => {
-  showEventModal.value = false
-  selectedEvent.value = null
+  showEventModal.value = false;
+  selectedEvent.value = null;
 }
 
 const getUserRSVP = (eventId) => {
-  return userRSVPs.value.has(eventId)
+  return userRSVPs.value.has(eventId);
 }
 
 const canRSVP = (event) => {
   return event.status === 'upcoming' && 
-         (!event.maxAttendees || event.attendees < event.maxAttendees)
+         (!event.maxAttendees || event.attendees < event.maxAttendees);
 }
 
 const getEventStatus = (event) => {
-  if (event.status === 'past') return 'Completed'
-  if (event.maxAttendees && event.attendees >= event.maxAttendees) return 'Full'
-  return 'Open'
+  if (event.status === 'past') return 'Completed';
+  if (event.maxAttendees && event.attendees >= event.maxAttendees) return 'Full';
+  return 'Open';
 }
 
 const getEventStatusClass = (event) => {
-  const status = getEventStatus(event)
-  const baseClasses = 'px-2 py-1 rounded-lg text-xs font-medium'
+  const status = getEventStatus(event);
+  const baseClasses = 'px-2 py-1 rounded-lg text-xs font-medium';
   
   switch (status) {
     case 'Completed':
-      return `${baseClasses} bg-gray-100 text-gray-800`
+      return `${baseClasses} bg-gray-100 text-gray-800`;
     case 'Full':
-      return `${baseClasses} bg-red-100 text-red-800`
+      return `${baseClasses} bg-red-100 text-red-800`;
     default:
-      return `${baseClasses} bg-green-100 text-green-800`
+      return `${baseClasses} bg-green-100 text-green-800`;
   }
 }
 
 const getRSVPStatusClass = (eventId) => {
-  const baseClasses = 'px-3 py-1 rounded-lg text-sm font-medium'
+  const baseClasses = 'px-3 py-1 rounded-lg text-sm font-medium';
   return getUserRSVP(eventId)
     ? `${baseClasses} bg-green-100 text-green-800`
-    : `${baseClasses} bg-gray-100 text-gray-800`
+    : `${baseClasses} bg-gray-100 text-gray-800`;
 }
 
 const formatDate = (dateString) => {
-  const date = new Date(dateString)
+  if (!dateString) return 'No date available';
+  
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return dateString;
+  
   return date.toLocaleDateString('en-IN', { 
     weekday: 'long', 
     year: 'numeric', 
     month: 'long', 
     day: 'numeric' 
-  })
+  });
+}
+
+const formatTime = (timeString) => {
+  if (!timeString) return 'Time not specified';
+  
+  // Handle ISO-formatted datetime strings
+  if (timeString.includes('T')) {
+    const date = new Date(timeString);
+    if (!isNaN(date.getTime())) {
+      return date.toLocaleTimeString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    }
+  }
+  
+  // Handle time-only strings (HH:MM or HH:MM:SS)
+  if (timeString.includes(':')) {
+    const timeParts = timeString.split(':');
+    if (timeParts.length >= 2) {
+      const hours = parseInt(timeParts[0], 10);
+      const minutes = parseInt(timeParts[1], 10);
+      
+      if (!isNaN(hours) && !isNaN(minutes)) {
+        const date = new Date();
+        date.setHours(hours, minutes, 0);
+        
+        return date.toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        });
+      }
+    }
+  }
+  
+  // Return the original if we can't parse it
+  return timeString;
 }
 
 const getEmptyStateMessage = () => {
   switch (selectedFilter.value) {
     case 'upcoming':
-      return 'No upcoming events found. Check back later for new events.'
+      return 'No upcoming events found. Check back later for new events.';
     case 'attending':
-      return 'You haven\'t RSVP\'d to any events yet. Browse upcoming events to participate.'
+      return 'You haven\'t RSVP\'d to any events yet. Browse upcoming events to participate.';
     case 'past':
-      return 'No past events to display.'
+      return 'No past events to display.';
     default:
-      return 'No events match your search criteria.'
+      return 'No events match your search criteria.';
   }
 }
 
 const resetFilters = () => {
-  searchQuery.value = ''
-  selectedFilter.value = 'all'
+  searchQuery.value = '';
+  selectedFilter.value = 'all';
 }
 
 // Lifecycle
 onMounted(() => {
-  loadEvents()
+  loadEvents();
 })
 </script>
 

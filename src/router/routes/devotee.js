@@ -143,6 +143,17 @@ export default [
       role: 'devotee'     
     }   
   },
+  {
+    path: '/entity/:id/devotee/my-seva-bookings',
+    name: 'DevoteeMySevaBookings',
+    component: () => import('@/views/devotee/MySevaBookings.vue'),
+    beforeEnter: [checkProfileCompleted],
+    meta: {
+      title: 'My Seva Bookings',
+      requiresAuth: true,
+      role: 'devotee'
+    }
+  },
   {     
     path: 'events',     
     name: 'MyEventsNoEntity',     

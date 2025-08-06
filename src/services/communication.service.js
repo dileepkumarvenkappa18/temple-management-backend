@@ -1,493 +1,196 @@
 // src/services/communication.service.js
+import { apiClient } from '@/plugins/axios';
 
-import api from './api.js'
-
-/**
- * Communication Service
- * 
- * Handles all communication-related API operations for the temple management system
- * including bulk messaging, templates, notifications, and message history
- */
-class CommunicationService {
-  
-  // ==================== MESSAGE TEMPLATES ====================
-  
-  /**
-   * Get all message templates for an entity
-   * @param {string} entityId - Temple entity ID
-   * @returns {Promise} Array of message templates
-   */
-  async getTemplates(entityId) {
+const communicationService = {
+  async getTemplates() {
     try {
-      const response = await api.get(`/entities/${entityId}/communication/templates`)
-      return {
-        success: true,
-        data: response.data,
-        message: 'Templates fetched successfully'
-      }
+      const response = await apiClient.communication.getTemplates();
+      return { success: true, data: response.data };
     } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Failed to fetch templates',
-        status: error.response?.status
-      }
+      return this.handleError(error);
     }
-  }
+  },
 
-  /**
-   * Create a new message template
-   * @param {string} entityId - Temple entity ID
-   * @param {Object} templateData - Template information
-   * @returns {Promise} Created template
-   */
-  async createTemplate(entityId, templateData) {
+  async createTemplate(data) {
     try {
-      const response = await api.post(`/entities/${entityId}/communication/templates`, {
-        name: templateData.name,
-        subject: templateData.subject,
-        content: templateData.content,
-        type: templateData.type, // 'sms', 'email', 'whatsapp', 'notification'
-        category: templateData.category, // 'seva', 'donation', 'event', 'general'
-        isActive: templateData.isActive || true,
-        variables: templateData.variables || [] // Available placeholders like {devotee_name}, {seva_name}
-      })
-      
-      return {
-        success: true,
-        data: response.data,
-        message: 'Template created successfully'
-      }
+      const response = await apiClient.communication.createTemplate(data);
+      return { success: true, data: response.data };
     } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Failed to create template',
-        status: error.response?.status
-      }
+      return this.handleError(error);
     }
-  }
+  },
 
-  /**
-   * Update an existing message template
-   * @param {string} entityId - Temple entity ID
-   * @param {string} templateId - Template ID
-   * @param {Object} templateData - Updated template information
-   * @returns {Promise} Updated template
-   */
-  async updateTemplate(entityId, templateId, templateData) {
+  async updateTemplate(templateId, data) {
     try {
-      const response = await api.put(`/entities/${entityId}/communication/templates/${templateId}`, templateData)
-      return {
-        success: true,
-        data: response.data,
-        message: 'Template updated successfully'
-      }
+      const response = await apiClient.communication.updateTemplate(templateId, data);
+      return { success: true, data: response.data };
     } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Failed to update template',
-        status: error.response?.status
-      }
+      return this.handleError(error);
     }
-  }
+  },
 
-  /**
-   * Delete a message template
-   * @param {string} entityId - Temple entity ID
-   * @param {string} templateId - Template ID
-   * @returns {Promise} Deletion confirmation
-   */
-  async deleteTemplate(entityId, templateId) {
+  async deleteTemplate(templateId) {
     try {
-      await api.delete(`/entities/${entityId}/communication/templates/${templateId}`)
-      return {
-        success: true,
-        message: 'Template deleted successfully'
-      }
+      await apiClient.communication.deleteTemplate(templateId);
+      return { success: true, message: 'Deleted successfully' };
     } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Failed to delete template',
-        status: error.response?.status
-      }
+      return this.handleError(error);
     }
-  }
+  },
 
-  // ==================== BULK MESSAGING ====================
-
-  /**
-   * Send bulk message to filtered devotees
-   * @param {string} entityId - Temple entity ID
-   * @param {Object} messageData - Message configuration
-   * @returns {Promise} Message sending result
-   */
-  async sendBulkMessage(entityId, messageData) {
+  async sendBulkMessage(entityId, data) {
     try {
-      const response = await api.post(`/entities/${entityId}/communication/bulk-send`, {
-        type: messageData.type, // 'sms', 'email', 'whatsapp', 'notification'
-        subject: messageData.subject,
-        content: messageData.content,
-        templateId: messageData.templateId,
-        recipients: {
-          type: messageData.recipients.type, // 'all', 'filtered', 'selected'
-          filters: messageData.recipients.filters, // Age, gender, seva preferences, etc.
-          devoteeIds: messageData.recipients.devoteeIds, // Specific devotee IDs
-          excludeIds: messageData.recipients.excludeIds // Devotees to exclude
-        },
-        scheduling: {
-          sendNow: messageData.sendNow || true,
-          scheduledAt: messageData.scheduledAt, // Future date/time
-          timezone: messageData.timezone || 'Asia/Kolkata'
-        },
-        attachments: messageData.attachments || [],
-        trackOpens: messageData.trackOpens || false,
-        trackClicks: messageData.trackClicks || false
-      })
-      
-      return {
-        success: true,
-        data: response.data,
-        message: `Message ${messageData.sendNow ? 'sent' : 'scheduled'} successfully`
-      }
+      const response = await apiClient.communication.sendBulk(entityId, data);
+      return { success: true, data: response.data };
     } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Failed to send message',
-        status: error.response?.status
-      }
+      return this.handleError(error);
     }
-  }
+  },
 
-  /**
-   * Preview bulk message before sending
-   * @param {string} entityId - Temple entity ID
-   * @param {Object} messageData - Message configuration
-   * @returns {Promise} Preview data with recipient count and sample content
-   */
-  async previewBulkMessage(entityId, messageData) {
+  async previewBulkMessage(entityId, data) {
     try {
-      const response = await api.post(`/entities/${entityId}/communication/preview`, {
-        type: messageData.type,
-        content: messageData.content,
-        templateId: messageData.templateId,
-        recipients: messageData.recipients
-      })
-      
-      return {
-        success: true,
-        data: {
-          recipientCount: response.data.recipientCount,
-          sampleRecipients: response.data.sampleRecipients,
-          renderedContent: response.data.renderedContent,
-          estimatedCost: response.data.estimatedCost,
-          deliveryTime: response.data.deliveryTime
-        }
-      }
+      const response = await apiClient.communication.previewBulk(entityId, data);
+      return { success: true, data: response.data };
     } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Failed to preview message',
-        status: error.response?.status
-      }
+      return this.handleError(error);
     }
-  }
+  },
 
-  // ==================== MESSAGE HISTORY & LOGS ====================
-
-  /**
-   * Get message history for an entity
-   * @param {string} entityId - Temple entity ID
-   * @param {Object} params - Query parameters
-   * @returns {Promise} Message history
-   */
-  async getMessageHistory(entityId, params = {}) {
+  async getMessageHistory(entityId, query) {
     try {
-      const queryParams = new URLSearchParams({
-        page: params.page || 1,
-        limit: params.limit || 20,
-        type: params.type || '', // Filter by message type
-        status: params.status || '', // 'sent', 'failed', 'scheduled', 'draft'
-        dateFrom: params.dateFrom || '',
-        dateTo: params.dateTo || '',
-        search: params.search || ''
-      }).toString()
-
-      const response = await api.get(`/entities/${entityId}/communication/history?${queryParams}`)
-      
-      return {
-        success: true,
-        data: response.data.messages,
-        pagination: response.data.pagination,
-        stats: response.data.stats
-      }
+      const response = await apiClient.communication.getHistory(entityId, query);
+      return { success: true, data: response.data };
     } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Failed to fetch message history',
-        status: error.response?.status
-      }
+      return this.handleError(error);
     }
-  }
+  },
 
-  /**
-   * Get detailed message log
-   * @param {string} entityId - Temple entity ID
-   * @param {string} messageId - Message ID
-   * @returns {Promise} Detailed message information
-   */
   async getMessageDetails(entityId, messageId) {
     try {
-      const response = await api.get(`/entities/${entityId}/communication/messages/${messageId}`)
-      
-      return {
-        success: true,
-        data: {
-          message: response.data.message,
-          deliveryStats: response.data.deliveryStats,
-          recipients: response.data.recipients,
-          timeline: response.data.timeline
-        }
-      }
+      const response = await apiClient.communication.getMessageDetails(entityId, messageId);
+      return { success: true, data: response.data };
     } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Failed to fetch message details',
-        status: error.response?.status
-      }
+      return this.handleError(error);
     }
-  }
+  },
 
-  // ==================== RECIPIENT MANAGEMENT ====================
-
-  /**
-   * Get devotee list with filters for messaging
-   * @param {string} entityId - Temple entity ID
-   * @param {Object} filters - Filter criteria
-   * @returns {Promise} Filtered devotee list
-   */
-  async getDevoteesForMessaging(entityId, filters = {}) {
+  async getDevoteesForMessaging(entityId, query) {
     try {
-      const queryParams = new URLSearchParams({
-        search: filters.search || '',
-        ageFrom: filters.ageFrom || '',
-        ageTo: filters.ageTo || '',
-        gender: filters.gender || '',
-        city: filters.city || '',
-        state: filters.state || '',
-        sevaPreferences: filters.sevaPreferences || '',
-        membershipType: filters.membershipType || '',
-        isActive: filters.isActive !== undefined ? filters.isActive : true,
-        hasPhone: filters.hasPhone || false,
-        hasEmail: filters.hasEmail || false,
-        hasWhatsApp: filters.hasWhatsApp || false
-      }).toString()
-
-      const response = await api.get(`/entities/${entityId}/devotees/for-messaging?${queryParams}`)
-      
-      return {
-        success: true,
-        data: response.data.devotees,
-        count: response.data.count,
-        filters: response.data.availableFilters
-      }
+      const response = await apiClient.communication.getDevotees(entityId, query);
+      return { success: true, data: response.data };
     } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Failed to fetch devotees',
-        status: error.response?.status
-      }
+      return this.handleError(error);
     }
+  },
+
+  async sendDirectNotification(payload) {
+  try {
+    const response = await apiClient.communication.sendDirectNotification(payload);
+    return { success: true, data: response.data };
+  } catch (error) {
+    console.error('Error in sendDirectNotification:', error);
+    return { 
+      success: false, 
+      error: error.response?.data?.error || error.response?.data?.message || error.message || 'Server error' 
+    };
   }
+},
 
-  // ==================== NOTIFICATIONS ====================
-
-  /**
-   * Send notification to specific devotees
-   * @param {string} entityId - Temple entity ID
-   * @param {Object} notificationData - Notification details
-   * @returns {Promise} Notification result
-   */
-  async sendNotification(entityId, notificationData) {
-    try {
-      const response = await api.post(`/entities/${entityId}/communication/notifications`, {
-        title: notificationData.title,
-        body: notificationData.body,
-        type: notificationData.type, // 'seva', 'donation', 'event', 'general', 'urgent'
-        priority: notificationData.priority || 'normal', // 'low', 'normal', 'high', 'urgent'
-        recipients: notificationData.recipients,
-        actionUrl: notificationData.actionUrl,
-        imageUrl: notificationData.imageUrl,
-        expireAt: notificationData.expireAt,
-        data: notificationData.data || {} // Additional payload
-      })
-      
-      return {
-        success: true,
-        data: response.data,
-        message: 'Notification sent successfully'
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Failed to send notification',
-        status: error.response?.status
-      }
-    }
-  }
-
-  /**
-   * Get unread notifications for a user
-   * @param {string} entityId - Temple entity ID
-   * @param {string} userId - User ID
-   * @returns {Promise} Unread notifications
-   */
   async getUnreadNotifications(entityId, userId) {
     try {
-      const response = await api.get(`/entities/${entityId}/users/${userId}/notifications/unread`)
-      
-      return {
-        success: true,
-        data: response.data.notifications,
-        count: response.data.count
-      }
+      const response = await apiClient.communication.getUnreadNotifications(entityId, userId);
+      return { success: true, data: response.data };
     } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Failed to fetch notifications',
-        status: error.response?.status
-      }
+      return this.handleError(error);
     }
-  }
+  },
 
-  /**
-   * Mark notification as read
-   * @param {string} entityId - Temple entity ID
-   * @param {string} userId - User ID
-   * @param {string} notificationId - Notification ID
-   * @returns {Promise} Success confirmation
-   */
   async markNotificationAsRead(entityId, userId, notificationId) {
     try {
-      await api.put(`/entities/${entityId}/users/${userId}/notifications/${notificationId}/read`)
-      
-      return {
-        success: true,
-        message: 'Notification marked as read'
-      }
+      await apiClient.communication.markNotificationAsRead(entityId, userId, notificationId);
+      return { success: true, message: 'Marked as read' };
     } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Failed to mark notification as read',
-        status: error.response?.status
-      }
+      return this.handleError(error);
     }
-  }
+  },
 
-  // ==================== COMMUNICATION STATS ====================
-
-  /**
-   * Get communication statistics for dashboard
-   * @param {string} entityId - Temple entity ID
-   * @param {Object} params - Date range and filters
-   * @returns {Promise} Communication statistics
-   */
-  async getCommunicationStats(entityId, params = {}) {
+  async getCommunicationStats(entityId, query) {
     try {
-      const queryParams = new URLSearchParams({
-        dateFrom: params.dateFrom || '',
-        dateTo: params.dateTo || '',
-        type: params.type || ''
-      }).toString()
-
-      const response = await api.get(`/entities/${entityId}/communication/stats?${queryParams}`)
-      
-      return {
-        success: true,
-        data: {
-          totalSent: response.data.totalSent,
-          totalDelivered: response.data.totalDelivered,
-          totalFailed: response.data.totalFailed,
-          openRate: response.data.openRate,
-          clickRate: response.data.clickRate,
-          byType: response.data.byType,
-          byDate: response.data.byDate,
-          topTemplates: response.data.topTemplates
-        }
-      }
+      const response = await apiClient.communication.getStats(entityId, query);
+      return { success: true, data: response.data };
     } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Failed to fetch communication stats',
-        status: error.response?.status
-      }
+      return this.handleError(error);
     }
-  }
+  },
 
-  // ==================== UTILITY METHODS ====================
+  async sendDirectNotification(payload) {
+    try {
+      const response = await apiClient.communication.sendDirectNotification(payload);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Error in sendDirectNotification:', error);
+      return this.handleError(error);
+    }
+  },
 
-  /**
-   * Validate message content and recipients
-   * @param {Object} messageData - Message data to validate
-   * @returns {Object} Validation result
-   */
   validateMessage(messageData) {
-    const errors = []
+    const errors = [];
+    if (!messageData.type) errors.push('Message type is required');
+    if (!messageData.content && !messageData.templateId) errors.push('Content or template required');
+    if (messageData.type === 'email' && !messageData.subject) errors.push('Email subject required');
+    if (!messageData.recipients) errors.push('Recipients required');
+    return { isValid: errors.length === 0, errors };
+  },
 
-    if (!messageData.type) {
-      errors.push('Message type is required')
-    }
-
-    if (!messageData.content && !messageData.templateId) {
-      errors.push('Message content or template is required')
-    }
-
-    if (messageData.type === 'email' && !messageData.subject) {
-      errors.push('Email subject is required')
-    }
-
-    if (!messageData.recipients || 
-        (!messageData.recipients.devoteeIds?.length && 
-         messageData.recipients.type !== 'all' &&
-         !messageData.recipients.filters)) {
-      errors.push('Recipients are required')
-    }
-
-    if (messageData.content && messageData.content.length > 1600 && messageData.type === 'sms') {
-      errors.push('SMS content cannot exceed 1600 characters')
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors
-    }
-  }
-
-  /**
-   * Replace template variables with actual values
-   * @param {string} content - Template content with variables
-   * @param {Object} variables - Variable values
-   * @returns {string} Rendered content
-   */
   renderTemplate(content, variables = {}) {
-    let renderedContent = content
-
-    // Common variables
-    const defaultVariables = {
-      temple_name: variables.templeName || '[Temple Name]',
-      devotee_name: variables.devoteeName || '[Devotee Name]',
+    let output = content;
+    const merged = {
+      temple_name: '[Temple Name]',
+      devotee_name: '[Devotee Name]',
       current_date: new Date().toLocaleDateString('en-IN'),
       current_time: new Date().toLocaleTimeString('en-IN'),
       ...variables
+    };
+    Object.entries(merged).forEach(([key, value]) => {
+      output = output.replace(new RegExp(`\\{${key}\\}`, 'gi'), value);
+    });
+    return output;
+  },
+
+  handleError(error) {
+    console.error('API Error:', error);
+    
+    // Extract error message
+    let errorMessage = 'An unexpected error occurred';
+    
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      if (error.response.data && error.response.data.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.response.data && error.response.data.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response.status === 500) {
+        errorMessage = 'Server error: Could not process your request';
+      } else if (error.response.status === 404) {
+        errorMessage = 'Service not found';
+      } else if (error.response.status === 401) {
+        errorMessage = 'Authentication error';
+      }
+    } else if (error.request) {
+      // The request was made but no response was received
+      errorMessage = 'No response from server. Check your connection.';
+    } else if (error.message) {
+      // Something happened in setting up the request that triggered an Error
+      errorMessage = error.message;
     }
-
-    // Replace variables in format {variable_name}
-    Object.entries(defaultVariables).forEach(([key, value]) => {
-      const regex = new RegExp(`\\{${key}\\}`, 'gi')
-      renderedContent = renderedContent.replace(regex, value)
-    })
-
-    return renderedContent
+    
+    return {
+      success: false,
+      error: errorMessage,
+      status: error.response?.status || 500
+    };
   }
-}
+};
 
-// Export singleton instance
-export default new CommunicationService()
+export default communicationService;

@@ -56,11 +56,18 @@
             placeholder="+91 00000 00000"
           />
           
-          <BaseInput
-            v-model="formData.spouse.dateOfBirth"
-            type="date"
-            label="Date of Birth"
-          />
+          <!-- Fixed: Using computed property for date conversion -->
+          <div>
+            <label class="block text-sm font-semibold text-gray-900 mb-2">
+              Date of Birth
+            </label>
+            <input
+              :value="formatDateForInput(formData.spouse.dateOfBirth)"
+              @input="updateSpouseDOB($event.target.value)"
+              type="date"
+              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors duration-200"
+            />
+          </div>
           
           <div>
             <label class="block text-sm font-semibold text-gray-900 mb-2">
@@ -129,12 +136,19 @@
                 required
               />
               
-              <BaseInput
-                v-model="child.dateOfBirth"
-                type="date"
-                label="Date of Birth"
-                required
-              />
+              <!-- Fixed: Using computed property for date conversion -->
+              <div>
+                <label class="block text-sm font-semibold text-gray-900 mb-2">
+                  Date of Birth *
+                </label>
+                <input
+                  :value="formatDateForInput(child.dateOfBirth)"
+                  @input="updateChildDOB(index, $event.target.value)"
+                  type="date"
+                  required
+                  class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors duration-200"
+                />
+              </div>
               
               <div>
                 <label class="block text-sm font-semibold text-gray-900 mb-2">
@@ -238,40 +252,14 @@
 
       <!-- Action Buttons -->
       <div class="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200">
-        <!-- <button
-          type="button"
-          @click="$emit('previous')"
-          class="flex items-center justify-center px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 font-semibold transition-colors duration-200"
-        >
-          <ChevronLeftIcon class="w-5 h-5 mr-2" />
-          Previous Step
-        </button> -->
-        
-        <!-- <div class="flex gap-4 flex-1">
-          <button
-            type="button"
-            @click="handleSkip"
-            class="flex-1 px-6 py-3 text-indigo-600 font-semibold rounded-xl hover:bg-indigo-50 transition-colors duration-200"
-          >
-            Skip for Now
-          </button>
-          
-          <button
-            type="submit"
-            :disabled="isSubmitting"
-            class="flex-1 bg-indigo-600 text-white px-6 py-3 rounded-xl hover:bg-indigo-700 font-semibold transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            <BaseLoader v-if="isSubmitting" size="sm" color="white" class="mr-2" />
-            Continue
-          </button>
-        </div> -->
+        <!-- Action buttons are commented out in the original code -->
       </div>
     </form>
   </div>
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { 
   ChevronLeftIcon,
   HeartIcon,
@@ -286,22 +274,37 @@ import BaseInput from '../common/BaseInput.vue'
 import BaseSelect from '../common/BaseSelect.vue'
 import BaseLoader from '../common/BaseLoader.vue'
 
-const emit = defineEmits(['next', 'previous', 'skip'])
+// Define props to receive initial data
+const props = defineProps({
+  data: {
+    type: Object,
+    default: () => ({
+      spouse: {
+        name: '',
+        email: '',
+        phone: '',
+        dateOfBirth: '',
+        gotra: '',
+        nakshatra: ''
+      },
+      children: [],
+      emergencyContacts: [],
+      hasSpouse: false
+    })
+  }
+})
+
+// Updated to include 'update' event
+const emit = defineEmits(['next', 'previous', 'skip', 'update', 'updateData'])
 
 const isSubmitting = ref(false)
-const hasSpouse = ref(false)
+const hasSpouse = ref(props.data.hasSpouse || false)
 
+// Initialize formData with props data
 const formData = reactive({
-  spouse: {
-    name: '',
-    email: '',
-    phone: '',
-    dateOfBirth: '',
-    gotra: '',
-    nakshatra: ''
-  },
-  children: [],
-  emergencyContacts: []
+  spouse: { ...props.data.spouse },
+  children: props.data.children ? [...props.data.children] : [],
+  emergencyContacts: props.data.emergencyContacts ? [...props.data.emergencyContacts] : []
 })
 
 const gotraOptions = [
@@ -319,6 +322,63 @@ const genderOptions = [
   { value: 'female', label: 'Female' }
 ]
 
+// Date formatting utilities
+const formatDateForInput = (dateValue) => {
+  if (!dateValue) return ''
+  
+  try {
+    // Handle ISO string format (from backend)
+    if (typeof dateValue === 'string' && dateValue.includes('T')) {
+      const date = new Date(dateValue)
+      if (isNaN(date.getTime())) return ''
+      return date.toISOString().split('T')[0]
+    }
+    
+    // Handle Date object
+    if (dateValue instanceof Date) {
+      if (isNaN(dateValue.getTime())) return ''
+      return dateValue.toISOString().split('T')[0]
+    }
+    
+    // Handle yyyy-mm-dd format (already correct)
+    if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+      return dateValue
+    }
+    
+    return ''
+  } catch (error) {
+    console.warn('Date formatting error:', error)
+    return ''
+  }
+}
+
+const formatDateForBackend = (dateString) => {
+  if (!dateString) return ''
+  
+  try {
+    // Convert yyyy-mm-dd to ISO string
+    const date = new Date(dateString + 'T00:00:00Z')
+    if (isNaN(date.getTime())) return ''
+    return date.toISOString()
+  } catch (error) {
+    console.warn('Date conversion error:', error)
+    return ''
+  }
+}
+
+// Date update handlers
+const updateSpouseDOB = (dateString) => {
+  formData.spouse.dateOfBirth = formatDateForBackend(dateString)
+  emitUpdate()
+}
+
+const updateChildDOB = (index, dateString) => {
+  if (formData.children[index]) {
+    formData.children[index].dateOfBirth = formatDateForBackend(dateString)
+    emitUpdate()
+  }
+}
+
 const addChild = () => {
   formData.children.push({
     name: '',
@@ -327,10 +387,14 @@ const addChild = () => {
     education: '',
     interests: ''
   })
+  // Emit update immediately when adding child
+  emitUpdate()
 }
 
 const removeChild = (index) => {
   formData.children.splice(index, 1)
+  // Emit update immediately when removing child
+  emitUpdate()
 }
 
 const addEmergencyContact = () => {
@@ -340,25 +404,43 @@ const addEmergencyContact = () => {
     phone: '',
     address: ''
   })
+  // Emit update immediately when adding contact
+  emitUpdate()
 }
 
 const removeEmergencyContact = (index) => {
   formData.emergencyContacts.splice(index, 1)
+  // Emit update immediately when removing contact
+  emitUpdate()
 }
 
+// Helper function to emit updates
+const emitUpdate = () => {
+  const familyData = {
+    ...formData,
+    hasSpouse: hasSpouse.value
+  }
+  emit('update', familyData)
+  emit('updateData', familyData)
+}
+
+// Updated handleSubmit to emit both update and next events with frontend format data
 const handleSubmit = async () => {
   isSubmitting.value = true
   
   try {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    const submitData = {
+    // Create the data object with hasSpouse flag
+    const familyData = {
       ...formData,
       hasSpouse: hasSpouse.value
     }
     
-    emit('next', submitData)
+    // Emit update with the frontend format data
+    emit('update', familyData)
+    emit('updateData', familyData)
+    
+    // Also emit next to proceed to the next step
+    emit('next')
   } catch (error) {
     console.error('Error saving family details:', error)
   } finally {
@@ -369,4 +451,30 @@ const handleSubmit = async () => {
 const handleSkip = () => {
   emit('skip')
 }
+
+// Watch for changes in formData and hasSpouse (excluding date fields to avoid conflicts)
+watch([() => formData.spouse.name, () => formData.spouse.email, () => formData.spouse.phone, 
+       () => formData.spouse.gotra, () => formData.spouse.nakshatra, hasSpouse], () => {
+  emitUpdate()
+}, { deep: true })
+
+// Watch for children changes (excluding date fields)
+watch(() => formData.children.map(child => ({
+  name: child.name,
+  gender: child.gender,
+  education: child.education,
+  interests: child.interests
+})), () => {
+  emitUpdate()
+}, { deep: true })
+
+// Watch for emergency contacts changes
+watch(() => formData.emergencyContacts, () => {
+  emitUpdate()
+}, { deep: true })
+
+// Watch for changes in hasSpouse specifically
+watch(hasSpouse, () => {
+  emitUpdate()
+})
 </script>

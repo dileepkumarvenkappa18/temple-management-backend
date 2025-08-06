@@ -61,33 +61,7 @@
 
       <!-- Contact Information -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label for="phone" class="block text-sm font-medium text-gray-700 mb-2">
-            Phone Number
-          </label>
-          <input
-            id="phone"
-            v-model="formData.phone"
-            type="tel"
-            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200"
-            placeholder="+91 XXXXX XXXXX"
-          />
-          <p v-if="errors.phone" class="mt-1 text-sm text-red-600">{{ errors.phone }}</p>
-        </div>
-
-        <div>
-          <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
-            Email Address
-          </label>
-          <input
-            id="email"
-            v-model="formData.email"
-            type="email"
-            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200"
-            placeholder="your.email@example.com"
-          />
-          <p v-if="errors.email" class="mt-1 text-sm text-red-600">{{ errors.email }}</p>
-        </div>
+        <!-- Contact fields commented out in original code -->
       </div>
 
       <!-- Address Section -->
@@ -175,15 +149,7 @@
         </div>
       </div>
 
-      <!-- Form Actions -->
-      <!-- <div class="flex justify-end pt-6 border-t">
-        <button
-          type="submit"
-          class="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors duration-200 font-medium"
-        >
-          Save & Continue
-        </button>
-      </div> -->
+      <!-- Form Actions commented out in original code -->
     </form>
   </div>
 </template>
@@ -212,8 +178,8 @@ const formData = ref({
   fullName: '',
   dateOfBirth: '',
   gender: '',
-  phone: '',
-  email: '',
+  // phone: '',
+  // email: '',
   address: {
     street: '',
     city: '',
@@ -259,13 +225,13 @@ function validateForm() {
     errors.value.gender = 'Gender is required'
   }
   
-  if (formData.value.phone && !/^[+]?[0-9\s-()]{10,15}$/.test(formData.value.phone)) {
-    errors.value.phone = 'Please enter a valid phone number'
-  }
+  // if (formData.value.phone && !/^[+]?[0-9\s-()]{10,15}$/.test(formData.value.phone)) {
+  //   errors.value.phone = 'Please enter a valid phone number'
+  // }
   
-  if (formData.value.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.value.email)) {
-    errors.value.email = 'Please enter a valid email address'
-  }
+  // if (formData.value.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.value.email)) {
+  //   errors.value.email = 'Please enter a valid email address'
+  // }
   
   if (!formData.value.address.street.trim()) {
     errors.value['address.street'] = 'Street address is required'
@@ -286,19 +252,10 @@ function validateForm() {
   return Object.keys(errors.value).length === 0
 }
 
+// THIS IS THE FIXED FUNCTION - Don't transform data before emitting it
 function handleSubmit() {
   if (validateForm()) {
-    // Convert to the format expected by the API
-    const apiData = {
-      date_of_birth: formData.value.dateOfBirth,
-      gender: formData.value.gender,
-      address: formData.value.address.street,
-      city: formData.value.address.city,
-      state: formData.value.address.state,
-      pincode: formData.value.address.pincode
-    }
-    
-    // Update the store with both formats
+    // Emit the original form data without transforming it
     emit('update', formData.value)
     
     // Move to next step
@@ -311,27 +268,32 @@ function handleSubmit() {
 // Load existing data
 onMounted(() => {
   if (props.data) {
+    // Handle both nested format and flat API format
     formData.value = {
-      fullName: props.data.fullName || '',
-      dateOfBirth: props.data.dateOfBirth || '',
+      fullName: props.data.full_name || props.data.fullName || '',
+      dateOfBirth: props.data.dob || props.data.dateOfBirth || '',
       gender: props.data.gender || '',
-      phone: props.data.phone || '',
-      email: props.data.email || '',
+      // phone: props.data.phone || '',
+      // email: props.data.email || '',
       address: {
-        street: props.data.address?.street || '',
-        city: props.data.address?.city || '',
-        state: props.data.address?.state || '',
-        pincode: props.data.address?.pincode || '',
-        country: props.data.address?.country || 'India'
+        street: props.data.street_address || props.data.address?.street || '',
+        city: props.data.city || props.data.address?.city || '',
+        state: props.data.state || props.data.address?.state || '',
+        pincode: props.data.pincode || props.data.address?.pincode || '',
+        country: props.data.country || props.data.address?.country || 'India'
       }
     }
   }
 })
 
 // Watch for validation on input change
+// Add this watch handler
 watch(formData, () => {
   if (Object.keys(errors.value).length > 0) {
     validateForm()
   }
+  
+  // Update parent component with data changes
+  emit('update', formData.value)
 }, { deep: true })
 </script>

@@ -106,6 +106,7 @@
               <PersonalDetailsForm 
                 :data="stepData.personal" 
                 @update="updateStepData('personal', $event)"
+                @next="nextStep"
               />
             </div>
 
@@ -113,7 +114,8 @@
             <div v-else-if="currentStep === 1">
               <SpiritualInfoForm 
                 :data="stepData.spiritual" 
-                @update="updateStepData('spiritual', $event)"
+                @update-data="updateStepData('spiritual', $event)"
+                @next="nextStep"
               />
             </div>
 
@@ -122,6 +124,7 @@
               <FamilyLineageForm 
                 :data="stepData.lineage" 
                 @update="updateStepData('lineage', $event)"
+                @next="nextStep"
               />
             </div>
 
@@ -130,6 +133,7 @@
               <SevaPreferencesForm 
                 :data="stepData.preferences" 
                 @update="updateStepData('preferences', $event)"
+                @next="nextStep"
               />
             </div>
 
@@ -138,6 +142,7 @@
               <FamilyMembersForm 
                 :data="stepData.family" 
                 @update="updateStepData('family', $event)"
+                @next="nextStep"
               />
             </div>
 
@@ -146,6 +151,7 @@
               <NotesAttachmentsForm 
                 :data="stepData.notes" 
                 @update="updateStepData('notes', $event)"
+                @submit="completeProfile"
               />
             </div>
           </div>
@@ -356,7 +362,24 @@ const completeProfile = async () => {
   isSubmitting.value = true
   
   try {
+    // Build the complete profile object from all steps
+    const completeProfileData = {
+      personal: stepData.value.personal || {},
+      spiritual: stepData.value.spiritual || {},
+      lineage: stepData.value.lineage || {},
+      preferences: stepData.value.preferences || {},
+      family: stepData.value.family || {},
+      notes: stepData.value.notes || {}
+    }
+    
+    // Save all steps data to the store
+    Object.entries(completeProfileData).forEach(([key, value]) => {
+      devoteeStore.updateProfileStep(key, value)
+    })
+    
+    // Call the store method to save everything to backend
     const result = await devoteeStore.completeProfile()
+    
     if (result) {
       toast.success('Profile completed successfully!')
       router.push('/devotee/dashboard')

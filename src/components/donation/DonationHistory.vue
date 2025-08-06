@@ -123,17 +123,19 @@
               <div class="text-xs text-gray-500">{{ formatTime(donation.date) }}</div>
             </td>
             <td class="px-6 py-4">
-              <div class="flex items-center">
-                <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center mr-3">
-                  <i class="fas fa-user text-indigo-600"></i>
-                </div>
-                <div>
-                  <div class="text-sm font-medium text-gray-900">{{ donation.donor.name }}</div>
-                  <div class="text-xs text-gray-500">{{ donation.donor.phone }}</div>
-                  <div class="text-xs text-indigo-600">ID: {{ donation.transactionId }}</div>
-                </div>
-              </div>
-            </td>
+  <div class="flex items-center">
+    <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center mr-3">
+      <i class="fas fa-user text-indigo-600"></i>
+    </div>
+    <div>
+      <div class="text-sm font-medium text-gray-900">{{ donation.donorName }}</div>
+      <div class="text-xs text-gray-500">{{ donation.donorEmail }}</div>
+      <div class="text-xs text-gray-500">{{ donation.donor.phone }}</div>
+      <div class="text-xs text-indigo-600">ID: {{ donation.transactionId }}</div>
+    </div>
+  </div>
+</td>
+
             <td class="px-6 py-4 whitespace-nowrap">
               <div class="text-lg font-bold text-green-600">₹{{ formatAmount(donation.amount) }}</div>
               <div v-if="donation.taxDeduction" class="text-xs text-indigo-600">
@@ -227,6 +229,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import donationService from '@/services/donation.service'
 
 // Props
 const props = defineProps({
@@ -413,70 +416,23 @@ const exportToExcel = () => {
 const loadDonations = async () => {
   try {
     loading.value = true
-    // Mock data - replace with actual API call
-    const mockDonations = [
-      {
-        id: 'DON001',
-        transactionId: 'TXN20241216001',
-        date: '2024-06-16T10:30:00Z',
-        donor: {
-          name: 'Rajesh Kumar',
-          phone: '+91-9876543210',
-          email: 'rajesh@example.com'
-        },
-        amount: 5100,
-        purpose: {
-          title: 'Ganesha Pooja',
-          type: 'seva'
-        },
-        paymentMethod: 'UPI',
-        paymentId: 'UPI2024061601',
-        status: 'completed',
-        taxDeduction: true,
-        notes: 'For family welfare'
-      },
-      {
-        id: 'DON002',
-        transactionId: 'TXN20241216002',
-        date: '2024-06-15T14:20:00Z',
-        donor: {
-          name: 'Priya Sharma',
-          phone: '+91-9876543211',
-          email: 'priya@example.com'
-        },
-        amount: 2500,
-        purpose: {
-          title: 'General Donation',
-          type: 'general'
-        },
-        paymentMethod: 'Card',
-        paymentId: 'CARD2024061501',
-        status: 'completed',
-        taxDeduction: true
-      },
-      {
-        id: 'DON003',
-        transactionId: 'TXN20241216003',
-        date: '2024-06-14T09:15:00Z',
-        donor: {
-          name: 'Amit Patel',
-          phone: '+91-9876543212',
-          email: 'amit@example.com'
-        },
-        amount: 10000,
-        purpose: {
-          title: 'Diwali Celebration',
-          type: 'festival'
-        },
-        paymentMethod: 'Net Banking',
-        paymentId: 'NB2024061401',
-        status: 'pending',
-        taxDeduction: true,
-        notes: 'Corporate donation'
-      }
-    ]
-    
-    donations.value = mockDonations
+
+    const params = {
+      entity_id: props.entityId,   // 👈 assuming entityId is passed in
+      page: 1,
+      limit: 100
+    }
+
+    const response = await donationService.getDonations(params)
+
+    // Check structure
+    console.log('Fetched donations:', response)
+
+    if (response?.data) {
+      donations.value = response.data
+    } else {
+      donations.value = []
+    }
   } catch (error) {
     console.error('Error loading donations:', error)
   } finally {

@@ -109,38 +109,7 @@
         </div>
       </div>
 
-      <!-- Preferred Frequency -->
-      <div>
-        <label class="block text-sm font-semibold text-gray-900 mb-4">
-          How often would you like to participate in temple activities?
-        </label>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div 
-            v-for="frequency in frequencies" 
-            :key="frequency.value"
-            class="relative"
-          >
-            <input
-              :id="`frequency-${frequency.value}`"
-              v-model="formData.preferredFrequency"
-              :value="frequency.value"
-              type="radio"
-              class="sr-only peer"
-            />
-            <label
-              :for="`frequency-${frequency.value}`"
-              class="block p-4 border-2 border-gray-200 rounded-xl cursor-pointer transition-all duration-200 hover:border-indigo-300 peer-checked:border-indigo-600 peer-checked:bg-indigo-50 text-center"
-            >
-              <div class="font-semibold text-gray-900 text-sm mb-1">
-                {{ frequency.label }}
-              </div>
-              <div class="text-xs text-gray-600">
-                {{ frequency.description }}
-              </div>
-            </label>
-          </div>
-        </div>
-      </div>
+      <!-- Preferred Frequency section is commented out in original code -->
 
       <!-- Special Interests -->
       <div>
@@ -156,34 +125,10 @@
         ></textarea>
       </div>
 
-      <!-- Action Buttons -->
+      <!-- Action Buttons section is mostly commented out in original code -->
       <div class="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200">
-        <!-- <button
-          type="button"
-          @click="$emit('previous')"
-          class="flex items-center justify-center px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 font-semibold transition-colors duration-200"
-        >
-          <ChevronLeftIcon class="w-5 h-5 mr-2" />
-          Previous Step
-        </button> -->
-        
         <div class="flex gap-4 flex-1">
-          <!-- <button
-            type="button"
-            @click="handleSkip"
-            class="flex-1 px-6 py-3 text-indigo-600 font-semibold rounded-xl hover:bg-indigo-50 transition-colors duration-200"
-          >
-            Skip for Now
-          </button> -->
-          
-          <!-- <button
-            type="submit"
-            :disabled="isSubmitting"
-            class="flex-1 bg-indigo-600 text-white px-6 py-3 rounded-xl hover:bg-indigo-700 font-semibold transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            <BaseLoader v-if="isSubmitting" size="sm" color="white" class="mr-2" />
-            Continue
-          </button> -->
+          <!-- Buttons are commented out in original code -->
         </div>
       </div>
     </form>
@@ -192,6 +137,8 @@
 
 <script setup>
 import { reactive, ref } from 'vue'
+import { watch, onMounted } from 'vue';
+
 import { ChevronLeftIcon } from '@heroicons/vue/24/outline'
 import { 
   HandRaisedIcon, 
@@ -205,7 +152,14 @@ import {
 } from '@heroicons/vue/24/outline'
 import BaseLoader from '../common/BaseLoader.vue'
 
-const emit = defineEmits(['next', 'previous', 'skip'])
+// Updated emit to include 'update' event
+const emit = defineEmits(['next', 'previous', 'skip', 'update'])
+const props = defineProps({
+  data: {
+    type: Object,
+    default: () => ({})
+  }
+})
 
 const isSubmitting = ref(false)
 
@@ -323,14 +277,16 @@ const frequencies = [
   }
 ]
 
+// FIXED: Updated handleSubmit to emit original formData structure
 const handleSubmit = async () => {
   isSubmitting.value = true
   
   try {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    // Emit the frontend data structure directly without transforming
+    emit('update', formData)
     
-    emit('next', formData)
+    // Move to next step
+    emit('next')
   } catch (error) {
     console.error('Error saving seva preferences:', error)
   } finally {
@@ -341,4 +297,20 @@ const handleSubmit = async () => {
 const handleSkip = () => {
   emit('skip')
 }
+
+// Add watch handler
+watch(formData, () => {
+  // Update parent component with data changes
+  emit('update', formData)
+}, { deep: true })
+
+// In onMounted, initialize with existing data
+onMounted(() => {
+  if (props.data) {
+    formData.favoriteSevas = props.data.favoriteSevas || []
+    formData.donationInterests = props.data.donationInterests || []
+    formData.preferredFrequency = props.data.preferredFrequency || ''
+    formData.specialInterests = props.data.specialInterests || ''
+  }
+})
 </script>

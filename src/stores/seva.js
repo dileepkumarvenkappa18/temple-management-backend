@@ -1,3 +1,4 @@
+// src/stores/seva.js
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { sevaService } from '@/services/seva.service'
@@ -15,6 +16,10 @@ export const useSevaStore = defineStore('seva', () => {
     dateRange: 'all'
   })
   const selectedSeva = ref(null)
+  
+  // New state for recent sevas
+  const recentSevas = ref([])
+  const loadingRecentSevas = ref(false)
   
   // Computed properties
   const filteredSevas = computed(() => {
@@ -50,19 +55,29 @@ export const useSevaStore = defineStore('seva', () => {
   }))
   
   // Actions - Connect to backend API
-  const fetchSevas = async (entityId) => {
+  const fetchSevas = async (params = {}) => {
     loading.value = true
     error.value = null
     
     try {
-      console.log('Fetching sevas for entity ID:', entityId)
-      // Call API using the updated service
-      const response = await sevaService.getSevas(entityId)
-      sevas.value = response.data || []
-      return sevas.value
+      // Only pass filtering parameters
+      const response = await sevaService.getSevas({
+        page: params.page || 1,
+        limit: params.limit || 10,
+        seva_type: params.seva_type || '',
+        search: params.search || ''
+      })
+      
+      if (response.success) {
+        sevas.value = response.data || []
+        return sevas.value
+      } else {
+        error.value = response.error
+        return []
+      }
     } catch (err) {
       console.error('Error fetching sevas:', err)
-      error.value = err.response?.data?.error || 'Failed to fetch sevas'
+      error.value = err.message || 'Failed to fetch sevas'
       return []
     } finally {
       loading.value = false
@@ -83,6 +98,31 @@ export const useSevaStore = defineStore('seva', () => {
       return []
     } finally {
       loading.value = false
+    }
+  }
+  
+  // Fetch recent sevas for the devotee dashboard
+  const fetchRecentSevas = async () => {
+    loadingRecentSevas.value = true
+    try {
+      const response = await sevaService.getMyBookings()
+      if (response.success) {
+        // Sort by booking time, newest first
+        const sorted = [...response.data].sort((a, b) => {
+          const dateA = new Date(a.booking_time || a.created_at || Date.now())
+          const dateB = new Date(b.booking_time || b.created_at || Date.now())
+          return dateB - dateA
+        })
+        
+        recentSevas.value = sorted
+      } else {
+        recentSevas.value = []
+      }
+    } catch (error) {
+      console.error('Failed to fetch recent sevas:', error)
+      recentSevas.value = []
+    } finally {
+      loadingRecentSevas.value = false
     }
   }
   
@@ -240,6 +280,8 @@ export const useSevaStore = defineStore('seva', () => {
     searchQuery,
     filters,
     selectedSeva,
+    recentSevas,
+    loadingRecentSevas,
     
     // Getters
     filteredSevas,
@@ -248,6 +290,7 @@ export const useSevaStore = defineStore('seva', () => {
     // Actions
     fetchSevas,
     fetchEntityBookings,
+    fetchRecentSevas,
     createSeva,
     updateSeva,
     deleteSeva,

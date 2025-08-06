@@ -168,7 +168,7 @@
                 <option value="">Select Category</option>
                 <option value="seva">Seva Notifications</option>
                 <option value="event">Event Announcements</option>
-                <!-- <option value="donation">Donation Receipts</option> -->
+                <option value="donation">Donation Receipts</option>
                 <option value="general">General Messages</option>
                 <option value="festival">Festival Greetings</option>
               </select>
@@ -281,7 +281,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-
+import communicationService from '@/services/communication.service'
+import { useAuthStore } from '@/stores/auth' // If using Pinia
+import { useRouter } from 'vue-router'
 // Reactive data
 const templates = ref([])
 const searchQuery = ref('')
@@ -289,6 +291,9 @@ const selectedCategory = ref('')
 const showCreateModal = ref(false)
 const editingTemplate = ref(null)
 const previewingTemplate = ref(null)
+const authStore = useAuthStore()
+const entityId = authStore.user?.entityId
+const router = useRouter()
 
 // Form data
 const templateForm = ref({
@@ -312,13 +317,16 @@ const availableVariables = ref([
 
 // Computed properties
 const filteredTemplates = computed(() => {
-  let filtered = templates.value
+  let filtered = templates.value || []
 
   if (searchQuery.value) {
-    filtered = filtered.filter(template =>
-      template.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      template.content.toLowerCase().includes(searchQuery.value.toLowerCase())
-    )
+    const query = searchQuery.value.toLowerCase()
+
+    filtered = filtered.filter(template => {
+      const name = template.name?.toLowerCase() || ''
+      const content = template.content?.toLowerCase() || ''
+      return name.includes(query) || content.includes(query)
+    })
   }
 
   if (selectedCategory.value) {
@@ -327,6 +335,7 @@ const filteredTemplates = computed(() => {
 
   return filtered
 })
+
 
 // Methods
 const getCategoryBadgeClass = (category) => {
@@ -358,18 +367,26 @@ const deleteTemplate = (templateId) => {
 }
 
 const previewTemplate = (template) => {
-  previewingTemplate.value = template
+  previewingTemplate.value = {
+    ...template,
+    content: template.content || template.body // 👈 fallback for correct rendering
+  }
 }
 
+
 const useTemplate = (template) => {
-  // Emit event to parent component or navigate to message composer
-  console.log('Using template:', template)
-  // Close any open modals
+  // Navigate with template ID or subject/content in query
+  router.push({
+    name: 'MessageComposer',
+    query: {
+      subject: template.subject,
+      content: template.content || template.body
+    }
+  })
   previewingTemplate.value = null
   showCreateModal.value = false
   editingTemplate.value = null
 }
-
 const insertVariable = (variable) => {
   const textarea = document.querySelector('textarea')
   if (textarea) {
@@ -380,30 +397,35 @@ const insertVariable = (variable) => {
   }
 }
 
-const saveTemplate = () => {
-  if (editingTemplate.value) {
-    // Update existing template
-    const index = templates.value.findIndex(t => t.id === editingTemplate.value.id)
-    if (index !== -1) {
-      templates.value[index] = {
-        ...templates.value[index],
-        ...templateForm.value,
-        updatedAt: new Date().toISOString()
-      }
-    }
-  } else {
-    // Create new template
-    const newTemplate = {
-      id: Date.now(),
-      ...templateForm.value,
-      usageCount: 0,
-      lastUsed: null,
-      createdAt: new Date().toISOString()
-    }
-    templates.value.push(newTemplate)
+const saveTemplate = async () => {
+  const payload = {
+    name: templateForm.value.name,
+    subject: templateForm.value.subject,
+    body: templateForm.value.content,
+    category: templateForm.value.category,
+    userId: authStore.user?.id,
+    entityId: authStore.user?.entity_id
   }
 
-  closeModal()
+  try {
+    let result
+    if (editingTemplate.value) {
+      // ⚠️ Update API not yet connected — optional future step
+      console.warn('Edit functionality is not wired to backend yet')
+    } else {
+      result = await communicationService.createTemplate(payload)
+    }
+
+    if (result?.success) {
+      templates.value.push(result.data)
+      closeModal()
+    } else {
+      alert(result?.error || 'Something went wrong while saving the template.')
+    }
+  } catch (err) {
+    console.error('Error saving template:', err)
+    alert('Unexpected error occurred.')
+  }
 }
 
 const closeModal = () => {
@@ -418,39 +440,14 @@ const closeModal = () => {
 }
 
 // Load templates on mount
-onMounted(() => {
-  // Mock data - replace with API call
-  templates.value = [
-    {
-      id: 1,
-      name: 'Seva Booking Confirmation',
-      category: 'seva',
-      subject: 'Your Seva Booking is Confirmed - {seva_name}',
-      content: 'Dear {devotee_name},\n\nYour booking for {seva_name} at {temple_name} has been confirmed for {date} at {time}.\n\nPlease arrive 15 minutes early.\n\nHare Krishna!',
-      usageCount: 45,
-      lastUsed: '2024-01-15T10:30:00Z',
-      createdAt: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: 2,
-      name: 'Festival Announcement',
-      category: 'festival',
-      subject: 'Upcoming Festival - {event_name}',
-      content: 'Dear Devotees,\n\nWe are pleased to announce {event_name} on {date} at {temple_name}.\n\nJoin us for this auspicious celebration!\n\nHare Krishna!',
-      usageCount: 23,
-      lastUsed: '2024-01-10T14:20:00Z',
-      createdAt: '2024-01-05T00:00:00Z'
-    },
-    {
-      id: 3,
-      name: 'Donation Receipt',
-      category: 'donation',
-      subject: 'Donation Receipt - {receipt_number}',
-      content: 'Dear {devotee_name},\n\nThank you for your generous donation of ₹{amount} to {temple_name}.\n\nReceipt Number: {receipt_number}\nDate: {date}\n\nMay Lord Krishna bless you!\n\nHare Krishna!',
-      usageCount: 67,
-      lastUsed: '2024-01-12T09:15:00Z',
-      createdAt: '2023-12-15T00:00:00Z'
-    }
-  ]
+onMounted(async () => {
+  const result = await communicationService.getTemplates()
+
+  if (result.success) {
+    templates.value = result.data
+  } else {
+    console.error("Failed to load templates:", result.error)
+  }
 })
+
 </script>

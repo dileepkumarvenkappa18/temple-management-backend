@@ -3,13 +3,14 @@ import { apiClient } from '@/plugins/axios';
 
 const eventService = {
   async getEvents() {
-    try {
-      const response = await apiClient.event.getAll();
-      return response.data;
-    } catch (error) {
-      throw this.handleError(error);
-    }
-  },
+  try {
+    const response = await apiClient.event.getAll();
+    console.log("🔍 Full Response:", response); // Confirmed from your logs
+    return response.data || []; // ✅ FIXED: return directly
+  } catch (error) {
+    throw this.handleError(error);
+  }
+},
 
   async getUpcomingEvents() {
     try {
@@ -51,13 +52,15 @@ const eventService = {
           const apiData = {
             title: parsedData.title,
             description: parsedData.description || '',
-            event_type: parsedData.type || parsedData.eventType || 'other',
+            // FIX: Don't default to 'other' - use event_type directly
+            event_type: parsedData.event_type || parsedData.type || parsedData.eventType,
             event_date: dateStr,
             event_time: timeStr,
             location: parsedData.location || 'Temple Premises',
             is_active: parsedData.isActive !== undefined ? parsedData.isActive : true
           };
 
+          console.log('Creating event with data:', apiData); // Debug log
           const response = await apiClient.event.create(apiData);
           return response.data;
         }
@@ -65,13 +68,15 @@ const eventService = {
         const apiData = {
           title: eventData.title,
           description: eventData.description || '',
-          event_type: eventData.type || eventData.eventType || 'other',
+          // FIX: Don't default to 'other' - use event_type directly
+          event_type: eventData.event_type || eventData.type || eventData.eventType,
           event_date: eventData.event_date || eventData.date,
           event_time: eventData.event_time || eventData.time,
           location: eventData.location || 'Temple Premises',
           is_active: eventData.isActive !== undefined ? eventData.isActive : true
         };
 
+        console.log('Creating event with data:', apiData); // Debug log
         const response = await apiClient.event.create(apiData);
         return response.data;
       }
@@ -81,41 +86,43 @@ const eventService = {
   },
 
   async updateEvent(id, eventData) {
-  try {
-    const apiData = {
-      title: eventData.title,
-      description: eventData.description || '',
-      event_type: eventData.type || eventData.eventType || 'other',
-      event_date: eventData.event_date || eventData.date,
-      event_time: eventData.event_time || eventData.time,
-      location: eventData.location || 'Temple Premises',
-      is_active: eventData.isActive !== undefined ? eventData.isActive : true
-    };
+    try {
+      const apiData = {
+        title: eventData.title,
+        description: eventData.description || '',
+        // FIX: Don't default to 'other' - use event_type directly
+        event_type: eventData.event_type || eventData.type || eventData.eventType,
+        event_date: eventData.event_date || eventData.date,
+        event_time: eventData.event_time || eventData.time,
+        location: eventData.location || 'Temple Premises',
+        is_active: eventData.isActive !== undefined ? eventData.isActive : true
+      };
 
-    const response = await apiClient.event.update(id, apiData);
+      console.log('Updating event with data:', apiData); // Debug log
+      const response = await apiClient.event.update(id, apiData);
 
-    return {
-      ...response.data,
-      message: 'Event updated successfully',
-      wasUpdate: true,
-      id
-    };
-  } catch (error) {
-    throw this.handleError(error);
-  }
-},
+      return {
+        ...response.data,
+        message: 'Event updated successfully',
+        wasUpdate: true,
+        id
+      };
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  },
 
-async deleteEvent(id) {
-  try {
-    const response = await apiClient.event.delete(id);
-    return {
-      message: 'Event deleted successfully',
-      id
-    };
-  } catch (error) {
-    throw this.handleError(error);
-  }
-},
+  async deleteEvent(id) {
+    try {
+      const response = await apiClient.event.delete(id);
+      return {
+        message: 'Event deleted successfully',
+        id
+      };
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  },
 
   async registerForEvent(eventId) {
     try {

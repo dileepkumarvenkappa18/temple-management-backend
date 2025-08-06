@@ -16,6 +16,11 @@
             <div class="bg-indigo-50 text-indigo-800 px-3 py-1 rounded-full text-sm font-medium">
               System Administrator
             </div>
+            <!-- Loading indicator for stats -->
+            <div v-if="isLoadingStats" class="flex items-center text-sm text-gray-500">
+              <div class="animate-spin rounded-full h-4 w-4 border-2 border-indigo-600 border-t-transparent mr-2"></div>
+              Loading stats...
+            </div>
           </div>
         </div>
       </div>
@@ -44,6 +49,34 @@
           </svg>
           Temple Approvals
         </button>
+
+        <!-- Debug button for API testing -->
+        <button
+          v-if="debugMode"
+          @click="testTempleCountsApi"
+          class="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors duration-200"
+        >
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+          </svg>
+          Test Counts API
+        </button>
+
+        <button
+          @click="debugMode = !debugMode"
+          class="inline-flex items-center px-4 py-2 bg-gray-200 text-gray-800 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors duration-200"
+        >
+          {{ debugMode ? 'Hide Debug' : 'Debug Mode' }}
+        </button>
+      </div>
+
+      <!-- Debug Info -->
+      <div v-if="debugMode" class="bg-gray-100 p-4 rounded-lg mb-6 text-xs font-mono">
+        <div class="mb-2 font-bold">Debug Information:</div>
+        <div>Temple Counts API Status: {{ templeCountsApiStatus }}</div>
+        <div>Last Updated: {{ lastStatsUpdate || 'Never' }}</div>
+        <div>Stats: {{ JSON.stringify(summaryStats, null, 2) }}</div>
+        <button @click="refreshData" class="mt-2 px-3 py-1 bg-blue-200 rounded text-xs">Force Refresh Stats</button>
       </div>
 
       <!-- Summary Cards -->
@@ -243,7 +276,7 @@
       </div>
 
       <!-- Recent Activity -->
-      <div class="bg-white rounded-xl shadow-md border border-gray-100">
+      <!-- <div class="bg-white rounded-xl shadow-md border border-gray-100">
         <div class="px-6 py-4 border-b border-gray-200">
           <h2 class="text-xl font-bold text-gray-900" style="font-family: 'Roboto', sans-serif;">
             Recent Activity
@@ -273,7 +306,7 @@
             </div>
           </div>
         </div>
-      </div>
+      </div> -->
     </div>
 
     <!-- Modals -->
@@ -400,6 +433,30 @@
         </div>
       </div>
     </div>
+
+    <!-- Debug Modal for API Testing -->
+    <div v-if="showDebugModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[80vh] overflow-auto">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h3 class="text-lg font-bold text-gray-900">Temple Counts API Debug</h3>
+          <button @click="showDebugModal = false" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="p-6">
+          <div class="bg-gray-100 p-4 rounded font-mono text-xs overflow-auto whitespace-pre">
+            {{ debugInfo }}
+          </div>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-200 flex justify-end">
+          <button @click="showDebugModal = false" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -415,13 +472,21 @@ const toast = useToast()
 const isLoading = ref(false)
 const isLoadingActivities = ref(false)
 const isProcessing = ref(false)
+const isLoadingStats = ref(false) // NEW: Loading state for stats
 const filterStatus = ref('all')
 const showDetailsModal = ref(false)
 const showRejectModal = ref(false)
 const selectedApplication = ref(null)
 const rejectionNotes = ref('')
 
-// API data
+// NEW: Debug mode and API status tracking
+const debugMode = ref(false)
+const showDebugModal = ref(false)
+const debugInfo = ref('')
+const templeCountsApiStatus = ref('Not tested')
+const lastStatsUpdate = ref(null)
+
+// API data - UPDATED to use actual API counts
 const summaryStats = ref({
   pendingApprovals: 0,
   activeTemples: 0,
@@ -441,15 +506,7 @@ const filteredApplications = computed(() => {
   return templeApplications.value.filter(app => app.status.toLowerCase() === filterStatus.value.toLowerCase())
 })
 
-// Mock data for development
-const MOCK_DASHBOARD_STATS = {
-  pendingApprovals: 5,
-  activeTemples: 32,
-  totalUsers: 178,
-  rejectedTemples: 3,
-  newThisWeek: 4
-}
-
+// Mock data for development (keeping for temple applications since that endpoint might not exist yet)
 const MOCK_TEMPLE_APPLICATIONS = [
   {
     id: '1',
@@ -551,37 +608,142 @@ const showComingSoonToast = () => {
   toast.info('Temple Approvals feature is coming soon');
 }
 
-// Methods
+// NEW: Load dashboard stats using the temple counts API
 const loadDashboardStats = async () => {
   try {
-    // Try to get data from API
-    // eslint-disable-next-line no-unused-vars
-    const response = await superAdminService.getSystemStats().catch(err => null)
-
-    if (response && response.data) {
-      // Map API response to our stats object
+    isLoadingStats.value = true
+    templeCountsApiStatus.value = 'Loading...'
+    
+    console.log('Loading temple approval counts from API...')
+    
+    // Use the new temple counts endpoint
+    const response = await superAdminService.getTempleApprovalCounts()
+    console.log('Temple counts response:', response)
+    
+    if (response && response.success && response.data) {
+      // Map API response to our stats object with proper field mapping
       summaryStats.value = {
-        pendingApprovals: response.data.pendingTemples || 0,
+        pendingApprovals: response.data.pendingApprovals || 0,
         activeTemples: response.data.activeTemples || 0,
         totalUsers: response.data.totalUsers || 0,
         rejectedTemples: response.data.rejectedTemples || 0,
-        newThisWeek: response.data.newTemplesThisWeek || 0
+        newThisWeek: response.data.newThisWeek || 0 // May not be in API response
       }
+      
+      templeCountsApiStatus.value = 'Success'
+      lastStatsUpdate.value = new Date().toLocaleString()
+      
+      console.log('Successfully loaded temple counts:', summaryStats.value)
+      toast.success('Dashboard stats updated from API')
     } else {
-      // If API fails, use mock data in development mode
-      console.log('DEVELOPMENT: Using mock dashboard stats')
-      summaryStats.value = { ...MOCK_DASHBOARD_STATS }
+      console.warn('Invalid response from temple counts API:', response)
+      templeCountsApiStatus.value = 'Invalid response format'
+      
+      // Keep existing values or set to mock data
+      if (summaryStats.value.pendingApprovals === 0) {
+        console.log('Setting fallback mock data for dashboard stats')
+        summaryStats.value = {
+          pendingApprovals: 5,
+          activeTemples: 32,
+          totalUsers: 178,
+          rejectedTemples: 3,
+          newThisWeek: 4
+        }
+      }
+      
+      toast.warning('Using fallback data for dashboard stats')
     }
   } catch (error) {
-    console.error('Failed to load stats:', error)
-
+    console.error('Failed to load temple counts:', error)
+    templeCountsApiStatus.value = `Error: ${error.message}`
+    
     // In development, use mock data instead of showing error
     if (import.meta.env.DEV) {
       console.log('DEVELOPMENT: Using mock dashboard stats')
-      summaryStats.value = { ...MOCK_DASHBOARD_STATS }
+      summaryStats.value = {
+        pendingApprovals: 5,
+        activeTemples: 32,
+        totalUsers: 178,
+        rejectedTemples: 3,
+        newThisWeek: 4
+      }
+      toast.info('Using mock dashboard data (development mode)')
     } else {
       toast.error('Failed to load dashboard statistics')
     }
+  } finally {
+    isLoadingStats.value = false
+  }
+}
+
+// NEW: Test temple counts API for debugging
+const testTempleCountsApi = async () => {
+  debugInfo.value = 'Testing temple counts API...\n'
+  showDebugModal.value = true
+  
+  try {
+    const info = []
+    info.push('==== TEMPLE COUNTS API TEST ====\n')
+    
+    // Test direct API call
+    info.push('Testing direct API call to /api/v1/superadmin/temple-approval-count...')
+    try {
+      const response = await fetch('/api/v1/superadmin/temple-approval-count', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      })
+      
+      if (!response.ok) {
+        info.push(`Direct API Error: ${response.status} ${response.statusText}`)
+        const errorText = await response.text()
+        info.push(`Error details: ${errorText}`)
+      } else {
+        const data = await response.json()
+        info.push(`Direct API Response Status: ${response.status}`)
+        info.push(`Direct API Response Data: ${JSON.stringify(data, null, 2)}`)
+      }
+    } catch (error) {
+      info.push(`Direct API Error: ${error.message}`)
+    }
+    
+    // Test service method
+    info.push('\n==== SERVICE METHOD TEST ====\n')
+    try {
+      const serviceResponse = await superAdminService.getTempleApprovalCounts()
+      info.push(`Service Response: ${JSON.stringify(serviceResponse, null, 2)}`)
+      
+      if (serviceResponse.success) {
+        info.push('\nSUCCESS: Service method worked!')
+        
+        // Update stats with the response
+        if (serviceResponse.data) {
+          summaryStats.value = {
+            pendingApprovals: serviceResponse.data.pendingApprovals || 0,
+            activeTemples: serviceResponse.data.activeTemples || 0,
+            totalUsers: serviceResponse.data.totalUsers || 0,
+            rejectedTemples: serviceResponse.data.rejectedTemples || 0,
+            newThisWeek: serviceResponse.data.newThisWeek || 0
+          }
+          info.push(`Updated dashboard stats: ${JSON.stringify(summaryStats.value, null, 2)}`)
+          lastStatsUpdate.value = new Date().toLocaleString()
+          toast.success('Stats updated from API test!')
+        }
+      } else {
+        info.push('Service method returned failure')
+      }
+    } catch (error) {
+      info.push(`Service Error: ${error.message}`)
+    }
+    
+    info.push('\n==== CURRENT STATS ====\n')
+    info.push(`Current summaryStats: ${JSON.stringify(summaryStats.value, null, 2)}`)
+    info.push(`Last update: ${lastStatsUpdate.value || 'Never'}`)
+    info.push(`API Status: ${templeCountsApiStatus.value}`)
+    
+    debugInfo.value = info.join('\n')
+  } catch (error) {
+    debugInfo.value += `\nError running test: ${error.message}`
   }
 }
 
@@ -692,11 +854,12 @@ const loadRecentActivities = async () => {
   }
 }
 
+// UPDATED: Refresh stats using the new temple counts API
 const refreshData = async () => {
   try {
     isLoading.value = true
     await Promise.all([
-      loadDashboardStats(),
+      loadDashboardStats(), // Now uses temple counts API
       loadPendingEntities(),
       loadRecentActivities()
     ])
@@ -749,9 +912,8 @@ const approveApplication = async (application) => {
       templeApplications.value[index].approvedAt = new Date().toISOString()
     }
 
-    // Update stats
-    summaryStats.value.pendingApprovals = Math.max(0, summaryStats.value.pendingApprovals - 1)
-    summaryStats.value.activeTemples++
+    // Update stats and refresh from API
+    await loadDashboardStats()
 
     // Add to recent activities
     const newActivity = {
@@ -822,9 +984,8 @@ const confirmReject = async () => {
       templeApplications.value[index].notes = rejectionNotes.value
     }
 
-    // Update stats
-    summaryStats.value.pendingApprovals = Math.max(0, summaryStats.value.pendingApprovals - 1)
-    summaryStats.value.rejectedTemples++
+    // Update stats and refresh from API
+    await loadDashboardStats()
 
     // Add to recent activities
     const newActivity = {
@@ -898,9 +1059,16 @@ const formatDate = (dateString) => {
   }
 }
 
-// Lifecycle
+// Lifecycle - UPDATED to load stats first
 onMounted(async () => {
-  // Load initial data
-  await refreshData()
+  // Load dashboard stats first (most important)
+  await loadDashboardStats()
+  
+  // Then load other data
+  await Promise.all([
+    loadPendingEntities(),
+    loadRecentActivities()
+  ])
 })
 </script>
+

@@ -381,7 +381,7 @@ const loadEntityData = async () => {
       console.log('Found temple in store:', storedTemple)
       temple.value = storedTemple
     } else {
-      // Fetch temple details from API - FIXED: Using direct API call with the correct path
+      // Fetch temple details from API
       console.log('Temple not in store, fetching from API')
       try {
         const response = await api.get(`/v1/entities/${entityId.value}`)
@@ -395,19 +395,45 @@ const loadEntityData = async () => {
       }
     }
     
-    // Fetch dashboard data - FIXED: Using API with the correct path
-    try {
-      const response = await api.get(`/v1/entities/${entityId.value}/dashboard`)
-      
-      if (response && response.data) {
-        dashboardData.value = response.data
+    // Inside loadEntityData function in EntityDashboard.vue
+// Fixed dashboard data fetching code:
+
+// Fetch dashboard data from the new API endpoint
+try {
+  // Remove the /api prefix from the URL since it's likely already configured in Axios
+  // or is being handled by the proxy configuration
+  const dashboardResponse = await api.get(`/v1/entities/dashboard-summary?entity_id=${entityId.value}`)
+  
+  if (dashboardResponse && dashboardResponse.data) {
+    // Map the backend response to the structure expected by the frontend
+    dashboardData.value = {
+      devotees: {
+        total: dashboardResponse.data.registered_devotees.total || 0,
+        newThisMonth: dashboardResponse.data.registered_devotees.this_month || 0
+      },
+      sevas: {
+        today: dashboardResponse.data.seva_bookings.today || 0,
+        thisMonth: dashboardResponse.data.seva_bookings.this_month || 0
+      },
+      donations: {
+        thisMonth: dashboardResponse.data.month_donations.amount || 0,
+        growth: dashboardResponse.data.month_donations.percent_change || 0
+      },
+      events: {
+        upcoming: dashboardResponse.data.upcoming_events.total || 0,
+        thisWeek: dashboardResponse.data.upcoming_events.this_week || 0
       }
-    } catch (err) {
-      console.error('Failed to fetch dashboard data:', err)
-      // Use default values if API fails
     }
     
-    // Fetch upcoming events - FIXED: Using API with the correct path
+    console.log('Dashboard data loaded successfully:', dashboardData.value)
+  }
+} catch (err) {
+  console.error('Failed to fetch dashboard data:', err)
+  toast.error('Failed to load dashboard statistics')
+  // Keep the default values if API fails
+}
+    
+    // Fetch upcoming events
     try {
       const eventsResponse = await api.get(`/v1/events/upcoming?entity_id=${entityId.value}&limit=3`)
       
@@ -422,7 +448,7 @@ const loadEntityData = async () => {
       upcomingEvents.value = []
     }
     
-    // Fetch top donors - FIXED: Using API with the correct path
+    // Fetch top donors
     try {
       const donorsResponse = await api.get(`/v1/donations/top?entity_id=${entityId.value}&limit=5`)
       
@@ -434,7 +460,7 @@ const loadEntityData = async () => {
       topDonors.value = []
     }
     
-    // Fetch notifications - FIXED: Using API with the correct path
+    // Fetch notifications
     try {
       const notificationsResponse = await api.get(`/v1/notifications?entity_id=${entityId.value}&limit=5`)
       

@@ -2,6 +2,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { checkProfileCompleted, requireAuth } from './guards'
 import superadminRoutes from './routes/superadmin'
+import MessageComposer from '@/components/communication/MessageComposer.vue'
 
 // Layouts
 import PublicLayout from '@/layouts/PublicLayout.vue'
@@ -336,6 +337,18 @@ const routes = [
           breadcrumb: 'Communication'
         }
       },
+
+      {
+        path: 'message',
+        name: 'MessageComposer',
+        component: MessageComposer,
+        props: true,
+        meta: {
+          title: 'Compose Message',
+          breadcrumb: 'Message Composer'
+        }
+      },
+
       {
         path: 'volunteers',
         name: 'VolunteerManagement',
@@ -463,6 +476,17 @@ const routes = [
         meta: { 
           title: 'Temple Events',
           breadcrumb: 'My Events'
+        }
+      },
+      // Add the new route for My Seva Bookings
+      {
+        path: 'my-seva-bookings',
+        name: 'DevoteeMySevaBookings',
+        component: () => import('@/views/devotee/MySevaBookings.vue'),
+        props: true,
+        meta: { 
+          title: 'My Seva Bookings',
+          breadcrumb: 'My Seva Bookings'
         }
       }
     ]

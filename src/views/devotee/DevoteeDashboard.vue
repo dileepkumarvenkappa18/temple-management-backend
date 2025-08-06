@@ -21,8 +21,8 @@
             <h3 class="text-sm font-medium text-amber-800">Complete Your Profile</h3>
             <p class="text-sm text-amber-700 mt-1">
               Your profile is {{ profileCompletionPercentage }}% complete. 
-              <router-link 
-                :to="`/entity/${route.params.id}/devotee/profile/edit`" 
+                <router-link 
+                :to="`/entity/${route.params.id}/devotee/profile/create`" 
                 class="font-medium text-amber-800 hover:text-amber-900 underline"
               >
                 Complete now
@@ -64,36 +64,30 @@
 
     <!-- Dashboard Content -->
     <div v-else>
-      <!-- Dashboard Stats -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <DashboardWidget 
-          title="Profile Completion"
-          :value="`${profileCompletionPercentage}%`"
-          icon="user-circle"
-          :color="profileCompletionPercentage === 100 ? 'green' : 'amber'"
-        />
-        <DashboardWidget 
-          title="Seva Bookings"
-          :value="stats.totalSevaBookings || mySevaBookings.length || 0"
-          icon="calendar"
-          color="indigo"
-          :subtitle="`${stats.upcomingSevas || mySevaBookings.length || 0} upcoming`"
-        />
-        <DashboardWidget 
-          title="Total Events"
-          :value="activityStats.totalEvents || stats.eventsAttended || 0"
-          icon="calendar-days"
-          color="emerald"
-          :subtitle="`${activityStats.upcomingEvents || stats.upcomingEvents || 0} upcoming`"
-        />
-        <DashboardWidget 
-          title="Temple Profile"
-          :value="currentTemple ? 'Active' : 'Select Temple'"
-          icon="building-library"
-          color="rose"
-          :subtitle="currentTemple ? currentTemple.name : 'Join a temple'"
-        />
-      </div>
+  <!-- Dashboard Stats -->
+  <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-6 mb-8">
+    <DashboardWidget 
+      title="Seva Bookings"
+      :value="stats.totalSevaBookings || mySevaBookings.length || 0"
+      icon="calendar"
+      color="indigo"
+      :subtitle="`${stats.upcomingSevas || mySevaBookings.length || 0} upcoming`"
+    />
+    <DashboardWidget 
+      title="Total Events"
+      :value="activityStats.totalEvents || stats.eventsAttended || 0"
+      icon="calendar-days"
+      color="emerald"
+      :subtitle="`${activityStats.upcomingEvents || stats.upcomingEvents || 0} upcoming`"
+    />
+    <DashboardWidget 
+      title="Temple Profile"
+      :value="currentTemple ? 'Active' : 'Select Temple'"
+      icon="building-library"
+      color="rose"
+      :subtitle="currentTemple ? currentTemple.name : 'Join a temple'"
+    />
+  </div>
 
       <!-- Main Content Grid -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -160,21 +154,58 @@
             </div>
           </BaseCard>
 
-          <!-- Upcoming Sevas -->
+          <!-- My Seva Bookings -->
           <BaseCard class="p-6">
             <div class="flex items-center justify-between mb-4">
               <h3 class="text-lg font-semibold text-gray-900">My Seva Bookings</h3>
               <router-link 
-                :to="`/entity/${route.params.id}/devotee/seva-booking`"
+                :to="`/entity/${route.params.id}/devotee/my-seva-bookings`"
                 class="text-sm font-medium text-indigo-600 hover:text-indigo-700"
               >
-                Book Seva
+                View All
               </router-link>
             </div>
             
-            <div v-if="mySevaBookings && mySevaBookings.length > 0" class="space-y-3">
+            <div v-if="loadingRecentSevas" class="text-center py-8">
+              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+              <span class="mt-2 text-sm text-gray-500 block">Loading seva bookings...</span>
+            </div>
+            
+            <div v-else-if="recentSevaBookings && recentSevaBookings.length > 0" class="space-y-3">
               <div 
-                v-for="booking in mySevaBookings" 
+                v-for="booking in recentSevaBookings.slice(0, 3)" 
+                :key="getId(booking)"
+                class="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+              >
+                <div class="flex items-center space-x-4">
+                  <div class="flex-shrink-0">
+                    <div class="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                      <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                      </svg>
+                    </div>
+                  </div>
+                  <div>
+                    <p class="text-sm font-medium text-gray-900">{{ getSevaName(booking) }}</p>
+                    <p class="text-xs text-gray-500">
+                      {{ formatBookingDate(booking) }}
+                    </p>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <span 
+                    :class="getStatusClass(getStatus(booking))" 
+                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                  >
+                    {{ (getStatus(booking)).charAt(0).toUpperCase() + (getStatus(booking)).slice(1) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div v-else-if="mySevaBookings && mySevaBookings.length > 0" class="space-y-3">
+              <div 
+                v-for="booking in mySevaBookings.slice(0, 3)" 
                 :key="booking.id"
                 class="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
               >
@@ -187,7 +218,7 @@
                     </div>
                   </div>
                   <div>
-                    <p class="text-sm font-medium text-gray-900">{{ booking.seva?.name || 'Unknown Seva' }}</p>
+                    <p class="text-sm font-medium text-gray-900">{{ booking.seva?.name || booking.name }}</p>
                     <p class="text-xs text-gray-500">
                       {{ formatDate(booking.booking_date) }} at {{ formatTime(booking.booking_time) }}
                     </p>
@@ -199,33 +230,6 @@
                     class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
                   >
                     {{ booking.status || 'Pending' }}
-                  </span>
-                </div>
-              </div>
-            </div>
-            
-            <div v-else-if="upcomingSevas && upcomingSevas.length > 0" class="space-y-3">
-              <div 
-                v-for="seva in upcomingSevas" 
-                :key="seva.id"
-                class="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-              >
-                <div class="flex items-center space-x-4">
-                  <div class="flex-shrink-0">
-                    <div class="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                      <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                      </svg>
-                    </div>
-                  </div>
-                  <div>
-                    <p class="text-sm font-medium text-gray-900">{{ seva.name }}</p>
-                    <p class="text-xs text-gray-500">{{ formatDate(seva.date) }} at {{ seva.time || '10:00 AM' }}</p>
-                  </div>
-                </div>
-                <div class="text-right">
-                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    {{ seva.status || 'Confirmed' }}
                   </span>
                 </div>
               </div>
@@ -396,7 +400,7 @@
               </router-link>
               
               <router-link 
-                :to="`/entity/${route.params.id}/devotee/profile/edit`"
+                :to="`/entity/${route.params.id}/devotee/profile/create`"
                 class="inline-flex items-center justify-center w-full px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               >
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -453,6 +457,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useDevoteeStore } from '@/stores/devotee'
 import { useTempleStore } from '@/stores/temple'
+import { useSevaStore } from '@/stores/seva'
 import { useTempleActivities } from '@/composables/useTempleActivities'
 import WelcomeBanner from '@/components/dashboard/WelcomeBanner.vue'
 import DashboardWidget from '@/components/dashboard/DashboardWidget.vue'
@@ -476,6 +481,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const devoteeStore = useDevoteeStore()
 const templeStore = useTempleStore()
+const sevaStore = useSevaStore()
 const { 
   loading: activitiesLoading, 
   error: activitiesError, 
@@ -526,6 +532,85 @@ const notifications = computed(() => {
   return devoteeStore.notifications?.slice(0, 5) || []
 })
 
+// For seva store
+const recentSevaBookings = computed(() => {
+  return sevaStore.recentSevas
+})
+
+const loadingRecentSevas = computed(() => sevaStore.loadingRecentSevas)
+
+// Helper functions to handle database field names
+const getId = (booking) => booking?.ID || booking?.id || 0
+const getSevaId = (booking) => booking?.SevaID || booking?.seva_id || 0
+const getStatus = (booking) => booking?.Status || booking?.status || 'pending'
+const getBookingTime = (booking) => booking?.BookingTime || booking?.booking_time || null
+
+// Helper function to get Seva name from a booking
+const getSevaName = (booking) => {
+  if (!booking) return 'Unknown Seva'
+  
+  // Check for direct seva_name property first (both cases)
+  if (booking.SevaName || booking.seva_name) {
+    return booking.SevaName || booking.seva_name
+  }
+  
+  // Check for seva catalog data in sevaStore
+  const sevaId = getSevaId(booking)
+  if (sevaStore.sevaCatalog && Array.isArray(sevaStore.sevaCatalog)) {
+    const catalogItem = sevaStore.sevaCatalog.find(item => item.id === sevaId)
+    if (catalogItem && catalogItem.name) {
+      return catalogItem.name
+    }
+  }
+  
+  // Check for seva in seva list
+  if (sevaStore.sevaList && Array.isArray(sevaStore.sevaList)) {
+    const seva = sevaStore.sevaList.find(s => s.id === sevaId)
+    if (seva && seva.name) {
+      return seva.name
+    }
+  }
+  
+  // Try to lookup in global catalog or seva entries
+  if (sevaStore.getSevaNameById && typeof sevaStore.getSevaNameById === 'function') {
+    const name = sevaStore.getSevaNameById(sevaId)
+    if (name) return name
+  }
+  
+  // Return generic name with ID as a last resort
+  return `Seva ${sevaId}`
+}
+
+// Format the booking date
+const formatBookingDate = (booking) => {
+  const dateTime = getBookingTime(booking)
+  if (!dateTime) return ''
+  
+  try {
+    const date = new Date(dateTime)
+    return date.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    })
+  } catch (error) {
+    console.error('Error formatting booking date:', error)
+    return ''
+  }
+}
+
+// Status styles
+const getStatusClass = (status) => {
+  const classes = {
+    pending: 'bg-yellow-100 text-yellow-800',
+    approved: 'bg-green-100 text-green-800',
+    rejected: 'bg-red-100 text-red-800',
+    completed: 'bg-blue-100 text-blue-800',
+    cancelled: 'bg-red-100 text-red-800'
+  }
+  return classes[status.toLowerCase()] || 'bg-gray-100 text-gray-800'
+}
+
 // Methods
 const formatDate = (date) => {
   if (!date) return 'N/A'
@@ -568,20 +653,6 @@ const formatEventDate = (date) => {
   } catch (error) {
     return '?'
   }
-}
-
-const getStatusClass = (status) => {
-  const statusMap = {
-    pending: 'bg-yellow-100 text-yellow-800',
-    approved: 'bg-green-100 text-green-800',
-    completed: 'bg-blue-100 text-blue-800',
-    cancelled: 'bg-red-100 text-red-800',
-    confirmed: 'bg-green-100 text-green-800'
-  }
-  
-  // Handle case insensitive
-  const normalizedStatus = (status || '').toLowerCase()
-  return statusMap[normalizedStatus] || 'bg-gray-100 text-gray-800'
 }
 
 const getDonationStatusClass = (status) => {
@@ -680,9 +751,35 @@ const loadDashboardData = async () => {
             }
           })
     )
+    
+    // Load recent sevas
+    promises.push(
+      sevaStore.fetchRecentSevas()
+        .catch(err => {
+          console.error('Error loading recent sevas:', err)
+        })
+    )
+    
+    // Load seva catalog to get actual seva names
+    if (sevaStore.fetchSevaCatalog) {
+      promises.push(
+        sevaStore.fetchSevaCatalog()
+          .then(() => {
+            console.log('Seva catalog loaded:', sevaStore.sevaCatalog)
+          })
+          .catch(err => {
+            console.error('Error loading seva catalog:', err)
+          })
+      )
+    }
 
     // Wait for all promises to resolve
     await Promise.all(promises)
+    
+    // Debug the loaded data
+    console.log('Recent sevas:', sevaStore.recentSevas)
+    console.log('Seva catalog:', sevaStore.sevaCatalog)
+    
   } catch (err) {
     console.error('Error loading dashboard data:', err)
     error.value = err.message || 'Failed to load dashboard data'

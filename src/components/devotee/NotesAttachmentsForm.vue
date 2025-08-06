@@ -15,7 +15,7 @@
 
     <form @submit.prevent="handleSubmit" class="space-y-8">
       <!-- Photo Upload Section -->
-      <div class="space-y-4">
+      <!-- <div class="space-y-4">
         <div class="flex items-center space-x-2">
           <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -23,9 +23,8 @@
           <h4 class="text-lg font-medium text-gray-900">Profile Photos</h4>
         </div>
         
-        <!-- Photo Upload Grid -->
+        
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <!-- Profile Photo -->
           <div class="space-y-3">
             <label class="block text-sm font-medium text-gray-700">Profile Photo</label>
             <div class="relative">
@@ -41,7 +40,7 @@
                 <p class="text-xs text-gray-500">PNG, JPG up to 5MB</p>
               </div>
               
-              <!-- Preview -->
+              
               <div v-else class="relative">
                 <img :src="formData.profilePhoto" alt="Profile" class="w-full h-40 object-cover rounded-lg">
                 <button type="button" 
@@ -56,7 +55,7 @@
             <input ref="profileFileInput" type="file" class="hidden" accept="image/*" @change="handleFileSelect($event, 'profile')">
           </div>
 
-          <!-- Family Photo -->
+          
           <div class="space-y-3">
             <label class="block text-sm font-medium text-gray-700">Family Photo</label>
             <div class="relative">
@@ -86,7 +85,7 @@
             <input ref="familyFileInput" type="file" class="hidden" accept="image/*" @change="handleFileSelect($event, 'family')">
           </div>
         </div>
-      </div>
+      </div> -->
 
       <!-- Health Information -->
       <div class="space-y-4">
@@ -169,7 +168,7 @@
       </div>
 
       <!-- Document Attachments -->
-      <div class="space-y-4">
+      <!-- <div class="space-y-4">
         <div class="flex items-center space-x-2">
           <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
@@ -193,7 +192,7 @@
             <p class="text-xs text-gray-500 mt-2">PDF, JPG, PNG up to 10MB each</p>
           </div>
           
-          <!-- Document List -->
+          
           <div v-if="formData.documents.length > 0" class="mt-4 space-y-2">
             <div v-for="(doc, index) in formData.documents" :key="index" 
                  class="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
@@ -214,10 +213,10 @@
           </div>
         </div>
         <input ref="documentsFileInput" type="file" class="hidden" multiple accept=".pdf,.jpg,.jpeg,.png" @change="handleDocumentSelect">
-      </div>
+      </div> -->
 
       <!-- Privacy Preferences -->
-      <div class="space-y-4">
+      <!-- <div class="space-y-4">
         <div class="flex items-center space-x-2">
           <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -262,7 +261,7 @@
             </button>
           </div>
         </div>
-      </div>
+      </div> -->
 
       <!-- Action Buttons -->
       <div class="flex flex-col sm:flex-row justify-between items-center pt-6 border-t border-gray-200 space-y-4 sm:space-y-0">
@@ -304,37 +303,46 @@
 <script setup>
 import { ref, reactive } from 'vue'
 import { useToast } from '@/composables/useToast'
+import { watch, onMounted } from 'vue';
 
-const emit = defineEmits(['previous', 'skip', 'submit'])
+
+const emit = defineEmits(['previous', 'skip', 'submit', 'update', 'update-data'])
+
 const { showToast } = useToast()
 
 const isSubmitting = ref(false)
 const profileFileInput = ref(null)
 const familyFileInput = ref(null)
 const documentsFileInput = ref(null)
+const props = defineProps({
+  data: {
+    type: Object,
+    default: () => ({})
+  }
+})
 
 const formData = reactive({
-  profilePhoto: null,
-  familyPhoto: null,
+  // profilePhoto: null,
+  // familyPhoto: null,
   allergies: '',
   dietaryRestrictions: '',
   sankalpa: '',
   additionalNotes: '',
-  documents: [],
+  // documents: [],
   shareProfile: true,
   receiveNotifications: true
 })
 
 // File handling methods
-const triggerFileInput = (type) => {
-  if (type === 'profile') {
-    profileFileInput.value.click()
-  } else if (type === 'family') {
-    familyFileInput.value.click()
-  } else if (type === 'documents') {
-    documentsFileInput.value.click()
-  }
-}
+// const triggerFileInput = (type) => {
+//   if (type === 'profile') {
+//     profileFileInput.value.click()
+//   } else if (type === 'family') {
+//     familyFileInput.value.click()
+//   } else if (type === 'documents') {
+//     documentsFileInput.value.click()
+//   }
+// }
 
 const handleFileSelect = (event, type) => {
   const file = event.target.files[0]
@@ -364,41 +372,41 @@ const handleFileDrop = (event, type) => {
   }
 }
 
-const removePhoto = (type) => {
-  if (type === 'profile') {
-    formData.profilePhoto = null
-    profileFileInput.value.value = ''
-  } else if (type === 'family') {
-    formData.familyPhoto = null
-    familyFileInput.value.value = ''
-  }
-}
+// const removePhoto = (type) => {
+//   if (type === 'profile') {
+//     formData.profilePhoto = null
+//     profileFileInput.value.value = ''
+//   } else if (type === 'family') {
+//     formData.familyPhoto = null
+//     familyFileInput.value.value = ''
+//   }
+// }
 
-const handleDocumentSelect = (event) => {
-  const files = Array.from(event.target.files)
+// const handleDocumentSelect = (event) => {
+//   const files = Array.from(event.target.files)
   
-  files.forEach(file => {
-    if (file.size > 10 * 1024 * 1024) {
-      showToast(`${file.name} exceeds 10MB limit`, 'error')
-      return
-    }
+//   files.forEach(file => {
+//     if (file.size > 10 * 1024 * 1024) {
+//       showToast(`${file.name} exceeds 10MB limit`, 'error')
+//       return
+//     }
     
-    formData.documents.push({
-      name: file.name,
-      size: file.size,
-      file: file
-    })
-  })
+//     formData.documents.push({
+//       name: file.name,
+//       size: file.size,
+//       file: file
+//     })
+//   })
   
-  if (files.length > 0) {
-    showToast(`${files.length} document(s) added successfully`, 'success')
-  }
-}
+//   if (files.length > 0) {
+//     showToast(`${files.length} document(s) added successfully`, 'success')
+//   }
+// }
 
-const removeDocument = (index) => {
-  formData.documents.splice(index, 1)
-  showToast('Document removed', 'success')
-}
+// const removeDocument = (index) => {
+//   formData.documents.splice(index, 1)
+//   showToast('Document removed', 'success')
+// }
 
 const handleSubmit = async () => {
   try {
@@ -416,4 +424,22 @@ const handleSubmit = async () => {
     isSubmitting.value = false
   }
 }
+
+// Add watch handler
+watch(formData, () => {
+  // Update parent component with data changes
+  emit('update', formData)
+}, { deep: true })
+
+// In onMounted, initialize with existing data
+onMounted(() => {
+  if (props.data) {
+    formData.healthNotes = props.data.healthNotes || ''
+    formData.allergies = props.data.allergies || ''
+    formData.dietaryRestrictions = props.data.dietaryRestrictions || ''
+    formData.sankalpa = props.data.sankalpa || ''
+    formData.additionalNotes = props.data.additionalNotes || ''
+    // Don't copy over files/photos as they need special handling
+  }
+})
 </script>

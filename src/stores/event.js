@@ -253,38 +253,74 @@ const deleteEvent = async (id) => {
 const normalizeEvent = (event) => {
   if (!event) return null
 
-  let rawDate = event.event_date || event.eventDate || ''
-  let rawTime = event.event_time || event.eventTime || ''
+  // FIX 1: Debug logging to understand what we're receiving
+  // console.log('Raw event data:', JSON.stringify(event, null, 2))
 
-  let fullDateTimeString = ''
+  // FIX 2: Better type handling - ensure we extract the correct event_type
+  let eventType = '';
+  if (event.event_type) {
+    eventType = event.event_type.toLowerCase();
+  } else if (event.eventType) {
+    eventType = event.eventType.toLowerCase();
+  } else if (event.type) {
+    eventType = event.type.toLowerCase();
+  } else {
+    eventType = 'other'; // Default if nothing is found
+  }
+
+  let rawDate = event.event_date || event.eventDate || '';
+  let rawTime = '';
+  
+  // FIX 3: Better time handling - prioritize event_time field
+  if (event.event_time) {
+    if (typeof event.event_time === 'string') {
+      rawTime = event.event_time;
+    } else {
+      // It could be a date object or something else
+      try {
+        const timeObj = new Date(event.event_time);
+        if (!isNaN(timeObj.getTime())) {
+          const hours = String(timeObj.getHours()).padStart(2, '0');
+          const minutes = String(timeObj.getMinutes()).padStart(2, '0');
+          rawTime = `${hours}:${minutes}`;
+        }
+      } catch (e) {
+        console.warn('Invalid event_time value:', event.event_time);
+      }
+    }
+  } else if (event.eventTime) {
+    rawTime = event.eventTime;
+  }
+
+  let fullDateTimeString = '';
 
   // Safely build ISO datetime
   if (typeof rawDate === 'string' && rawDate.includes('T')) {
-    fullDateTimeString = rawDate
-  } else if (rawDate && rawTime && rawTime.match(/^\d{2}:\d{2}/)) {
-    fullDateTimeString = `${rawDate}T${rawTime}`
+    fullDateTimeString = rawDate;
+  } else if (rawDate && rawTime && /^\d{2}:\d{2}/.test(rawTime)) {
+    fullDateTimeString = `${rawDate}T${rawTime}`;
   } else if (rawDate) {
-    fullDateTimeString = `${rawDate}T00:00`
+    fullDateTimeString = `${rawDate}T00:00`;
   } else {
-    console.warn('Missing event_date for event:', event)
-    fullDateTimeString = new Date().toISOString()
+    console.warn('Missing event_date for event:', event);
+    fullDateTimeString = new Date().toISOString();
   }
 
-  let isoDateString = ''
+  let isoDateString = '';
   try {
-    const date = new Date(fullDateTimeString)
-    if (isNaN(date.getTime())) throw new Error('Invalid Date')
-    isoDateString = date.toISOString()
+    const date = new Date(fullDateTimeString);
+    if (isNaN(date.getTime())) throw new Error('Invalid Date');
+    isoDateString = date.toISOString();
   } catch (err) {
-    console.warn('Invalid date-time during normalizeEvent:', fullDateTimeString, err)
-    isoDateString = new Date().toISOString() // Fallback to now
+    console.warn('Invalid date-time during normalizeEvent:', fullDateTimeString, err);
+    isoDateString = new Date().toISOString(); // Fallback to now
   }
 
   return {
     id: event.id,
     title: event.title,
     description: event.description,
-    type: event.event_type || event.eventType || event.type,
+    type: eventType,
     eventDate: isoDateString,
     location: event.location,
     isActive: event.is_active !== false,
@@ -295,7 +331,6 @@ const normalizeEvent = (event) => {
     status: getEventStatus(isoDateString)
   }
 }
-
 
   
   const normalizeEvents = (eventsData) => {

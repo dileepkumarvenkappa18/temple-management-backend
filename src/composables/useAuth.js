@@ -297,19 +297,28 @@ export function useAuth() {
         throw new Error('Only devotees and volunteers can join temples')
       }
       
-      // Update user's current entity
-      const updatedUser = { ...user.value, current_entity: response.data.temple }
+      // Update user's current entity with the entity_id from the response
+      const entityId = response.data.entity_id || templeId
+      const updatedUser = { 
+        ...user.value, 
+        current_entity: { 
+          id: entityId,
+          ...response.data.temple 
+        }
+      }
+      
       user.value = updatedUser
       localStorage.setItem('user_data', JSON.stringify(updatedUser))
       
-      showToast(`Successfully joined ${response.data.temple.name}!`, 'success')
+      showToast(`Successfully joined ${response.data.temple?.name || 'temple'}!`, 'success')
       
-      // Get dashboard path
+      // Get dashboard path with proper entity ID
       const dashboardPath = getDashboardPath()
       
       return { 
         success: true, 
         temple: response.data.temple,
+        entityId: entityId,
         redirectPath: dashboardPath
       }
     } catch (error) {

@@ -178,6 +178,29 @@ const dashboardAPI = {
   getEntityNotifications: (entityId, limit = 5) => api.get(`/v1/notifications?entity_id=${entityId}&limit=${limit}`)
 }
 
+// Notification endpoints
+const communicationAPI = {
+  getTemplates: () => api.get(`/v1/notifications/templates`),
+  createTemplate: (data) => api.post(`/v1/notifications/templates`, data),
+  updateTemplate: (id, data) => api.put(`/v1/notifications/templates/${id}`, data),
+  deleteTemplate: (id) => api.delete(`/v1/notifications/templates/${id}`),
+
+  sendBulk: (entityId, data) => api.post(`/v1/entities/${entityId}/communication/bulk-send`, data),
+  previewBulk: (entityId, data) => api.post(`/entities/${entityId}/communication/preview`, data),
+  getHistory: (entityId, query) => api.get(`/entities/${entityId}/communication/history?${query}`),
+  getMessageDetails: (entityId, messageId) => api.get(`/entities/${entityId}/communication/messages/${messageId}`),
+
+  getDevotees: (entityId, query) => api.get(`/entities/${entityId}/devotees/for-messaging?${query}`),
+
+  sendNotification: (entityId, data) => api.post(`/entities/${entityId}/communication/notifications`, data),
+  getUnreadNotifications: (entityId, userId) => api.get(`/entities/${entityId}/users/${userId}/notifications/unread`),
+  markNotificationAsRead: (entityId, userId, notificationId) => api.put(`/entities/${entityId}/users/${userId}/notifications/${notificationId}/read`),
+
+  getStats: (entityId, query) => api.get(`/entities/${entityId}/communication/stats?${query}`),
+
+  sendDirectNotification: (payload) => api.post(`/v1/notifications/send`, payload)
+};
+
 // Export structured API client
 export const apiClient = {
   auth: authAPI,
@@ -185,7 +208,8 @@ export const apiClient = {
   user: userAPI,
   admin: adminAPI,
   event: eventAPI,
-  dashboard: dashboardAPI
+  dashboard: dashboardAPI,
+  communication: communicationAPI 
 }
 
 // Default export for backward compatibility

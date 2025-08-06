@@ -114,7 +114,7 @@
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-for="booking in filteredBookings" :key="getId(booking)" class="hover:bg-gray-50">
+            <tr v-for="booking in filteredBookings" :key="booking.id" class="hover:bg-gray-50">
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">
                   <div class="flex-shrink-0 h-10 w-10 bg-indigo-100 rounded-full flex items-center justify-center">
@@ -123,24 +123,24 @@
                     </svg>
                   </div>
                   <div class="ml-4">
-                    <div class="text-sm font-medium text-gray-900">{{ getSevaName(booking) }}</div>
-                    <div class="text-xs text-gray-500">{{ getSevaType(booking) }}</div>
+                    <div class="text-sm font-medium text-gray-900">{{ booking.seva_name || (booking.seva && booking.seva.name) || 'Seva' }}</div>
+                    <div class="text-xs text-gray-500">{{ booking.seva_type || (booking.seva && booking.seva.type) || '' }}</div>
                   </div>
                 </div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm text-gray-900">{{ formatBookingDate(booking) }}</div>
-                <div class="text-xs text-gray-500">{{ formatBookingTime(booking) }}</div>
+                <div class="text-sm text-gray-900">{{ formatDate(booking.booking_time || booking.BookingTime) }}</div>
+                <div class="text-xs text-gray-500">{{ formatTime(booking.booking_time || booking.BookingTime) }}</div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="text-sm text-gray-900">₹{{ booking.price || booking.amount || 0 }}</div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 <span 
-                  :class="getStatusClass(getStatus(booking))" 
+                  :class="getStatusClass(booking.status || booking.Status)"
                   class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
                 >
-                  {{ (getStatus(booking)).charAt(0).toUpperCase() + (getStatus(booking)).slice(1) }}
+                  {{ formatStatus(booking.status || booking.Status) }}
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -151,7 +151,7 @@
                   View
                 </button>
                 <button
-                  v-if="getStatus(booking).toLowerCase() === 'pending'"
+                  v-if="(booking.status || booking.Status || '').toLowerCase() === 'pending'"
                   @click="cancelBooking(booking)"
                   class="text-red-600 hover:text-red-900"
                 >
@@ -190,23 +190,23 @@
       <div v-if="selectedBooking" class="p-4">
         <div class="space-y-4">
           <div class="flex justify-between">
-            <h3 class="text-lg font-medium text-gray-900">{{ getSevaName(selectedBooking) }}</h3>
+            <h3 class="text-lg font-medium text-gray-900">{{ selectedBooking.seva_name || (selectedBooking.seva && selectedBooking.seva.name) || 'Seva' }}</h3>
             <span 
-              :class="getStatusClass(getStatus(selectedBooking))" 
+              :class="getStatusClass(selectedBooking.status || selectedBooking.Status)" 
               class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
             >
-              {{ (getStatus(selectedBooking)).charAt(0).toUpperCase() + (getStatus(selectedBooking)).slice(1) }}
+              {{ formatStatus(selectedBooking.status || selectedBooking.Status) }}
             </span>
           </div>
           
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div>
               <p class="text-gray-500">Booking Date</p>
-              <p class="font-medium">{{ formatBookingDate(selectedBooking) }}</p>
+              <p class="font-medium">{{ formatDate(selectedBooking.booking_time || selectedBooking.BookingTime) }}</p>
             </div>
             <div>
               <p class="text-gray-500">Booking Time</p>
-              <p class="font-medium">{{ formatBookingTime(selectedBooking) }}</p>
+              <p class="font-medium">{{ formatTime(selectedBooking.booking_time || selectedBooking.BookingTime) }}</p>
             </div>
             <div>
               <p class="text-gray-500">Amount</p>
@@ -214,15 +214,15 @@
             </div>
             <div>
               <p class="text-gray-500">Type</p>
-              <p class="font-medium">{{ getSevaType(selectedBooking) }}</p>
+              <p class="font-medium">{{ selectedBooking.seva_type || (selectedBooking.seva && selectedBooking.seva.type) || '' }}</p>
             </div>
             <div class="col-span-2">
               <p class="text-gray-500">Description</p>
-              <p class="font-medium">{{ selectedBooking.description || 'No description available' }}</p>
+              <p class="font-medium">{{ selectedBooking.description || (selectedBooking.seva && selectedBooking.seva.description) || 'No description available' }}</p>
             </div>
-            <div v-if="getSpecialRequests(selectedBooking)" class="col-span-2">
+            <div v-if="selectedBooking.special_requests || selectedBooking.SpecialRequests" class="col-span-2">
               <p class="text-gray-500">Special Requests</p>
-              <p class="font-medium">{{ getSpecialRequests(selectedBooking) }}</p>
+              <p class="font-medium">{{ selectedBooking.special_requests || selectedBooking.SpecialRequests }}</p>
             </div>
           </div>
         </div>
@@ -235,7 +235,7 @@
             Close
           </button>
           <button 
-            v-if="getStatus(selectedBooking).toLowerCase() === 'pending'"
+            v-if="(selectedBooking.status || selectedBooking.Status || '').toLowerCase() === 'pending'"
             @click="cancelBookingFromModal"
             class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none"
           >
@@ -297,88 +297,9 @@ const selectedBooking = ref(null)
 const showBookingDetailsModal = ref(false)
 const showCancelConfirmModal = ref(false)
 
-// Based on the SevaManagement.vue file implementation
-// Helper functions to handle both lowercase and uppercase field names
-const getId = (booking) => booking?.ID || booking?.id || 0
-const getSevaId = (booking) => booking?.SevaID || booking?.seva_id || 0
-const getUserId = (booking) => booking?.UserID || booking?.user_id || 0
-const getEntityId = (booking) => booking?.EntityID || booking?.entity_id || 0
-const getStatus = (booking) => booking?.Status || booking?.status || 'pending'
-const getSpecialRequests = (booking) => booking?.SpecialRequests || booking?.special_requests || ''
-const getAmountPaid = (booking) => booking?.AmountPaid || booking?.amount_paid || 0
-const getBookingTime = (booking) => booking?.BookingTime || booking?.booking_time || null
-const getCreatedAt = (booking) => booking?.CreatedAt || booking?.created_at || null
-const getUpdatedAt = (booking) => booking?.UpdatedAt || booking?.updated_at || null
-
-// Helper function to get Seva name from a booking
-const getSevaName = (booking) => {
-  if (!booking) return 'Unknown Seva'
-  
-  // Check for direct seva_name property first (both cases)
-  if (booking.SevaName || booking.seva_name) {
-    return booking.SevaName || booking.seva_name
-  }
-  
-  // Check for seva catalog data in sevaStore
-  const sevaId = getSevaId(booking)
-  if (sevaStore.sevaCatalog && Array.isArray(sevaStore.sevaCatalog)) {
-    const catalogItem = sevaStore.sevaCatalog.find(item => item.id === sevaId)
-    if (catalogItem && catalogItem.name) {
-      return catalogItem.name
-    }
-  }
-  
-  // Check for seva in seva list
-  if (sevaStore.sevaList && Array.isArray(sevaStore.sevaList)) {
-    const seva = sevaStore.sevaList.find(s => s.id === sevaId)
-    if (seva && seva.name) {
-      return seva.name
-    }
-  }
-  
-  // Try to lookup in global catalog or seva entries
-  if (sevaStore.getSevaNameById && typeof sevaStore.getSevaNameById === 'function') {
-    const name = sevaStore.getSevaNameById(sevaId)
-    if (name) return name
-  }
-  
-  // Return generic name with ID as a last resort
-  return `Seva ${sevaId}`
-}
-
-// Helper function to get Seva type from a booking
-const getSevaType = (booking) => {
-  if (!booking) return 'Not Categorized'
-  
-  // Check for direct seva_type property first (both cases)
-  if (booking.SevaType || booking.seva_type) {
-    return booking.SevaType || booking.seva_type
-  }
-  
-  // Check for seva type in catalog
-  const sevaId = getSevaId(booking)
-  if (sevaStore.sevaCatalog && Array.isArray(sevaStore.sevaCatalog)) {
-    const catalogItem = sevaStore.sevaCatalog.find(item => item.id === sevaId)
-    if (catalogItem && catalogItem.seva_type) {
-      return catalogItem.seva_type
-    }
-  }
-  
-  // Check for seva type in seva list
-  if (sevaStore.sevaList && Array.isArray(sevaStore.sevaList)) {
-    const seva = sevaStore.sevaList.find(s => s.id === sevaId)
-    if (seva && seva.type) {
-      return seva.type
-    }
-  }
-  
-  return 'Regular'
-}
-
-// Format the booking date from BookingTime field
-const formatBookingDate = (booking) => {
-  const dateTime = getBookingTime(booking)
-  if (!dateTime) return 'No Date'
+// Format helpers
+const formatDate = (dateTime) => {
+  if (!dateTime) return ''
   
   try {
     const date = new Date(dateTime)
@@ -388,14 +309,12 @@ const formatBookingDate = (booking) => {
       year: 'numeric'
     })
   } catch (error) {
-    console.error('Error formatting booking date:', error, dateTime)
-    return 'No Date'
+    console.error('Error formatting date:', error)
+    return ''
   }
 }
 
-// Format the booking time from BookingTime field
-const formatBookingTime = (booking) => {
-  const dateTime = getBookingTime(booking)
+const formatTime = (dateTime) => {
   if (!dateTime) return ''
   
   try {
@@ -406,34 +325,42 @@ const formatBookingTime = (booking) => {
       hour12: true
     })
   } catch (error) {
-    console.error('Error formatting booking time:', error, dateTime)
+    console.error('Error formatting time:', error)
     return ''
   }
 }
 
+const formatStatus = (status) => {
+  if (!status) return 'Pending'
+  return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()
+}
+
 // Status styles
 const getStatusClass = (status) => {
-  const classes = {
+  if (!status) return 'bg-gray-100 text-gray-800'
+  
+  const statusMap = {
     pending: 'bg-yellow-100 text-yellow-800',
     approved: 'bg-green-100 text-green-800',
-    rejected: 'bg-red-100 text-red-800',
     completed: 'bg-blue-100 text-blue-800',
-    cancelled: 'bg-red-100 text-red-800'
+    cancelled: 'bg-red-100 text-red-800',
+    rejected: 'bg-red-100 text-red-800'
   }
-  return classes[status.toLowerCase()] || 'bg-gray-100 text-gray-800'
+  
+  return statusMap[status.toLowerCase()] || 'bg-gray-100 text-gray-800'
 }
 
 // Computed
 const filteredBookings = computed(() => {
   let result = sevaStore.recentSevas || []
   
-  // Debug the data for inspection
-  console.log('Seva bookings data:', result)
+  // Log the data for debugging
+  console.log('Seva bookings data:', result);
   
   // Filter by status
   if (filters.value.status !== 'all') {
     result = result.filter(booking => {
-      const bookingStatus = getStatus(booking).toLowerCase()
+      const bookingStatus = (booking.status || booking.Status || '').toLowerCase()
       return bookingStatus === filters.value.status.toLowerCase()
     })
   }
@@ -449,7 +376,7 @@ const filteredBookings = computed(() => {
     const startOfYear = new Date(now.getFullYear(), 0, 1)
     
     result = result.filter(booking => {
-      const bookingDate = new Date(getBookingTime(booking) || new Date())
+      const bookingDate = new Date(booking.booking_time || booking.BookingTime || new Date())
       
       switch (filters.value.dateRange) {
         case 'today':
@@ -470,9 +397,9 @@ const filteredBookings = computed(() => {
   if (filters.value.search) {
     const search = filters.value.search.toLowerCase()
     result = result.filter(booking => {
-      const sevaName = getSevaName(booking).toLowerCase()
-      const sevaType = getSevaType(booking).toLowerCase()
-      const specialRequests = getSpecialRequests(booking).toLowerCase()
+      const sevaName = (booking.seva_name || (booking.seva && booking.seva.name) || '').toLowerCase()
+      const sevaType = (booking.seva_type || (booking.seva && booking.seva.type) || '').toLowerCase()
+      const specialRequests = (booking.special_requests || booking.SpecialRequests || '').toLowerCase()
       
       return sevaName.includes(search) || 
              sevaType.includes(search) || 
@@ -489,19 +416,14 @@ const fetchSevaBookings = async () => {
   error.value = null
   
   try {
-    // First try to load the seva catalog
+    await sevaStore.fetchRecentSevas()
+    
+    // After fetching, retrieve catalog/seva names
     if (sevaStore.fetchSevaCatalog) {
-      try {
-        await sevaStore.fetchSevaCatalog()
-        console.log('Fetched seva catalog:', sevaStore.sevaCatalog)
-      } catch (catalogErr) {
-        console.error('Error fetching seva catalog:', catalogErr)
-      }
+      await sevaStore.fetchSevaCatalog()
     }
     
-    // Then fetch the bookings
-    await sevaStore.fetchRecentSevas()
-    console.log('Fetched seva bookings:', sevaStore.recentSevas)
+    console.log("Fetched seva bookings:", sevaStore.recentSevas)
   } catch (err) {
     console.error('Error fetching seva bookings:', err)
     error.value = err.message || 'Failed to load seva bookings'
@@ -527,8 +449,10 @@ const cancelBookingFromModal = () => {
 
 const confirmCancelBooking = async () => {
   try {
+    const bookingId = selectedBooking.value.id || selectedBooking.value.ID
+    
     // Call API to cancel the booking
-    await sevaService.updateBookingStatus(getId(selectedBooking.value), 'cancelled')
+    await sevaService.updateBookingStatus(bookingId, 'cancelled')
     
     // Refresh the list
     await fetchSevaBookings()
@@ -542,8 +466,27 @@ const confirmCancelBooking = async () => {
   }
 }
 
+// Call your API to get the real seva catalog data and match it with bookings
+const fetchSevaNamesForBookings = async () => {
+  if (sevaStore.fetchSevaCatalog) {
+    try {
+      await sevaStore.fetchSevaCatalog()
+    } catch (error) {
+      console.error("Error fetching seva catalog:", error)
+    }
+  }
+}
+
 // Lifecycle hooks
 onMounted(() => {
   fetchSevaBookings()
+  fetchSevaNamesForBookings()
+  
+  // Log store state for debugging
+  console.log("Initial sevaStore state:", {
+    recentSevas: sevaStore.recentSevas,
+    sevaCatalog: sevaStore.sevaCatalog,
+    sevaList: sevaStore.sevaList
+  })
 })
 </script>

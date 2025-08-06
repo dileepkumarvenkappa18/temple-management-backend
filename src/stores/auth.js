@@ -7,7 +7,8 @@ import router from '@/router'
 
 export const useAuthStore = defineStore('auth', () => {
   // State
-  const user = ref(JSON.parse(localStorage.getItem('user_data')) || null)
+  const userDataRaw = localStorage.getItem('user_data')
+  const user = ref(userDataRaw && userDataRaw !== 'undefined' ? JSON.parse(userDataRaw) : null)
   const token = ref(localStorage.getItem('auth_token') || null)
   const loading = ref(false)
   const error = ref(null)
@@ -98,48 +99,28 @@ export const useAuthStore = defineStore('auth', () => {
   }
   
   // Initialize auth state
-  const initialize = async () => {
-    try {
-      // If we have a token but no user data, try to fetch user
-      if (token.value) {
-        // Set the authorization header for all subsequent requests
+  const initialize = () => {
+  const storedToken = localStorage.getItem('auth_token')
+  if (storedToken) {
+    token.value = storedToken
+
+    const storedUser = localStorage.getItem('user_data')
+    if (storedUser && storedUser !== 'undefined') {
+      try {
+        user.value = JSON.parse(storedUser)
+        // ❌ REMOVE this: isAuthenticated.value = true
         api.defaults.headers.common['Authorization'] = `Bearer ${token.value}`
-        
-        // Add tenant ID header for proper isolation
-        if (currentTenantId.value) {
-          api.defaults.headers.common['X-Tenant-ID'] = currentTenantId.value
-          console.log('Set X-Tenant-ID header on init:', currentTenantId.value)
-        }
-        
-        const storedUser = localStorage.getItem('user_data')
-        if (storedUser) {
-          user.value = JSON.parse(storedUser)
-          console.log('Auth initialized with stored user:', user.value.role)
-          
-          // Ensure tenant ID is set for temple admins
-          if (user.value.role === 'templeadmin' || user.value.role === 'tenant') {
-            const tenantId = user.value.id
-            currentTenantId.value = tenantId
-            localStorage.setItem('current_tenant_id', tenantId)
-            
-            // Ensure tenant ID header is set
-            api.defaults.headers.common['X-Tenant-ID'] = tenantId
-            console.log('Set X-Tenant-ID header on init:', tenantId)
-          }
-        } else {
-          console.warn('Token exists but no user data found')
-        }
-      } else {
-        console.log('No auth token found during initialization')
+        console.log('Auth initialized with stored user:', user.value)
+        console.log('Set Authorization header with token')
+      } catch (e) {
+        console.error('Failed to parse stored user_data:', e)
       }
-      
-      return isAuthenticated.value
-    } catch (err) {
-      console.error('Auth initialization error:', err)
-      logout()
-      return false
+    } else {
+      console.warn('Token exists but no valid user data found')
     }
   }
+}
+
   
   // Login action - only uses real backend
   const login = async (credentials) => {
@@ -171,7 +152,7 @@ export const useAuthStore = defineStore('auth', () => {
       token.value = accessToken
       user.value = userData
       localStorage.setItem('auth_token', accessToken)
-      localStorage.removeItem('token') // Clear old token key
+      // Clear old token key
       localStorage.setItem('user_data', JSON.stringify(userData))
       
       // Set axios default header for authentication

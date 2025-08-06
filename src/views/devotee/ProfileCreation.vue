@@ -99,14 +99,67 @@
             </div>
           </div>
 
-          <!-- Form Content -->
-          <div v-else>
-            <!-- Use component directly instead of conditionally rendering divs -->
-            <component 
-              :is="formComponents[currentStep]" 
-              :data="stepData[steps[currentStep].id]" 
-              @update="updateStepData(steps[currentStep].id, $event)"
-            />
+          <!-- Step Content -->
+          <div v-else class="min-h-[400px]">
+            <!-- Personal Details -->
+            <div v-if="currentStep === 0">
+              <PersonalDetailsForm 
+                :data="stepData.personal" 
+                @update="updateStepData('personal', $event)"
+                @update-data="updateStepData('personal', $event)"
+                @next="nextStep"
+              />
+            </div>
+
+            <!-- Spiritual Info -->
+            <div v-else-if="currentStep === 1">
+              <SpiritualInfoForm 
+                :data="stepData.spiritual" 
+                @update="updateStepData('spiritual', $event)"
+                @update-data="updateStepData('spiritual', $event)"
+                @next="nextStep"
+              />
+            </div>
+
+            <!-- Family Lineage -->
+            <div v-else-if="currentStep === 2">
+              <FamilyLineageForm 
+                :data="stepData.lineage" 
+                @update="updateStepData('lineage', $event)"
+                @update-data="updateStepData('lineage', $event)"
+                @next="nextStep"
+              />
+            </div>
+
+            <!-- Seva Preferences -->
+            <div v-else-if="currentStep === 3">
+              <SevaPreferencesForm 
+                :data="stepData.preferences" 
+                @update="updateStepData('preferences', $event)"
+                @update-data="updateStepData('preferences', $event)"
+                @next="nextStep"
+              />
+            </div>
+
+            <!-- Family Members -->
+            <div v-else-if="currentStep === 4">
+              <FamilyMembersForm 
+                :data="stepData.family" 
+                @update="updateStepData('family', $event)"
+                @update-data="updateStepData('family', $event)"
+                @next="nextStep"
+              />
+            </div>
+
+            <!-- Notes & Attachments -->
+            <div v-else-if="currentStep === 5">
+              <NotesAttachmentsForm 
+                :data="stepData.notes" 
+                @update="updateStepData('notes', $event)"
+                @update-data="updateStepData('notes', $event)"
+                @submit="completeProfile"
+              />
+            </div>
           </div>
 
           <!-- Navigation Buttons -->
@@ -190,24 +243,42 @@ const loading = ref(true)
 const error = ref(null)
 const currentStep = ref(0)
 const isSubmitting = ref(false)
+// Update the stepData initialization to include empty objects for all sections
 const stepData = ref({
   personal: {},
   spiritual: {},
-  lineage: {},
-  preferences: {},
-  family: {},
-  notes: {}
+  lineage: {
+    father: { name: '', gotra: '', nativePlace: '', vedaShaka: '' },
+    mother: { name: '', maidenGotra: '', nativePlace: '', fatherName: '' },
+    paternalGrandfather: '',
+    paternalGrandmother: '',
+    maternalGrandfather: '',
+    maternalGrandmother: ''
+  },
+  preferences: {
+    favoriteSevas: [],
+    donationInterests: [],
+    preferredFrequency: '',
+    specialInterests: ''
+  },
+  family: {
+    spouse: { name: '', email: '', phone: '', dateOfBirth: '', gotra: '', nakshatra: '' },
+    children: [],
+    emergencyContacts: []
+  },
+  notes: {
+    healthNotes: '',
+    allergies: '',
+    dietaryRestrictions: '',
+    sankalpa: '',
+    additionalNotes: '',
+    documents: [],
+    profilePhoto: null,
+    familyPhoto: null,
+    shareProfile: true,
+    receiveNotifications: true
+  }
 })
-
-// Define form components array to use with :is
-const formComponents = [
-  PersonalDetailsForm,
-  SpiritualInfoForm, 
-  FamilyLineageForm,
-  SevaPreferencesForm,
-  FamilyMembersForm,
-  NotesAttachmentsForm
-]
 
 // Steps configuration
 const steps = ref([
@@ -266,12 +337,14 @@ const goToStep = (stepIndex) => {
   }
 }
 
+// Add to nextStep function
 const nextStep = async () => {
   isSubmitting.value = true
   
   try {
     // Save current step data to store
     const stepId = steps.value[currentStep.value].id
+    console.log(`⏭️ Moving to next step, saving data for ${stepId}:`, stepData.value[stepId])
     await devoteeStore.updateProfileStep(stepId, stepData.value[stepId])
     
     // Mark current step as completed
@@ -308,27 +381,77 @@ const skipStep = () => {
 
 const skipToEnd = async () => {
   try {
+    isSubmitting.value = true
+    
     // Mark user has been through the profile creation process
-    await devoteeStore.completeProfile()
-    router.push('/devotee/dashboard')
+    const result = await devoteeStore.completeProfile()
+    
+    if (result && result.redirectPath) {
+      router.push(result.redirectPath)
+    } else {
+      // Fallback redirect
+      const entityId = devoteeStore.getCurrentEntityId()
+      if (entityId) {
+        router.push(`/entity/${entityId}/devotee/dashboard`)
+      } else {
+        router.push('/devotee/dashboard')
+      }
+    }
   } catch (error) {
     toast.error('Failed to complete profile')
     console.error('Error skipping to end:', error)
+  } finally {
+    isSubmitting.value = false
   }
 }
 
 const updateStepData = (stepId, data) => {
-  stepData.value[stepId] = data
+  console.log(`💾 UPDATING STEP DATA for ${stepId}:`, data);
+  stepData.value[stepId] = data;
 }
 
 const completeProfile = async () => {
   isSubmitting.value = true
   
   try {
+    // Log current data state before completing
+    console.log("📊 Current stepData before completion:", JSON.stringify(stepData.value, null, 2));
+    
+    // Build the complete profile object from all steps (for logging purposes)
+    const completeProfileData = {
+      personal: stepData.value.personal || {},
+      spiritual: stepData.value.spiritual || {},
+      lineage: stepData.value.lineage || {},
+      preferences: stepData.value.preferences || {},
+      family: stepData.value.family || {},
+      notes: stepData.value.notes || {}
+    }
+    
+    // Log the data that will be sent to the store
+    console.log(`📤 COMPLETE PROFILE DATA GOING TO STORE:`, JSON.stringify(completeProfileData, null, 2));
+    
+    // IMPORTANT: Skip re-updating each step since we've already updated them individually
+    // This was causing the issue - each step was being updated when moving through the form
+    // and then again here, which could lead to data inconsistencies
+    
+    // Instead, directly call the store method to save everything to backend
     const result = await devoteeStore.completeProfile()
-    if (result) {
-      toast.success('Profile completed successfully!')
-      router.push('/devotee/dashboard')
+    
+    console.log("✅ Profile completion result:", result);
+    
+    if (result && result.success) {
+      // Use the redirect path from the result
+      if (result.redirectPath) {
+        router.push(result.redirectPath)
+      } else {
+        // Fallback redirect
+        const entityId = devoteeStore.getCurrentEntityId()
+        if (entityId) {
+          router.push(`/entity/${entityId}/devotee/dashboard`)
+        } else {
+          router.push('/devotee/dashboard')
+        }
+      }
     }
   } catch (err) {
     toast.error('Failed to complete profile')
@@ -356,40 +479,33 @@ const loadProfileData = async () => {
     loading.value = true
     error.value = null
     
-    try {
-      // Try to load profile data from API
-      const data = await devoteeStore.loadProfileData()
-      
-      if (data) {
-        // Populate step data from API response
-        stepData.value = {
-          personal: data.personal || {},
-          spiritual: data.spiritual || {},
-          lineage: data.lineage || {},
-          preferences: data.preferences || {},
-          family: data.family || {},
-          notes: data.notes || {}
-        }
-        
-        // Update completed steps based on data
-        steps.value.forEach((step, index) => {
-          const stepId = step.id
-          const hasData = stepData.value[stepId] && Object.keys(stepData.value[stepId]).length > 0
-          steps.value[index].completed = hasData
-        })
+    // Load profile data from API
+    const data = await devoteeStore.loadProfileData()
+    
+    if (data) {
+      // Populate step data from API response
+      stepData.value = {
+        personal: data.personal || {},
+        spiritual: data.spiritual || {},
+        lineage: data.lineage || {},
+        preferences: data.preferences || {},
+        family: data.family || {},
+        notes: data.notes || {}
       }
-    } catch (err) {
-      // If 404 error, it means the profile doesn't exist yet - this is normal for new users
-      // So we'll initialize with empty data instead of showing an error
-      console.log('Profile not found or other API error:', err)
-      // Just continue with empty data (already initialized in stepData)
+      
+      // Update completed steps based on data
+      steps.value.forEach((step, index) => {
+        const stepId = step.id
+        const hasData = stepData.value[stepId] && Object.keys(stepData.value[stepId]).length > 0
+        steps.value[index].completed = hasData
+      })
     }
   } catch (err) {
-    // Only set error for serious issues, not 404s
+    // Only set error for serious issues, not 404s (which are normal for new users)
     if (err?.response?.status !== 404) {
       error.value = 'Failed to load profile data. Please try again.'
-      console.error('Error loading profile data:', err)
     }
+    console.error('Error loading profile data:', err)
   } finally {
     loading.value = false
   }

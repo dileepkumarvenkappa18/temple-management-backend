@@ -1,42 +1,53 @@
 // src/services/devotee.service.js
-import axios from 'axios';
+import api from '@/plugins/axios';
+import router from '@/router';
 
-// Get the API base URL from environment variables
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
-
-// Get the auth token from localStorage
+// Get the auth token from localStorage with validation
 const getAuthToken = () => {
-  return localStorage.getItem('temple_auth_token');
+  const token = localStorage.getItem('temple_auth_token') || localStorage.getItem('auth_token');
+  if (!token) {
+    console.log('No auth token found in localStorage');
+    return null;
+  }
+  return token;
 };
 
-// Create axios instance with auth headers
-const createAuthHeader = () => {
-  return {
-    headers: {
-      'Authorization': `Bearer ${getAuthToken()}`,
-      'Content-Type': 'application/json'
-    }
-  };
+// Check if user is authenticated
+const isAuthenticated = () => {
+  const token = getAuthToken();
+  return token !== null && token !== undefined && token !== '';
 };
 
-// Create multipart form data header with auth
-const createMultipartHeader = () => {
-  return {
-    headers: {
-      'Authorization': `Bearer ${getAuthToken()}`,
-      'Content-Type': 'multipart/form-data'
-    }
-  };
+// Clear authentication data
+const clearAuth = () => {
+  localStorage.removeItem('temple_auth_token');
+  localStorage.removeItem('temple_user_data');
+  localStorage.removeItem('temple_user_role');
+  // Clear legacy keys too
+  localStorage.removeItem('auth_token');
+  localStorage.removeItem('user_data');
+};
+
+// Redirect to login
+const redirectToLogin = () => {
+  clearAuth();
+  if (router.currentRoute.value.path !== '/login') {
+    router.push('/login');
+  }
 };
 
 export default {
   /**
-   * Get devotee profile
+   * Get devotee profile (current user)
    */
   async getProfile() {
     try {
-      const response = await axios.get(`${API_URL}/userprofiles/me`, createAuthHeader());
-      return response.data;
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await api.get('/v1/profiles/me');
+      return response;
     } catch (error) {
       throw this.handleError(error);
     }
@@ -47,8 +58,12 @@ export default {
    */
   async getDevoteeById(id) {
     try {
-      const response = await axios.get(`${API_URL}/userprofiles/${id}`, createAuthHeader());
-      return response.data;
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await api.get(`/v1/profiles/${id}`);
+      return response;
     } catch (error) {
       throw this.handleError(error);
     }
@@ -59,81 +74,50 @@ export default {
    */
   async createOrUpdateProfile(profileData) {
     try {
-      // Check if we're dealing with FormData or plain object
-      let response;
-      if (profileData instanceof FormData) {
-        response = await axios.post(`${API_URL}/userprofiles`, profileData, createMultipartHeader());
-      } else {
-        // The API expects a specific format - format the data appropriately
-        const apiData = {
-          date_of_birth: profileData.dateOfBirth,
-          gender: profileData.gender,
-          address: profileData.address?.street,
-          gotra: profileData.gotra,
-          nakshatra: profileData.nakshatra,
-          rashi: profileData.rashi,
-          lagna: profileData.lagna,
-          veda_shaka: profileData.vedaShaka,
-          father_name: profileData.fatherName,
-          mother_name: profileData.motherName,
-          grandfather_name: profileData.grandfatherName,
-          grandmother_name: profileData.grandmotherName,
-          family_tree_url: profileData.familyTreeUrl,
-          favorite_sevas: profileData.favoriteSevas ? JSON.stringify(profileData.favoriteSevas) : null,
-          donation_interests: profileData.donationInterests ? JSON.stringify(profileData.donationInterests) : null,
-          spouse_info: profileData.spouseInfo ? JSON.stringify(profileData.spouseInfo) : null,
-          children_info: profileData.childrenInfo ? JSON.stringify(profileData.childrenInfo) : null,
-          emergency_contacts: profileData.emergencyContacts ? JSON.stringify(profileData.emergencyContacts) : null,
-          health_info: profileData.healthInfo,
-          sankalpa_notes: profileData.sankalpaNotes
-        };
-
-        response = await axios.post(`${API_URL}/userprofiles`, apiData, createAuthHeader());
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
       }
       
-      return response.data;
+      let response;
+      
+      if (profileData instanceof FormData) {
+        response = await api.post('/v1/profiles', profileData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+      } else {
+        response = await api.post('/v1/profiles', profileData);
+      }
+      
+      return response;
     } catch (error) {
       throw this.handleError(error);
     }
   },
+
 
   /**
    * Update devotee profile
    */
   async updateProfile(id, profileData) {
     try {
-      let response;
-      if (profileData instanceof FormData) {
-        response = await axios.put(`${API_URL}/userprofiles/${id}`, profileData, createMultipartHeader());
-      } else {
-        // Format profile data for the API
-        const apiData = {
-          date_of_birth: profileData.dateOfBirth,
-          gender: profileData.gender,
-          address: profileData.address?.street,
-          gotra: profileData.gotra,
-          nakshatra: profileData.nakshatra,
-          rashi: profileData.rashi,
-          lagna: profileData.lagna,
-          veda_shaka: profileData.vedaShaka,
-          father_name: profileData.fatherName,
-          mother_name: profileData.motherName,
-          grandfather_name: profileData.grandfatherName,
-          grandmother_name: profileData.grandmotherName,
-          family_tree_url: profileData.familyTreeUrl,
-          favorite_sevas: profileData.favoriteSevas ? JSON.stringify(profileData.favoriteSevas) : null,
-          donation_interests: profileData.donationInterests ? JSON.stringify(profileData.donationInterests) : null,
-          spouse_info: profileData.spouseInfo ? JSON.stringify(profileData.spouseInfo) : null,
-          children_info: profileData.childrenInfo ? JSON.stringify(profileData.childrenInfo) : null,
-          emergency_contacts: profileData.emergencyContacts ? JSON.stringify(profileData.emergencyContacts) : null,
-          health_info: profileData.healthInfo,
-          sankalpa_notes: profileData.sankalpaNotes
-        };
-        
-        response = await axios.put(`${API_URL}/userprofiles/${id}`, apiData, createAuthHeader());
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
       }
       
-      return response.data;
+      let response;
+      if (profileData instanceof FormData) {
+        response = await api.put('/v1/profiles', profileData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+      } else {
+        response = await api.put('/v1/profiles', profileData);
+      }
+      
+      return response;
     } catch (error) {
       throw this.handleError(error);
     }
@@ -144,10 +128,14 @@ export default {
    */
   async joinTemple(entityId) {
     try {
-      const response = await axios.post(`${API_URL}/memberships`, {
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await api.post('/v1/memberships', {
         entity_id: entityId
-      }, createAuthHeader());
-      return response.data;
+      });
+      return response;
     } catch (error) {
       throw this.handleError(error);
     }
@@ -158,20 +146,109 @@ export default {
    */
   async getMemberships() {
     try {
-      const response = await axios.get(`${API_URL}/memberships`, createAuthHeader());
-      return response.data;
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await api.get('/v1/memberships');
+      return response;
     } catch (error) {
       throw this.handleError(error);
     }
   },
 
   /**
-   * Get all devotees (for admin purposes)
+   * Check if devotee has joined a specific temple
    */
-  async getAllDevotees() {
+  async checkTempleJoined(templeId) {
     try {
-      const response = await axios.get(`${API_URL}/userprofiles`, createAuthHeader());
-      return response.data;
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await api.get(`/v1/memberships/check/${templeId}`);
+      return response;
+    } catch (error) {
+      // For 404 (not joined), return a valid response with joined: false
+      if (error.response?.status === 404) {
+        return { data: { joined: false } };
+      }
+      throw this.handleError(error);
+    }
+  },
+
+  /**
+   * FIXED: Get all devotees for an entity (matches backend route)
+   * This matches the backend route: GET /v1/entities/:id/devotees
+   */
+  async getAllDevotees(entityId) {
+    try {
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
+      }
+
+      if (!entityId) {
+        throw new Error('Entity ID is required');
+      }
+
+      const response = await api.get(`/v1/entities/${entityId}/devotees`);
+      return response;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  },
+
+  /**
+   * FIXED: Get devotee stats for an entity
+   * This matches the backend route: GET /v1/entities/:id/devotee-stats
+   */
+  async getDevoteeStats(entityId) {
+    try {
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
+      }
+
+      if (!entityId) {
+        throw new Error('Entity ID is required');
+      }
+
+      const response = await api.get(`/v1/entities/${entityId}/devotee-stats`);
+      return response;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  },
+
+  /**
+   * FIXED: Update devotee membership status
+   * This matches the backend route: PATCH /v1/entities/:entityID/devotees/:userID/status
+   */
+  async updateDevoteeStatus(entityId, devoteeId, status) {
+    try {
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await api.patch(`/v1/entities/${entityId}/devotees/${devoteeId}/status`, {
+        status: status
+      });
+      return response;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  },
+
+  /**
+   * Get all profiles/devotees (fallback method)
+   */
+  async getAllProfiles() {
+    try {
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await api.get('/v1/profiles');
+      return response;
     } catch (error) {
       throw this.handleError(error);
     }
@@ -182,8 +259,12 @@ export default {
    */
   async addFamilyMember(profileId, familyMemberData) {
     try {
-      const response = await axios.post(`${API_URL}/userprofiles/${profileId}/family`, familyMemberData, createAuthHeader());
-      return response.data;
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await api.post(`/v1/profiles/${profileId}/family`, familyMemberData);
+      return response;
     } catch (error) {
       throw this.handleError(error);
     }
@@ -194,8 +275,12 @@ export default {
    */
   async updateFamilyMember(profileId, familyMemberId, familyMemberData) {
     try {
-      const response = await axios.put(`${API_URL}/userprofiles/${profileId}/family/${familyMemberId}`, familyMemberData, createAuthHeader());
-      return response.data;
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await api.put(`/v1/profiles/${profileId}/family/${familyMemberId}`, familyMemberData);
+      return response;
     } catch (error) {
       throw this.handleError(error);
     }
@@ -206,29 +291,102 @@ export default {
    */
   async removeFamilyMember(profileId, familyMemberId) {
     try {
-      const response = await axios.delete(`${API_URL}/userprofiles/${profileId}/family/${familyMemberId}`, createAuthHeader());
-      return response.data;
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await api.delete(`/v1/profiles/${profileId}/family/${familyMemberId}`);
+      return response;
     } catch (error) {
       throw this.handleError(error);
     }
   },
 
   /**
-   * Get dashboard data
+   * Get dashboard data - Uses entity-specific devotee dashboard endpoint
    */
-  async getDashboardData() {
+  async getDashboardData(entityId) {
     try {
-      const response = await axios.get(`${API_URL}/devotee/dashboard`, createAuthHeader());
-      return response.data;
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
+      }
+
+      // This matches the backend route for devotee dashboard
+      const response = await api.get(`/v1/entity/${entityId}/devotee/dashboard`);
+      return response;
+    } catch (error) {
+      console.warn('Dashboard endpoint not available');
+      throw this.handleError(error);
+    }
+  },
+
+  /**
+   * Search temples - matches backend route
+   */
+  async searchTemples(searchParams = {}) {
+    try {
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await api.get('/v1/temples/search', { params: searchParams });
+      return response;
     } catch (error) {
       throw this.handleError(error);
     }
   },
-  
+
+  /**
+   * Get recent temples - matches backend route
+   */
+  async getRecentTemples() {
+    try {
+      if (!isAuthenticated()) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await api.get('/v1/temples/recent');
+      return response;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  },
+
   /**
    * Handle API errors consistently
    */
   handleError(error) {
+    // Handle authentication errors specifically
+    if (error.response?.status === 401) {
+      console.error('Authentication error:', error.response?.data);
+      redirectToLogin();
+      return new Error('Authentication failed. Please login again.');
+    }
+
+    // Handle other HTTP errors
+    if (error.response?.status === 403) {
+      return new Error('Access denied. You do not have permission to perform this action.');
+    }
+
+    if (error.response?.status === 404) {
+      return new Error('The requested resource was not found.');
+    }
+
+    if (error.response?.status >= 500) {
+      return new Error('Server error. Please try again later.');
+    }
+
+    // Handle network errors
+    if (error.code === 'NETWORK_ERROR' || !error.response) {
+      return new Error('Network error. Please check your internet connection.');
+    }
+
+    // Handle timeout errors
+    if (error.code === 'ECONNABORTED') {
+      return new Error('Request timeout. Please try again.');
+    }
+
+    // Extract error messages from response
     if (error.response?.data?.message) {
       return new Error(error.response.data.message);
     } else if (error.response?.data?.error) {
@@ -238,5 +396,13 @@ export default {
     } else {
       return new Error('An unexpected error occurred');
     }
-  }
+  },
+
+  /**
+   * Utility methods for authentication
+   */
+  isAuthenticated,
+  getAuthToken,
+  clearAuth,
+  redirectToLogin
 };

@@ -105,94 +105,99 @@
           </svg>
           <div>
             <p class="text-sm font-medium text-red-800">Rejection Reason:</p>
-            <p class="text-sm text-red-700">{{ temple.rejection_reason }}</p>
+              <p class="text-sm text-red-700">{{ temple.rejection_reason }}</p>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Action Buttons -->
-      <div class="flex flex-col sm:flex-row gap-2 pt-4 border-t border-gray-100">
-        <button
-          @click="$emit('view', temple)"
-          class="flex-1 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors flex items-center justify-center gap-2"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-          </svg>
-          View Details
-        </button>
+        <!-- Action Buttons -->
+        <div class="flex flex-col sm:flex-row gap-2 pt-4 border-t border-gray-100">
+          <button
+            @click="$emit('view', temple)"
+            class="flex-1 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors flex items-center justify-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+            </svg>
+            View Details
+          </button>
 
-        <!-- Edit Button (only for non-approved temples) -->
-        <button
-          v-if="!isApprovedCaseInsensitive"
-          @click="$emit('edit', temple)"
-          class="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center gap-2"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-          </svg>
-          Edit
-        </button>
+          <!-- Edit Button (only for non-approved temples) -->
+          <button
+            v-if="!isApprovedCaseInsensitive"
+            @click="$emit('edit', temple)"
+            class="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+            </svg>
+            Edit
+          </button>
 
-        <!-- Manage Button (only for approved temples) -->
-        <button
-          v-if="isApprovedCaseInsensitive"
-          @click="$emit('manage', temple)"
-          class="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-          </svg>
-          Manage
-        </button>
+          <!-- Primary Action Button -->
+          <button
+            v-if="isApprovedCaseInsensitive"
+            @click="handlePrimaryAction"
+            class="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+          >
+            <svg v-if="isJoined" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            {{ isJoined ? 'Manage' : 'Join Temple' }}
+          </button>
 
-        <!-- Delete Button (only for non-approved temples) -->
-        <button
-          v-if="!isApprovedCaseInsensitive && showDeleteButton"
-          @click="$emit('delete', temple)"
-          class="px-3 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors flex items-center justify-center"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M9 7h6m-6 0V4a1 1 0 011-1h4a1 1 0 011 1v3"/>
-          </svg>
-        </button>
-      </div>
+          <!-- Delete Button (only for non-approved temples) -->
+          <button
+            v-if="!isApprovedCaseInsensitive && showDeleteButton"
+            @click="$emit('delete', temple)"
+            class="px-3 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors flex items-center justify-center"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M9 7h6m-6 0V4a1 1 0 011-1h4a1 1 0 011 1v3"/>
+            </svg>
+          </button>
+        </div>
 
-      <!-- Creation Date -->
-      <div class="flex items-center justify-between mt-4 pt-3 border-t border-gray-100 text-xs text-gray-500">
-        <span>Created: {{ formatDate(temple.created_at) }}</span>
-        <span v-if="temple.approved_at">Approved: {{ formatDate(temple.approved_at) }}</span>
-      </div>
+        <!-- Creation Date -->
+        <div class="flex items-center justify-between mt-4 pt-3 border-t border-gray-100 text-xs text-gray-500">
+          <span>Created: {{ formatDate(temple.created_at) }}</span>
+          <span v-if="temple.approved_at">Approved: {{ formatDate(temple.approved_at) }}</span>
+        </div>
 
-      <!-- Debug Info - Only visible in development -->
-      <div v-if="isDevelopment" class="mt-4 pt-3 border-t border-gray-200 text-xs text-gray-500">
-        <details>
-          <summary class="cursor-pointer font-semibold">Debug Info</summary>
-          <div class="mt-2 p-2 bg-gray-50 rounded">
-            <div><b>Temple ID:</b> {{ temple.id }}</div>
-            <div><b>Raw Status:</b> "{{ temple.status }}"</div>
-            <div><b>Status Type:</b> {{ typeof temple.status }}</div>
-            <div><b>Is Approved (case-sensitive):</b> {{ isApproved }}</div>
-            <div><b>Is Approved (case-insensitive):</b> {{ isApprovedCaseInsensitive }}</div>
-            <div><b>Available Keys:</b> {{ Object.keys(temple).join(', ') }}</div>
-            <button
-              @click="forceApprovedStatus"
-              class="mt-2 px-2 py-1 bg-green-100 text-green-800 rounded text-xs"
-            >
-              Force Status to "approved"
-            </button>
-          </div>
-        </details>
+        <!-- Debug Info - Only visible in development -->
+        <div v-if="isDevelopment" class="mt-4 pt-3 border-t border-gray-200 text-xs text-gray-500">
+          <details>
+            <summary class="cursor-pointer font-semibold">Debug Info</summary>
+            <div class="mt-2 p-2 bg-gray-50 rounded">
+              <div><b>Temple ID:</b> {{ temple.id }}</div>
+              <div><b>Raw Status:</b> "{{ temple.status }}"</div>
+              <div><b>Status Type:</b> {{ typeof temple.status }}</div>
+              <div><b>Is Approved (case-sensitive):</b> {{ isApproved }}</div>
+              <div><b>Is Approved (case-insensitive):</b> {{ isApprovedCaseInsensitive }}</div>
+              <div><b>Is Joined:</b> {{ isJoined }}</div>
+              <div><b>Available Keys:</b> {{ Object.keys(temple).join(', ') }}</div>
+              <button
+                @click="forceApprovedStatus"
+                class="mt-2 px-2 py-1 bg-green-100 text-green-800 rounded text-xs"
+              >
+                Force Status to "approved"
+              </button>
+            </div>
+          </details>
+        </div>
       </div>
     </div>
-  </div>
 </template>
 
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import TempleApprovalStatus from './TempleApprovalStatus.vue'
+import { useAuthStore } from '@/stores/auth'
 
 // Props
 const props = defineProps({
@@ -207,7 +212,11 @@ const props = defineProps({
 })
 
 // Emits
-const emit = defineEmits(['view', 'edit', 'manage', 'delete'])
+const emit = defineEmits(['view', 'edit', 'manage', 'delete', 'join'])
+
+// Stores
+const authStore = useAuthStore()
+const membershipStore = useTempleMembershipStore()
 
 // Development mode detection
 const isDevelopment = ref(false)
@@ -224,7 +233,17 @@ onMounted(() => {
     console.log('Temple status:', props.temple.status)
     console.log('Status data type:', typeof props.temple.status)
   }
+
+  // Check membership status when component mounts
+  checkMembershipStatus()
 })
+
+// Check if temple is already joined by the devotee
+const checkMembershipStatus = async () => {
+  if (authStore.isDevotee && props.temple?.id) {
+    await membershipStore.checkMembership(props.temple.id)
+  }
+}
 
 // Computed properties
 const isApproved = computed(() => {
@@ -243,6 +262,10 @@ const isRejected = computed(() => {
   return status === 'rejected'
 })
 
+const isJoined = computed(() => {
+  return membershipStore.membershipStatus[props.temple.id] || false
+})
+
 // Methods
 const formatDate = (dateString) => {
   if (!dateString) return ''
@@ -252,6 +275,14 @@ const formatDate = (dateString) => {
     month: 'short',
     day: 'numeric'
   })
+}
+
+const handlePrimaryAction = () => {
+  if (isJoined.value) {
+    emit('manage', props.temple)
+  } else {
+    emit('join', props.temple)
+  }
 }
 
 // Debug method to force approval status

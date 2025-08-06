@@ -1,413 +1,259 @@
 <template>
   <div class="space-y-6">
-    <!-- Header Section -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-      <div>
-        <h2 class="text-2xl font-bold text-gray-900 font-roboto">
-          Tenant Approvals
-        </h2>
-        <p class="text-sm text-gray-600 mt-1">
-          Review and manage temple admin registration requests
-        </p>
-      </div>
-      
-      <!-- Stats Cards -->
-      <div class="flex gap-3">
-        <div class="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 text-center min-w-[100px]">
-          <div class="text-2xl font-bold text-yellow-800">{{ superAdminStore.pendingCount }}</div>
-          <div class="text-xs text-yellow-600 font-medium">Pending</div>
-        </div>
-        <div class="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-center min-w-[100px]">
-          <div class="text-2xl font-bold text-green-800">{{ superAdminStore.activeCount }}</div>
-          <div class="text-xs text-green-600 font-medium">Approved</div>
-        </div>
-        <div class="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-center min-w-[100px]">
-          <div class="text-2xl font-bold text-red-800">{{ superAdminStore.rejectedCount }}</div>
-          <div class="text-xs text-red-600 font-medium">Rejected</div>
-        </div>
+    <!-- Debug Info (remove in production) -->
+    <div class="bg-gray-100 p-4 rounded-lg mb-4 text-xs font-mono overflow-auto max-h-40" v-if="debugMode">
+      <div class="mb-2 font-bold">Debug Information:</div>
+      <div v-if="selectedTenant">Selected Tenant: ID={{ selectedTenant.id || selectedTenant.ID }}, Name={{ getTenantName(selectedTenant) }}</div>
+      <div>Tenant Count: {{ allTenants.length }}</div>
+      <div>API Counts: P={{ tenantCounts.pending }}, A={{ tenantCounts.approved }}, R={{ tenantCounts.rejected }}</div>
+      <div class="mt-2 flex gap-2">
+        <button @click="debugTenantData" class="px-3 py-1 bg-gray-200 rounded text-xs">Run API Debug</button>
+        <button @click="loadTenantCounts" class="px-3 py-1 bg-blue-200 rounded text-xs">Refresh Counts</button>
       </div>
     </div>
 
-    <!-- Debug Button -->
-    <div class="flex justify-end">
+    <!-- Stats Cards -->
+    <div class="flex flex-wrap gap-3">
+      <div class="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 text-center min-w-[100px] flex-1">
+        <div class="text-2xl font-bold text-yellow-800">{{ tenantCounts.pending }}</div>
+        <div class="text-xs text-yellow-600 font-medium">Pending</div>
+      </div>
+      <div class="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-center min-w-[100px] flex-1">
+        <div class="text-2xl font-bold text-green-800">{{ tenantCounts.approved }}</div>
+        <div class="text-xs text-green-600 font-medium">Approved</div>
+      </div>
+      <div class="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-center min-w-[100px] flex-1">
+        <div class="text-2xl font-bold text-red-800">{{ tenantCounts.rejected }}</div>
+        <div class="text-xs text-red-600 font-medium">Rejected</div>
+      </div>
+    </div>
+
+    <!-- Filter & Refresh -->
+    <div class="flex flex-col sm:flex-row justify-between gap-3">
+      <!-- Filters -->
+      <div class="flex gap-3">
+        <select 
+          v-model="statusFilter" 
+          class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm w-full sm:w-auto"
+          @change="applyFilters"
+        >
+          <option value="">View All</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+        
+        <!-- Debug Mode Toggle -->
+        <button 
+          @click="debugMode = !debugMode" 
+          class="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm"
+        >
+          {{ debugMode ? 'Hide Debug' : 'Debug Mode' }}
+        </button>
+      </div>
+      
+      <!-- Refresh Button -->
       <button 
-        @click="debugTenantData" 
-        class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm flex items-center gap-2"
+        @click="refreshData" 
+        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        Debug API
+        Refresh Data
       </button>
     </div>
 
-    <!-- Filters Section -->
-    <div class="bg-white rounded-xl shadow-md border border-gray-200 p-6">
-      <div class="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
-        <div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <!-- Search Input -->
-          <div class="relative">
-            <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="Search by name, email, or temple..."
-              class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 text-sm"
-            />
-            <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-            </svg>
-          </div>
-
-          <!-- Status Filter -->
-          <select
-            v-model="statusFilter"
-            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 text-sm bg-white"
-          >
-            <option value="">All Status</option>
-            <option value="PENDING">Pending</option>
-            <option value="APPROVED">Approved</option>
-            <option value="REJECTED">Rejected</option>
-          </select>
-
-          <!-- Date Filter -->
-          <input
-            v-model="dateFilter"
-            type="date"
-            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 text-sm"
-          />
-        </div>
-
-        <!-- Clear Filters Button -->
-        <button
-          @click="clearFilters"
-          class="px-4 py-3 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-all duration-200 whitespace-nowrap"
-        >
-          Clear Filters
-        </button>
-      </div>
-    </div>
-
     <!-- Loading State -->
-    <div v-if="isLoading" class="flex justify-center items-center py-12">
+    <div v-if="loading" class="flex justify-center items-center py-12">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
     </div>
 
     <!-- Tenant Applications List -->
-    <div v-else-if="filteredTenants.length > 0" class="space-y-4">
+    <div v-if="!loading && filteredTenants.length > 0" class="space-y-4">
       <div
-        v-for="tenant in paginatedTenants"
-        :key="tenant.id"
+        v-for="(tenant, idx) in paginatedTenants"
+        :key="tenant.id || tenant.ID || idx"
         class="bg-white rounded-xl shadow-md border border-gray-200 hover:shadow-lg transition-all duration-200"
       >
         <div class="p-6">
+          <!-- Tenant ID Debug (remove in production) -->
+          <div v-if="debugMode" class="bg-gray-100 p-2 mb-3 rounded text-xs">
+            <span class="font-bold">ID:</span> {{ tenant.id || tenant.ID || 'Not available' }} |
+            <span class="font-bold">Status:</span> {{ tenant.status || tenant.Status || 'Not available' }}
+          </div>
+          
           <!-- Header Row -->
           <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
             <div class="flex items-start gap-4">
               <!-- Avatar -->
               <div class="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
                 <span class="text-indigo-600 font-semibold text-lg">
-                  {{ tenant.fullName ? tenant.fullName.charAt(0).toUpperCase() : 'T' }}
+                  {{ getTenantInitial(tenant) }}
                 </span>
               </div>
               
-              <!-- Basic Info -->
+              <!-- Basic Info - Only name and email -->
               <div class="flex-1 min-w-0">
                 <h3 class="text-lg font-semibold text-gray-900 font-roboto">
-                  {{ tenant.fullName || tenant.name || 'Unknown Tenant' }}
+                  {{ getTenantName(tenant) }}
                 </h3>
-                <p class="text-sm text-gray-600">{{ tenant.email || 'No email provided' }}</p>
-                <p class="text-sm text-gray-500">{{ tenant.phone || 'No phone provided' }}</p>
+                <p class="text-sm text-gray-600">{{ getTenantEmail(tenant) }}</p>
               </div>
             </div>
 
             <!-- Status & Date -->
             <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
               <span
-                :class="getStatusBadgeClass(tenant.status)"
+                :class="getStatusBadgeClass(tenant.status || tenant.Status)"
                 class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium"
               >
-                {{ tenant.status }}
+                {{ tenant.status || tenant.Status || 'pending' }}
               </span>
               <span class="text-xs text-gray-500">
-                Applied: {{ formatDate(tenant.createdAt || tenant.submitted) }}
+                Applied: {{ formatDate(tenant.created_at || tenant.CreatedAt) }}
               </span>
-            </div>
-          </div>
-
-          <!-- Temple Information -->
-          <div v-if="tenant.temple" class="bg-gray-50 rounded-lg p-4 mb-4">
-            <h4 class="text-sm font-semibold text-gray-900 mb-2">Temple Information</h4>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-              <div>
-                <span class="text-gray-600">Name:</span>
-                <span class="ml-2 text-gray-900">{{ tenant.temple.name || 'Pending' }}</span>
-              </div>
-              <div>
-                <span class="text-gray-600">Type:</span>
-                <span class="ml-2 text-gray-900">{{ tenant.temple.type || 'Hindu Temple' }}</span>
-              </div>
-              <div>
-                <span class="text-gray-600">City:</span>
-                <span class="ml-2 text-gray-900">{{ tenant.temple.city || tenant.location || 'Pending' }}</span>
-              </div>
-              <div>
-                <span class="text-gray-600">State:</span>
-                <span class="ml-2 text-gray-900">{{ tenant.temple.state || 'Pending' }}</span>
-              </div>
-            </div>
-            <div class="mt-2">
-              <span class="text-gray-600">Address:</span>
-              <span class="ml-2 text-gray-900">{{ tenant.temple.address || tenant.address || 'Pending' }}</span>
-            </div>
-          </div>
-
-          <!-- Documents Section -->
-          <div v-if="tenant.documents && tenant.documents.length > 0" class="mb-4">
-            <h4 class="text-sm font-semibold text-gray-900 mb-2">Uploaded Documents</h4>
-            <div class="flex flex-wrap gap-2">
-              <button
-                v-for="doc in tenant.documents"
-                :key="doc.id"
-                @click="viewDocument(doc)"
-                class="inline-flex items-center px-3 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs hover:bg-indigo-100 transition-colors duration-200"
-              >
-                <svg class="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                </svg>
-                {{ doc.name }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Rejection Notes (if rejected) -->
-          <div v-if="tenant.status === 'REJECTED' && tenant.rejectionNotes" class="mb-4">
-            <div class="bg-red-50 border border-red-200 rounded-lg p-3">
-              <h4 class="text-sm font-semibold text-red-800 mb-1">Rejection Notes</h4>
-              <p class="text-sm text-red-700">{{ tenant.rejectionNotes }}</p>
             </div>
           </div>
 
           <!-- Action Buttons -->
-          <div v-if="tenant.status === 'PENDING'" class="flex flex-col sm:flex-row gap-3">
+          <div v-if="isStatusPending(tenant)" class="flex flex-col sm:flex-row gap-3">
             <button
-              @click="openApprovalModal(tenant)"
+              @click="handleApprove(tenant)"
+              class="flex-1 sm:flex-none px-6 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
               :disabled="isProcessing"
-              class="flex-1 sm:flex-none px-6 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
               </svg>
-              Approve
+              {{ isProcessing ? 'Processing...' : 'Approve' }}
             </button>
             
             <button
-              @click="openRejectionModal(tenant)"
+              @click="handleRejectClick(tenant)"
+              class="flex-1 sm:flex-none px-6 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
               :disabled="isProcessing"
-              class="flex-1 sm:flex-none px-6 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
               </svg>
-              Reject
+              {{ isProcessing ? 'Processing...' : 'Reject' }}
             </button>
             
-            <button
-              @click="viewTenantDetails(tenant)"
-              class="flex-1 sm:flex-none px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+            <!-- Direct API call debug button (remove in production) -->
+            <button 
+              v-if="debugMode"
+              @click="testApprovalApi(tenant)"
+              class="flex-1 sm:flex-none px-6 py-2 bg-gray-600 text-white text-sm font-medium rounded-xl flex items-center justify-center gap-2"
             >
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-              </svg>
-              View Details
+              Test API Call
             </button>
           </div>
+        </div>
+      </div>
 
-          <!-- Approved/Rejected Actions -->
-          <div v-else class="flex flex-col sm:flex-row gap-3">
-            <button
-              @click="viewTenantDetails(tenant)"
-              class="flex-1 sm:flex-none px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+      <!-- Pagination Controls -->
+      <div class="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+        <div class="text-sm text-gray-700 mb-3 sm:mb-0">
+          Showing <span class="font-medium">{{ paginationStart }}</span> to 
+          <span class="font-medium">{{ paginationEnd }}</span> of 
+          <span class="font-medium">{{ filteredTenants.length }}</span> results
+        </div>
+        
+        <div class="flex space-x-2">
+          <button 
+            @click="currentPage--" 
+            :disabled="currentPage === 1"
+            class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          
+          <div class="flex space-x-1">
+            <button 
+              v-for="page in displayedPageNumbers" 
+              :key="page"
+              @click="goToPage(page)"
+              :class="[
+                'inline-flex items-center px-3 py-2 border text-sm font-medium rounded-md',
+                currentPage === page 
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-600'
+                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+              ]"
             >
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-              </svg>
-              View Details
+              {{ page }}
             </button>
-            
-            <div class="text-sm text-gray-500 flex items-center">
-              {{ tenant.status === 'APPROVED' ? 'Approved' : 'Rejected' }} on {{ formatDate(tenant.updatedAt) }}
-            </div>
           </div>
+          
+          <button 
+            @click="currentPage++" 
+            :disabled="currentPage === totalPages"
+            class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
         </div>
       </div>
     </div>
 
     <!-- Empty State -->
-    <div v-else class="text-center py-12">
+    <div v-else-if="!loading" class="text-center py-12">
       <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
       </svg>
       <h3 class="mt-4 text-lg font-medium text-gray-900">No tenant applications found</h3>
       <p class="mt-2 text-sm text-gray-500">
-        {{ searchQuery || statusFilter || dateFilter ? 'Try adjusting your filters' : 'No applications have been submitted yet' }}
+        {{ statusFilter ? `No tenants with "${statusFilter}" status found` : 'Try refreshing or checking back later' }}
       </p>
-      <button 
-        @click="refreshData" 
-        class="mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm"
-      >
-        Refresh Data
-      </button>
     </div>
 
-    <!-- Pagination -->
-    <div v-if="totalPages > 1" class="flex items-center justify-between bg-white rounded-xl shadow-md border border-gray-200 px-6 py-4">
-      <div class="text-sm text-gray-700">
-        Showing {{ (currentPage - 1) * itemsPerPage + 1 }} to {{ Math.min(currentPage * itemsPerPage, filteredTenants.length) }} of {{ filteredTenants.length }} results
-      </div>
-      
-      <div class="flex items-center gap-2">
-        <button
-          @click="currentPage--"
-          :disabled="currentPage === 1"
-          class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-        >
-          Previous
-        </button>
+    <!-- Rejection Modal -->
+    <div v-if="showRejectModal" class="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center">
+      <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+        <h3 class="text-lg font-semibold mb-4">Reject Tenant</h3>
         
-        <span
-          v-for="page in visiblePages"
-          :key="page"
-          @click="currentPage = page"
-          :class="[
-            'px-3 py-2 text-sm font-medium cursor-pointer rounded-lg transition-all duration-200',
-            currentPage === page
-              ? 'bg-indigo-600 text-white'
-              : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'
-          ]"
-        >
-          {{ page }}
-        </span>
+        <!-- Debug info -->
+        <div v-if="debugMode" class="bg-gray-100 p-2 mb-3 rounded text-xs">
+          <div><span class="font-bold">Selected Tenant ID:</span> {{ selectedTenant?.id || selectedTenant?.ID }}</div>
+          <div><span class="font-bold">Selected Tenant Name:</span> {{ getTenantName(selectedTenant) }}</div>
+        </div>
         
-        <button
-          @click="currentPage++"
-          :disabled="currentPage === totalPages"
-          class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-        >
-          Next
-        </button>
-      </div>
-    </div>
-
-    <!-- Approval Modal -->
-    <div
-      v-if="approvalModal.show"
-      class="fixed inset-0 z-50 overflow-y-auto"
-      aria-labelledby="modal-title"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeApprovalModal"></div>
-        
-        <div class="inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <div class="bg-white px-6 pt-6 pb-4">
-            <div class="flex items-center">
-              <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
-                <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                </svg>
-              </div>
-              <div class="ml-4 text-left">
-                <h3 class="text-lg leading-6 font-semibold text-gray-900 font-roboto" id="modal-title">
-                  Approve Tenant Application
-                </h3>
-                <div class="mt-2">
-                  <p class="text-sm text-gray-500">
-                    Are you sure you want to approve {{ approvalModal.tenant?.fullName || approvalModal.tenant?.name || 'this tenant' }}'s application{{ approvalModal.tenant?.temple ? ' for ' + approvalModal.tenant?.temple?.name : '' }}?
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div class="bg-gray-50 px-6 py-4 flex flex-col sm:flex-row-reverse gap-3">
-            <button
-              @click="approveTenant"
-              :disabled="isProcessing"
-              class="w-full sm:w-auto px-6 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-            >
-              <div v-if="isProcessing" class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              {{ isProcessing ? 'Processing...' : 'Approve' }}
-            </button>
-            <button
-              @click="closeApprovalModal"
-              :disabled="isProcessing"
-              class="w-full sm:w-auto px-6 py-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium border border-gray-300 rounded-xl transition-all duration-200"
-            >
-              Cancel
-            </button>
-          </div>
+        <p class="mb-4">Please provide a reason for rejecting <span class="font-medium">{{ selectedTenant ? getTenantName(selectedTenant) : '' }}</span>:</p>
+        <textarea 
+          v-model="rejectReason" 
+          class="w-full border border-gray-300 rounded-lg p-3 mb-4 min-h-[100px] focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          placeholder="Enter rejection reason..."
+        ></textarea>
+        <div class="flex justify-end gap-3">
+          <button 
+            @click="showRejectModal = false"
+            class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg"
+            :disabled="isProcessing"
+          >
+            Cancel
+          </button>
+          <button 
+            @click="confirmReject"
+            :disabled="!rejectReason.trim() || isProcessing"
+            class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50"
+          >
+            {{ isProcessing ? 'Processing...' : 'Reject' }}
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- Rejection Modal -->
-    <div
-      v-if="rejectionModal.show"
-      class="fixed inset-0 z-50 overflow-y-auto"
-      aria-labelledby="modal-title"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeRejectionModal"></div>
-        
-        <div class="inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <div class="bg-white px-6 pt-6 pb-4">
-            <div class="flex items-start">
-              <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
-                <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-              </div>
-              <div class="ml-4 w-full text-left">
-                <h3 class="text-lg leading-6 font-semibold text-gray-900 font-roboto" id="modal-title">
-                  Reject Tenant Application
-                </h3>
-                <div class="mt-2">
-                  <p class="text-sm text-gray-500 mb-4">
-                    Please provide a reason for rejecting {{ rejectionModal.tenant?.fullName || rejectionModal.tenant?.name || 'this tenant' }}'s application:
-                  </p>
-                  <textarea
-                    v-model="rejectionModal.notes"
-                    rows="4"
-                    placeholder="Enter rejection reason..."
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm resize-none"
-                  ></textarea>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div class="bg-gray-50 px-6 py-4 flex flex-col sm:flex-row-reverse gap-3">
-            <button
-              @click="rejectTenant"
-              :disabled="isProcessing || !rejectionModal.notes.trim()"
-              class="w-full sm:w-auto px-6 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-            >
-              <div v-if="isProcessing" class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              {{ isProcessing ? 'Processing...' : 'Reject' }}
-            </button>
-            <button
-              @click="closeRejectionModal"
-              :disabled="isProcessing"
-              class="w-full sm:w-auto px-6 py-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium border border-gray-300 rounded-xl transition-all duration-200"
-            >
-              Cancel
-            </button>
-          </div>
+    <!-- API Debug Modal -->
+    <div v-if="showApiDebugModal" class="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center">
+      <div class="bg-white rounded-xl p-6 w-full max-w-3xl mx-4 max-h-[80vh] overflow-auto">
+        <h3 class="text-lg font-semibold mb-4">API Debug Information</h3>
+        <div class="bg-gray-100 p-4 rounded font-mono text-xs overflow-auto whitespace-pre">
+          {{ apiDebugInfo }}
+        </div>
+        <div class="mt-4 flex justify-end">
+          <button 
+            @click="showApiDebugModal = false"
+            class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>
@@ -417,479 +263,714 @@
 <script>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useToast } from '@/composables/useToast'
-import { useSuperAdminStore } from '@/stores/superadmin'
 import superAdminService from '@/services/superadmin.service'
+import api from '@/services/api'
 
 export default {
-  name: 'TenantApprovalView',
-  setup() {
-    // Toast notifications
+  name: 'TenantApprovals',
+  emits: ['updated'],
+  setup(props, { emit }) {
+    // Data
+    const loading = ref(true)
+    const tenants = ref([])
+    const allTenants = ref([]) // Store all tenants for "View All" functionality
     const toast = useToast()
-    
-    // Use the SuperAdmin store
-    const superAdminStore = useSuperAdminStore()
-    
-    // Reactive data
     const isProcessing = ref(false)
-    const searchQuery = ref('')
-    const statusFilter = ref('PENDING') // Default to pending
-    const dateFilter = ref('')
-    const currentPage = ref(1)
-    const itemsPerPage = ref(10)
-
-    // Modal states
-    const approvalModal = ref({
-      show: false,
-      tenant: null
-    })
-
-    const rejectionModal = ref({
-      show: false,
-      tenant: null,
-      notes: ''
-    })
-
-    // Computed properties
-    const isLoading = computed(() => superAdminStore.loadingTenants)
     
-    const filteredTenants = computed(() => {
-      let filtered = superAdminStore.tenants
-
-      // Search filter
-      if (searchQuery.value) {
-        const query = searchQuery.value.toLowerCase()
-        filtered = filtered.filter(tenant => 
-          (tenant.fullName || tenant.name || '').toLowerCase().includes(query) ||
-          (tenant.email || '').toLowerCase().includes(query) ||
-          (tenant.temple?.name || '').toLowerCase().includes(query)
-        )
-      }
-
-      // Status filter
-      if (statusFilter.value) {
-        filtered = filtered.filter(tenant => tenant.status === statusFilter.value)
-      }
-
-      // Date filter
-      if (dateFilter.value) {
-        filtered = filtered.filter(tenant => {
-          if (!tenant.createdAt && !tenant.submitted) return false;
-          const date = tenant.createdAt || tenant.submitted;
-          const tenantDate = new Date(date).toISOString().split('T')[0]
-          return tenantDate === dateFilter.value
-        })
-      }
-
-      return filtered
+    // NEW: Tenant counts from API
+    const tenantCounts = ref({
+      pending: 0,
+      approved: 0,
+      rejected: 0
     })
-
+    const loadingCounts = ref(false)
+    
+    // Debug mode
+    const debugMode = ref(false)
+    const showApiDebugModal = ref(false)
+    const apiDebugInfo = ref('')
+    
+    // Simple rejection modal
+    const showRejectModal = ref(false)
+    const selectedTenant = ref(null)
+    const rejectReason = ref('')
+    
+    // Filters
+    const statusFilter = ref('')
+    
+    // Pagination
+    const currentPage = ref(1)
+    const itemsPerPage = ref(5)
+    
+    // NEW: Load tenant counts from API
+    const loadTenantCounts = async () => {
+      loadingCounts.value = true
+      
+      try {
+        console.log('Loading tenant approval counts...')
+        const response = await superAdminService.getTenantApprovalCounts()
+        
+        if (response.success && response.data) {
+          tenantCounts.value = {
+            pending: response.data.pending || 0,
+            approved: response.data.approved || 0,
+            rejected: response.data.rejected || 0
+          }
+          console.log('Loaded tenant counts:', tenantCounts.value)
+          toast.success('Tenant counts updated')
+        } else {
+          console.warn('Failed to load tenant counts:', response.message)
+          toast.warning('Could not load tenant counts')
+        }
+      } catch (error) {
+        console.error('Error loading tenant counts:', error)
+        toast.error('Error loading tenant counts')
+      } finally {
+        loadingCounts.value = false
+      }
+    }
+    
+    // Status check helpers - Updated to check both uppercase and lowercase properties
+    const isStatusPending = (tenant) => {
+      if (!tenant) return false;
+      const status = (tenant.status || tenant.Status || '').toLowerCase();
+      return status === 'pending' || status === 'pending approval' || status === '';
+    }
+    
+    const isStatusApproved = (tenant) => {
+      if (!tenant) return false;
+      const status = (tenant.status || tenant.Status || '').toLowerCase();
+      return status === 'active' || status === 'approved';
+    }
+    
+    const isStatusRejected = (tenant) => {
+      if (!tenant) return false;
+      const status = (tenant.status || tenant.Status || '').toLowerCase();
+      return status === 'rejected' || status === 'declined';
+    }
+    
+    // Filtered tenants based on status
+    const filteredTenants = computed(() => {
+      let sourceData = statusFilter.value === '' ? allTenants.value : tenants.value;
+      
+      if (!statusFilter.value) {
+        return allTenants.value; // Show all tenants when "View All" is selected
+      }
+      
+      switch (statusFilter.value.toLowerCase()) {
+        case 'pending':
+          return allTenants.value.filter(tenant => isStatusPending(tenant));
+        case 'approved':
+          return allTenants.value.filter(tenant => isStatusApproved(tenant));
+        case 'rejected':
+          return allTenants.value.filter(tenant => isStatusRejected(tenant));
+        default:
+          return allTenants.value;
+      }
+    })
+    
+    // Paginated tenants
     const paginatedTenants = computed(() => {
       const start = (currentPage.value - 1) * itemsPerPage.value
       const end = start + itemsPerPage.value
       return filteredTenants.value.slice(start, end)
     })
-
+    
+    // Pagination helpers
     const totalPages = computed(() => {
-      return Math.ceil(filteredTenants.value.length / itemsPerPage.value)
+      return Math.ceil(filteredTenants.value.length / itemsPerPage.value) || 1
     })
-
-    const visiblePages = computed(() => {
+    
+    const paginationStart = computed(() => {
+      return filteredTenants.value.length === 0 
+        ? 0 
+        : (currentPage.value - 1) * itemsPerPage.value + 1
+    })
+    
+    const paginationEnd = computed(() => {
+      return Math.min(currentPage.value * itemsPerPage.value, filteredTenants.value.length)
+    })
+    
+    const displayedPageNumbers = computed(() => {
+      const maxDisplayed = 5
       const pages = []
-      const total = totalPages.value
-      const current = currentPage.value
       
-      if (total <= 7) {
-        for (let i = 1; i <= total; i++) {
+      if (totalPages.value <= maxDisplayed) {
+        for (let i = 1; i <= totalPages.value; i++) {
           pages.push(i)
         }
       } else {
-        if (current <= 4) {
-          for (let i = 1; i <= 5; i++) {
-            pages.push(i)
-          }
-          pages.push('...', total)
-        } else if (current >= total - 3) {
-          pages.push(1, '...')
-          for (let i = total - 4; i <= total; i++) {
-            pages.push(i)
-          }
-        } else {
-          pages.push(1, '...')
-          for (let i = current - 1; i <= current + 1; i++) {
-            pages.push(i)
-          }
-          pages.push('...', total)
+        pages.push(1)
+        
+        let startPage = Math.max(2, currentPage.value - 1)
+        let endPage = Math.min(totalPages.value - 1, currentPage.value + 1)
+        
+        if (currentPage.value <= 2) {
+          endPage = 3
+        }
+        
+        if (currentPage.value >= totalPages.value - 1) {
+          startPage = totalPages.value - 2
+        }
+        
+        if (startPage > 2) {
+          pages.push('...')
+        }
+        
+        for (let i = startPage; i <= endPage; i++) {
+          pages.push(i)
+        }
+        
+        if (endPage < totalPages.value - 1) {
+          pages.push('...')
+        }
+        
+        if (totalPages.value > 1) {
+          pages.push(totalPages.value)
         }
       }
       
-      return pages.filter(page => page !== '...' || pages.indexOf(page) === pages.lastIndexOf(page))
+      return pages
     })
-
+    
+    // Helper methods for displaying tenant information
+    const getTenantName = (tenant) => {
+      if (!tenant) return 'Unknown Tenant';
+      
+      // Check both uppercase and lowercase properties
+      if (tenant.full_name) return tenant.full_name;
+      if (tenant.FullName) return tenant.FullName;
+      if (tenant.fullName) return tenant.fullName;
+      if (tenant.name) return tenant.name;
+      if (tenant.Name) return tenant.Name;
+      
+      // Check email as fallback
+      if (tenant.email) return tenant.email.split('@')[0];
+      if (tenant.Email) return tenant.Email.split('@')[0];
+      
+      // Return ID if available
+      return (tenant.id || tenant.ID) ? `User ${tenant.id || tenant.ID}` : 'Unknown Tenant';
+    }
+    
+    const getTenantEmail = (tenant) => {
+      if (!tenant) return 'No email provided';
+      
+      if (tenant.email) return tenant.email;
+      if (tenant.Email) return tenant.Email;
+      if (tenant.email_address) return tenant.email_address;
+      if (tenant.EmailAddress) return tenant.EmailAddress;
+      
+      return 'No email provided';
+    }
+    
+    const getTenantInitial = (tenant) => {
+      if (!tenant) return 'T';
+      
+      const name = getTenantName(tenant);
+      if (name && name !== 'Unknown Tenant' && name.length > 0) {
+        return name.charAt(0).toUpperCase();
+      }
+      
+      const email = getTenantEmail(tenant);
+      if (email && email !== 'No email provided' && email.length > 0) {
+        return email.charAt(0).toUpperCase();
+      }
+      
+      return 'T';
+    }
+    
     // Methods
     const getStatusBadgeClass = (status) => {
+      const statusLower = status?.toLowerCase() || 'pending'
       const classes = {
-        'PENDING': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
-        'APPROVED': 'bg-green-100 text-green-800 border border-green-200',
-        'REJECTED': 'bg-red-100 text-red-800 border border-red-200',
         'pending': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
+        'active': 'bg-green-100 text-green-800 border border-green-200',
         'approved': 'bg-green-100 text-green-800 border border-green-200',
-        'rejected': 'bg-red-100 text-red-800 border border-red-200'
+        'rejected': 'bg-red-100 text-red-800 border border-red-200',
+        'declined': 'bg-red-100 text-red-800 border border-red-200'
       }
-      return classes[status] || 'bg-gray-100 text-gray-800 border border-gray-200'
+      return classes[statusLower] || 'bg-gray-100 text-gray-800 border border-gray-200'
     }
-
+    
     const formatDate = (dateString) => {
       if (!dateString) return 'N/A'
-      const date = new Date(dateString)
-      return date.toLocaleDateString('en-IN', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      })
+      try {
+        const date = new Date(dateString)
+        return date.toLocaleDateString('en-IN', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        })
+      } catch {
+        return 'N/A'
+      }
     }
-
-    const clearFilters = () => {
-      searchQuery.value = ''
-      statusFilter.value = ''
-      dateFilter.value = ''
+    
+    const goToPage = (page) => {
+      if (page !== '...') {
+        currentPage.value = page
+      }
+    }
+    
+    // UPDATED: Refresh both counts and tenant data
+    const refreshData = async () => {
+      await Promise.all([
+        loadTenantCounts(),
+        loadTenants()
+      ])
+    }
+    
+    // Updated filter function to properly apply filters
+    const applyFilters = () => {
+      // Reset to first page when filter changes
       currentPage.value = 1
-    }
-
-    const refreshData = () => {
-      superAdminStore.fetchTenants()
-      superAdminStore.fetchStats()
-      toast.info('Refreshing data...')
-    }
-
-    const openApprovalModal = (tenant) => {
-      approvalModal.value = {
-        show: true,
-        tenant
-      }
-    }
-
-    const closeApprovalModal = () => {
-      approvalModal.value = {
-        show: false,
-        tenant: null
-      }
-    }
-
-    const openRejectionModal = (tenant) => {
-      rejectionModal.value = {
-        show: true,
-        tenant,
-        notes: ''
-      }
-    }
-
-    const closeRejectionModal = () => {
-      rejectionModal.value = {
-        show: false,
-        tenant: null,
-        notes: ''
-      }
-    }
-
-    const approveTenant = async () => {
-      if (!approvalModal.value.tenant) return
       
-      isProcessing.value = true
+      // If "View All" is selected, load all tenants
+      if (statusFilter.value === '') {
+        loadAllTenants()
+      }
+    }
+    
+    // Load pending tenants (default view)
+    const loadTenants = async () => {
+      loading.value = true
       
       try {
-        // Call store action to approve tenant
-        const result = await superAdminStore.approveTenant(approvalModal.value.tenant.id, {
-          notes: 'Approved by Super Admin'
-        })
+        console.log('Loading tenant data...')
         
-        if (result.success) {
-          toast.success(`Tenant ${approvalModal.value.tenant.fullName || approvalModal.value.tenant.name} approved successfully`)
-        } else {
-          toast.error(result.error || 'Failed to approve tenant')
-        }
-        
-        closeApprovalModal()
-      } catch (error) {
-        console.error('Error approving tenant:', error)
-        toast.error('Failed to approve tenant. Please try again.')
-      } finally {
-        isProcessing.value = false
-      }
-    }
-
-    const rejectTenant = async () => {
-      if (!rejectionModal.value.tenant || !rejectionModal.value.notes.trim()) return
-      
-      isProcessing.value = true
-      
-      try {
-        // Call store action to reject tenant
-        const result = await superAdminStore.rejectTenant(rejectionModal.value.tenant.id, {
-          notes: rejectionModal.value.notes
-        })
-        
-        if (result.success) {
-          toast.success(`Tenant ${rejectionModal.value.tenant.fullName || rejectionModal.value.tenant.name} rejected successfully`)
-        } else {
-          toast.error(result.error || 'Failed to reject tenant')
-        }
-        
-        closeRejectionModal()
-      } catch (error) {
-        console.error('Error rejecting tenant:', error)
-        toast.error('Failed to reject tenant. Please try again.')
-      } finally {
-        isProcessing.value = false
-      }
-    }
-
-    const viewDocument = (document) => {
-      // Open document in new tab if URL is available
-      if (document.url) {
-        window.open(document.url, '_blank')
-      } else {
-        toast.info('Document preview not available')
-      }
-    }
-
-    const viewTenantDetails = (tenant) => {
-      // This could open a modal or navigate to detailed view
-      toast.info(`Viewing details for ${tenant.fullName || tenant.name}`)
-      
-      // In a real implementation, you might navigate to a details page
-      // router.push(`/superadmin/tenants/${tenant.id}`)
-    }
-
-    const debugTenantData = async () => {
-      try {
-        console.log('==== DEBUGGING API REQUESTS ====')
-        
-        // 1. Log the API endpoint being called
-        console.log('API endpoint:', `${window.location.origin}/api/v1/superadmin/tenants/pending`)
-        
-        // 2. Make a direct fetch request to bypass the service
-        const response = await fetch('/api/v1/superadmin/tenants/pending')
-        const responseText = await response.text()
-        
-        console.log('Raw API Response:', {
-          status: response.status,
-          statusText: response.statusText,
-          headers: Object.fromEntries([...response.headers.entries()]),
-          responseLength: responseText.length
-        })
-        
-        // 3. Try to parse as JSON
         try {
-          const jsonData = JSON.parse(responseText)
-          console.log('API Response Data:', jsonData)
+          // First try the correct API endpoint
+          const response = await fetch('/api/v1/superadmin/tenants?status=pending', {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+            }
+          })
           
-          // Check if the response contains tenant data
-          if (Array.isArray(jsonData)) {
-            console.log('Response contains array with', jsonData.length, 'items')
-            if (jsonData.length > 0) {
-              console.log('First item:', jsonData[0])
-            } else {
-              console.log('Array is empty - no tenant data')
-            }
-          } else if (jsonData && Array.isArray(jsonData.tenants)) {
-            console.log('Response contains tenant array with', jsonData.tenants.length, 'items')
-            if (jsonData.tenants.length > 0) {
-              console.log('First item:', jsonData.tenants[0])
-            } else {
-              console.log('Tenant array is empty - no tenant data')
-            }
-          } else {
-            console.log('Response data structure does not contain expected tenant array')
-            console.log('Response data keys:', Object.keys(jsonData))
+          if (!response.ok) {
+            throw new Error(`API returned ${response.status}: ${response.statusText}`)
           }
-        } catch (e) {
-          console.log('Response is not valid JSON:', e)
+          
+          const data = await response.json()
+          console.log('API response:', data)
+          
+          if (data && data.data) {
+            tenants.value = data.data
+            allTenants.value = data.data
+            console.log(`Loaded ${tenants.value.length} tenant applications from API`)
+            toast.success(`Loaded ${tenants.value.length} tenant applications`)
+          } else if (data) {
+            tenants.value = data
+            allTenants.value = data
+            console.log(`Loaded ${tenants.value.length} tenant applications from API`)
+            toast.success(`Loaded ${tenants.value.length} tenant applications`)
+          } else {
+            console.warn('API returned unexpected format:', data)
+            toast.error('Could not load tenant data: unexpected API response format')
+          }
+        } catch (apiError) {
+          console.error('Error calling API directly:', apiError)
+          
+          // Try using the service
+          try {
+            const serviceResponse = await superAdminService.getPendingTenants()
+            console.log('Service response:', serviceResponse)
+            
+            if (serviceResponse && serviceResponse.success && serviceResponse.data) {
+              // Check different possible structures from the service
+              let tenantsData = []
+              
+              if (serviceResponse.data.pending_tenants) {
+                tenantsData = serviceResponse.data.pending_tenants
+                console.log('Found pending_tenants in service response')
+              } else if (Array.isArray(serviceResponse.data)) {
+                tenantsData = serviceResponse.data
+                console.log('Found array in service response')
+              } else {
+                console.warn('Unexpected service response format:', serviceResponse)
+                tenantsData = []
+              }
+              
+              tenants.value = tenantsData
+              allTenants.value = tenantsData
+              
+              if (tenantsData.length > 0) {
+                toast.success(`Loaded ${tenantsData.length} tenant applications`)
+              } else {
+                toast.info('No pending tenant applications found')
+              }
+            } else {
+              console.warn('Service call failed or returned unexpected format')
+              toast.error('Could not load tenant data from API')
+            }
+          } catch (serviceError) {
+            console.error('Error calling service:', serviceError)
+            toast.error('Could not load tenant data')
+          }
         }
-        
-        // 4. Check localStorage for authentication token
-        const token = localStorage.getItem('auth_token')
-        console.log('Auth token exists:', !!token)
-        if (token) {
-          console.log('Token prefix:', token.substring(0, 15) + '...')
-        }
-        
-        // 5. Test the service directly
-        console.log('Testing superAdminService.getPendingTenants() directly...')
-        const serviceResponse = await superAdminService.getPendingTenants()
-        console.log('Service response:', serviceResponse)
-        
-        // 6. Refresh data from the store
-        console.log('Refreshing data from the store...')
-        superAdminStore.fetchTenants()
-        
-        toast.info('API debug completed - check browser console')
       } catch (error) {
-        console.error('Debug API call failed:', error)
-        toast.error('API debug failed: ' + error.message)
+        console.error('Error in loadTenants:', error)
+        toast.error('Error loading tenant data')
+      } finally {
+        loading.value = false
       }
     }
-
-    // Watchers
-    watch([searchQuery, statusFilter, dateFilter], () => {
-      currentPage.value = 1
-    })
-
-    // Lifecycle
-    onMounted(() => {
-      console.log('TenantApproval component mounted')
-      // Initialize the store data
-      superAdminStore.initialize()
-    })
-
-    return {
-      // Store
-      superAdminStore,
+    
+    // Load all tenants (for "View All" option)
+    const loadAllTenants = async () => {
+      loading.value = true
       
-      // Reactive data
-      isLoading,
-      isProcessing,
-      searchQuery,
+      try {
+        const response = await superAdminService.getAllTenants()
+        
+        if (response && response.success && Array.isArray(response.data)) {
+          allTenants.value = response.data
+          toast.success(`Loaded ${response.data.length} total tenants`)
+        } else {
+          // Fallback to pending tenants if getAllTenants fails
+          await loadTenants()
+        }
+      } catch (error) {
+        console.error('Error loading all tenants:', error)
+        // Fallback to pending tenants if getAllTenants fails
+        await loadTenants()
+        toast.warning('Showing pending tenants only')
+      } finally {
+        loading.value = false
+      }
+    }
+    
+    // Debug methods
+    const debugTenantData = async () => {
+      apiDebugInfo.value = 'Loading API debug information...'
+      showApiDebugModal.value = true
+      
+      try {
+        const debugInfo = []
+        debugInfo.push('==== TENANT DATA DEBUG ====\n')
+        
+        // 1. Test direct API call to verify backend
+        debugInfo.push('Testing direct API call to /api/v1/superadmin/tenants?status=pending...')
+        try {
+          const response = await fetch('/api/v1/superadmin/tenants?status=pending', {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+            }
+          })
+          
+          if (!response.ok) {
+            debugInfo.push(`API Error: ${response.status} ${response.statusText}`)
+            const errorText = await response.text()
+            debugInfo.push(`Error details: ${errorText}`)
+          } else {
+            const data = await response.json()
+            debugInfo.push(`API Response Status: ${response.status}`)
+            debugInfo.push(`API Response Data: ${JSON.stringify(data, null, 2)}`)
+            
+            // Try to load the data if not already loaded
+            if (allTenants.value.length === 0 && data && data.data) {
+              tenants.value = data.data
+              allTenants.value = data.data
+              debugInfo.push(`\nAUTOMATICALLY LOADED ${data.data.length} TENANTS FROM API RESPONSE`)
+            } else if (allTenants.value.length === 0 && Array.isArray(data)) {
+              tenants.value = data
+              allTenants.value = data
+              debugInfo.push(`\nAUTOMATICALLY LOADED ${data.length} TENANTS FROM API RESPONSE`)
+            }
+          }
+        } catch (error) {
+          debugInfo.push(`API Error: ${error.message}`)
+        }
+        
+        // 2. Test tenant counts API
+        debugInfo.push('\n==== TENANT COUNTS API DEBUG ====\n')
+        try {
+          const countsResponse = await superAdminService.getTenantApprovalCounts()
+          debugInfo.push(`Counts API Response: ${JSON.stringify(countsResponse, null, 2)}`)
+        } catch (error) {
+          debugInfo.push(`Counts API Error: ${error.message}`)
+        }
+        
+        // 3. Check service methods
+        debugInfo.push('\n==== SERVICE METHODS DEBUG ====\n')
+        debugInfo.push(`superAdminService.baseURL: ${superAdminService.baseURL}`)
+        
+        // 4. Display tenant data
+        debugInfo.push('\n==== TENANT DATA ====\n')
+        debugInfo.push(`Total Tenants: ${allTenants.value.length}`)
+        debugInfo.push(`Current Counts: P=${tenantCounts.value.pending}, A=${tenantCounts.value.approved}, R=${tenantCounts.value.rejected}`)
+        
+        if (allTenants.value.length > 0) {
+          const firstTenant = allTenants.value[0]
+          debugInfo.push(`First Tenant Data: ${JSON.stringify(firstTenant, null, 2)}`)
+          debugInfo.push(`First Tenant ID: ${firstTenant.id || firstTenant.ID || 'Not found'}`)
+          
+          // List all properties that could be used as ID
+          const potentialIds = ['ID', 'id', 'user_id', 'userId', '_id']
+          for (const idField of potentialIds) {
+            debugInfo.push(`${idField}: ${firstTenant[idField]}`)
+          }
+        }
+        
+        apiDebugInfo.value = debugInfo.join('\n')
+      } catch (error) {
+        apiDebugInfo.value = `Error running debug: ${error.message}`
+      }
+    }
+    
+    // Direct API test for approval
+    const testApprovalApi = async (tenant) => {
+      if (!tenant) {
+        toast.error('No tenant selected for testing')
+        return
+      }
+      
+      apiDebugInfo.value = `Testing API call for tenant ${tenant.id || tenant.ID || 'unknown'}...`
+      showApiDebugModal.value = true
+      
+      try {
+        const debugInfo = []
+        debugInfo.push(`Testing API approval for tenant ${JSON.stringify(tenant, null, 2)}\n`)
+        
+        // Extract tenant ID with fallbacks
+        const tenantId = tenant.id || tenant.ID || tenant.user_id || tenant.userId
+        
+        if (!tenantId) {
+          debugInfo.push('ERROR: No tenant ID found in tenant object!')
+          apiDebugInfo.value = debugInfo.join('\n')
+          return
+        }
+        
+        debugInfo.push(`Using tenant ID: ${tenantId}`)
+        
+        // Test direct API call
+        debugInfo.push('\nTesting direct PATCH call to approve tenant...')
+        try {
+          const token = localStorage.getItem('auth_token')
+          debugInfo.push(`Auth token available: ${!!token}`)
+          
+          const response = await fetch(`/api/v1/superadmin/tenants/${tenantId}/approval`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              status: 'APPROVED'
+            })
+          })
+          
+          debugInfo.push(`API Response Status: ${response.status} ${response.statusText}`)
+          
+          if (response.ok) {
+            const responseData = await response.json()
+            debugInfo.push(`API Response Data: ${JSON.stringify(responseData, null, 2)}`)
+            debugInfo.push('\nSUCCESS: Direct API call worked! The backend endpoint is functional.')
+            toast.success('Test API call successful!')
+            
+            // Refresh the tenant list and counts
+            await refreshData()
+          } else {
+            const errorText = await response.text()
+            debugInfo.push(`Error response: ${errorText}`)
+          }
+        } catch (error) {
+          debugInfo.push(`API Error: ${error.message}`)
+        }
+        
+        apiDebugInfo.value = debugInfo.join('\n')
+      } catch (error) {
+        apiDebugInfo.value = `Error running API test: ${error.message}`
+      }
+    }
+    
+    // UPDATED: Refresh counts after approval
+    const handleApprove = async (tenant) => {
+      if (!tenant) {
+        toast.error('Cannot approve: Missing tenant');
+        return;
+      }
+      
+      // Use lowercase id first, fall back to uppercase ID
+      const tenantId = tenant.id || tenant.ID;
+      
+      if (!tenantId) {
+        toast.error('Cannot approve: Missing tenant ID');
+        return;
+      }
+      
+      isProcessing.value = true;
+      console.log(`Attempting to approve tenant ${tenantId} with PATCH to /api/v1/superadmin/tenants/${tenantId}/approval`);
+      
+      try {
+        // Make a direct API call to the approval endpoint
+        const response = await fetch(`/api/v1/superadmin/tenants/${tenantId}/approval`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          },
+          body: JSON.stringify({
+            status: "APPROVED"
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Approval successful:', data);
+          toast.success(`Tenant ${getTenantName(tenant)} approved successfully`);
+          
+          // Refresh both tenant list and counts
+          await refreshData();
+          emit('updated');
+        } else {
+          console.error('Approval failed with status:', response.status);
+          const errorData = await response.text();
+          console.error('Error response:', errorData);
+          toast.error(`Failed to approve tenant: ${response.statusText}`);
+        }
+      } catch (error) {
+        console.error('Error in approval process:', error);
+        toast.error('Error approving tenant: ' + (error.message || 'Unknown error'));
+      } finally {
+        isProcessing.value = false;
+      }
+    };
+    
+    // Updated to use id instead of ID
+    const handleRejectClick = (tenant) => {
+      if (!tenant) {
+        toast.error('Cannot reject: Missing tenant');
+        return;
+      }
+      
+      // Use lowercase id first, fall back to uppercase ID
+      const tenantId = tenant.id || tenant.ID;
+      
+      if (!tenantId) {
+        toast.error('Cannot reject: Missing tenant ID');
+        return;
+      }
+      
+      selectedTenant.value = tenant;
+      rejectReason.value = '';
+      showRejectModal.value = true;
+    };
+    
+    // UPDATED: Refresh counts after rejection
+    const confirmReject = async () => {
+      const tenant = selectedTenant.value;
+      
+      if (!tenant) {
+        toast.error('Cannot reject: Missing tenant');
+        showRejectModal.value = false;
+        return;
+      }
+      
+      // Use lowercase id first, fall back to uppercase ID
+      const tenantId = tenant.id || tenant.ID;
+      
+      if (!tenantId) {
+        toast.error('Cannot reject: Missing tenant ID');
+        showRejectModal.value = false;
+        return;
+      }
+      
+      if (!rejectReason.value.trim()) {
+        toast.warning('Please provide a rejection reason');
+        return;
+      }
+      
+      isProcessing.value = true;
+      
+      try {
+        // Make a direct API call to the rejection endpoint
+        const response = await fetch(`/api/v1/superadmin/tenants/${tenantId}/approval`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          },
+          body: JSON.stringify({
+            status: "REJECTED",
+            reason: rejectReason.value
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Rejection successful:', data);
+          toast.success(`Tenant ${getTenantName(tenant)} rejected successfully`);
+          showRejectModal.value = false;
+          
+          // Refresh both tenant list and counts
+          await refreshData();
+          emit('updated');
+        } else {
+          console.error('Rejection failed with status:', response.status);
+          const errorData = await response.text();
+          console.error('Error response:', errorData);
+          toast.error(`Failed to reject tenant: ${response.statusText}`);
+        }
+      } catch (error) {
+        console.error('Error in rejection process:', error);
+        toast.error('Error rejecting tenant: ' + (error.message || 'Unknown error'));
+      } finally {
+        isProcessing.value = false;
+      }
+    };
+    
+    // Load data on mount
+    onMounted(async () => {
+      // Load both tenant data and counts
+      await Promise.all([
+        loadTenants(),
+        loadTenantCounts()
+      ])
+    })
+    
+    return {
+      loading,
+      tenants,
+      allTenants,
+      tenantCounts, // NEW: Expose tenant counts
+      loadingCounts, // NEW: Expose loading state for counts
       statusFilter,
-      dateFilter,
       currentPage,
       itemsPerPage,
-      approvalModal,
-      rejectionModal,
-      
-      // Computed properties
       filteredTenants,
       paginatedTenants,
       totalPages,
-      visiblePages,
-      
-      // Methods
+      paginationStart,
+      paginationEnd,
+      displayedPageNumbers,
       getStatusBadgeClass,
       formatDate,
-      clearFilters,
-      refreshData,
-      openApprovalModal,
-      closeApprovalModal,
-      openRejectionModal,
-      closeRejectionModal,
-      approveTenant,
-      rejectTenant,
-      viewDocument,
-      viewTenantDetails,
-      debugTenantData
+      loadTenants,
+      loadTenantCounts, // NEW: Expose method to load counts
+      loadAllTenants,
+      refreshData, // UPDATED: Now refreshes both data and counts
+      handleApprove,
+      handleRejectClick,
+      getTenantName,
+      getTenantEmail,
+      getTenantInitial,
+      goToPage,
+      isStatusPending,
+      isStatusApproved,
+      isStatusRejected,
+      applyFilters,
+      isProcessing,
+      showRejectModal,
+      selectedTenant,
+      rejectReason,
+      confirmReject,
+      // Debug & Mock data
+      debugMode,
+      debugTenantData,
+      testApprovalApi,
+      showApiDebugModal,
+      apiDebugInfo
     }
   }
 }
 </script>
-
-<style scoped>
-/* Custom font classes */
-.font-roboto {
-  font-family: 'Roboto', sans-serif;
-}
-
-/* Custom scrollbar for better UX */
-::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 6px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 6px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-
-/* Smooth transitions for all interactive elements */
-* {
-  transition: all 0.2s ease-in-out;
-}
-
-/* Enhanced focus states for accessibility */
-button:focus,
-input:focus,
-select:focus,
-textarea:focus {
-  outline: 2px solid #6366f1;
-  outline-offset: 2px;
-}
-
-/* Loading animation */
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
-
-/* Card hover effects */
-.bg-white:hover {
-  transform: translateY(-2px);
-}
-
-/* Button loading state */
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-/* Modal backdrop blur effect */
-.fixed.inset-0.bg-gray-500 {
-  backdrop-filter: blur(4px);
-}
-
-/* Status badge pulse animation for pending items */
-.bg-yellow-100 {
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.8;
-  }
-}
-
-/* Responsive grid adjustments */
-@media (max-width: 640px) {
-  .grid-cols-1 {
-    gap: 1rem;
-  }
-}
-
-/* Enhanced spacing for mobile */
-@media (max-width: 768px) {
-  .p-6 {
-    padding: 1rem;
-  }
-  
-  .px-6 {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-}
-
-/* Print styles */
-@media print {
-  .no-print,
-  button,
-  .fixed {
-    display: none !important;
-  }
-  
-  .bg-white {
-    box-shadow: none !important;
-  }
-}
-</style>

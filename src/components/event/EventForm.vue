@@ -216,26 +216,84 @@ onMounted(() => {
     let eventDate = '';
     let eventTime = '';
     
- if (props.event.eventDate) {
-  try {
-    const date = new Date(props.event.eventDate);
-    if (!isNaN(date.getTime())) {
-      eventDate = date.toISOString().split('T')[0];
-      eventTime = date.toTimeString().slice(0, 5);
+    // FIX 1: Better event type handling
+    let eventType = '';
+    if (props.event.event_type) {
+      eventType = props.event.event_type;
+    } else if (props.event.type) {
+      eventType = props.event.type;
+    } else if (props.event.eventType) {
+      eventType = props.event.eventType;
     }
-  } catch (e) {
-    console.warn('Invalid eventDate format:', props.event.eventDate, e);
-  }
-}
+    
+    // Make sure event type matches one of our dropdown options
+    const validTypes = ['festival', 'ceremony', 'spiritual', 'cultural', 'community', 'special'];
+    if (!validTypes.includes(eventType.toLowerCase())) {
+      // If it's not a valid type, we'll set it to an empty string (which will show "Select Event Type")
+      eventType = '';
+    }
+    
+    // FIX 2: Better time handling
+    if (props.event.eventDate) {
+      try {
+        const date = new Date(props.event.eventDate);
+        if (!isNaN(date.getTime())) {
+          eventDate = date.toISOString().split('T')[0];
+          
+          // Get hours and minutes directly from the date object
+          const hours = String(date.getHours()).padStart(2, '0');
+          const minutes = String(date.getMinutes()).padStart(2, '0');
+          eventTime = `${hours}:${minutes}`;
+        }
+      } catch (e) {
+        console.warn('Invalid eventDate format:', props.event.eventDate, e);
+      }
+    }
 
-if (!eventDate && props.event.event_date) {
-  eventDate = props.event.event_date;
-}
+    // Additional fallbacks for date and time
+    if (!eventDate && props.event.event_date) {
+      eventDate = props.event.event_date;
+    }
 
-if (!eventTime) {
-  eventTime = props.event.event_time || '00:00';
-}
-
+    // FIX 3: More specific time handling
+    if (!eventTime && props.event.event_time) {
+      // Try to handle event_time which might be a string or a Date object
+      if (typeof props.event.event_time === 'string') {
+        // If it's a string like "15:30", use it directly
+        if (/^\d{2}:\d{2}$/.test(props.event.event_time)) {
+          eventTime = props.event.event_time;
+        } else {
+          // If it's an ISO string or other date format
+          try {
+            const timeDate = new Date(props.event.event_time);
+            if (!isNaN(timeDate.getTime())) {
+              const hours = String(timeDate.getHours()).padStart(2, '0');
+              const minutes = String(timeDate.getMinutes()).padStart(2, '0');
+              eventTime = `${hours}:${minutes}`;
+            }
+          } catch (e) {
+            console.warn('Could not parse event_time as date:', props.event.event_time);
+          }
+        }
+      } else {
+        // It might be a Date object directly
+        try {
+          const timeDate = new Date(props.event.event_time);
+          if (!isNaN(timeDate.getTime())) {
+            const hours = String(timeDate.getHours()).padStart(2, '0');
+            const minutes = String(timeDate.getMinutes()).padStart(2, '0');
+            eventTime = `${hours}:${minutes}`;
+          }
+        } catch (e) {
+          console.warn('Invalid event_time object:', props.event.event_time);
+        }
+      }
+    }
+    
+    // Final fallback for time
+    if (!eventTime) {
+      eventTime = '18:00'; // Default to 6 PM if no time found
+    }
     
     const isActive = props.event.isActive !== undefined ? props.event.isActive : 
                      props.event.is_active !== undefined ? props.event.is_active : true;
@@ -249,7 +307,7 @@ if (!eventTime) {
     
     Object.assign(form, {
       title: props.event.title || '',
-      type: props.event.type || props.event.event_type || props.event.eventType || '',
+      type: eventType.toLowerCase(), // FIX: Ensure lowercase to match options
       status: status,
       date: eventDate,
       time: eventTime,

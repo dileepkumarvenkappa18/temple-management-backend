@@ -62,9 +62,9 @@
                 class="px-4 py-3 border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-indigo-800 min-w-[140px] appearance-none"
               >
                 <option value="">All Types</option>
-                <option value="Traditional">Traditional</option>
-                <option value="Modern">Modern</option>
-                <option value="Heritage">Heritage</option>
+                <option value="traditional">Traditional</option>
+                <option value="modern">Modern</option>
+                <option value="heritage">Heritage</option>
               </select>
             </div>
           </div>

@@ -226,7 +226,7 @@
               <option value="general">General Donation</option>
               <option value="seva">Seva Donation</option>
               <option value="festival">Festival Donation</option>
-              <option value="construction">Construction Fund</option>
+              <option value="event">Event Donation</option>
             </select>
           </div>
 
@@ -275,6 +275,18 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import api from '@/plugins/axios';
+import axios from 'axios'
+
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
 
 // Reactive data
 const showDonationForm = ref(false)
@@ -408,58 +420,77 @@ const downloadReport = () => {
   console.log('Downloading donation report')
 }
 
-const submitDonation = () => {
-  // Implement donation submission logic
-  console.log('Submitting donation:', donationForm.value)
-  showDonationForm.value = false
-  // Reset form
-  donationForm.value = {
-    type: '',
-    amount: '',
-    purpose: ''
+const submitDonation = async () => {
+  try {
+    const scriptLoaded = await loadRazorpayScript();
+    if (!scriptLoaded) {
+      alert("Razorpay SDK failed to load. Please check your internet.");
+      return;
+    }
+
+    const entityId = localStorage.getItem("current_entity_id");
+
+    const response = await api.post("/v1/donations", {
+      amount: donationForm.value.amount,
+      donation_type: donationForm.value.type,
+      note: donationForm.value.purpose,
+    });
+
+    const { order_id, razorpay_key, amount } = response.data;
+
+    const options = {
+      key: razorpay_key,
+      amount: amount * 100, // 💰 Razorpay expects paise
+      currency: "INR",
+      name: "Temple Donation",
+      description: "Thank you for your generosity!",
+      order_id: order_id,
+      handler: async function (response) {
+        try {
+          await api.post("/v1/donations/verify", {
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_signature: response.razorpay_signature,
+          });
+
+          alert("🎉 Donation successful!");
+          showDonationForm.value = false;
+          fetchDonationHistory();
+        } catch (verifyError) {
+          console.error("❌ Verification failed:", verifyError);
+          alert("Payment verification failed. Please contact support.");
+        }
+      },
+      prefill: {
+        name: localStorage.getItem("user_name") || "Donor",
+        email: localStorage.getItem("user_email") || "donor@example.com",
+      },
+      theme: {
+        color: "#6366f1",
+      },
+    };
+
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+  } catch (error) {
+    console.error("❌ Donation Flow Error:", error.response || error.message || error);
+    alert("Something went wrong: " + (error.response?.data?.error || error.message));
   }
-}
+};
+
+
 
 const fetchDonationHistory = async () => {
   try {
     loading.value = true
-    // Mock data - replace with actual API call
-    donationHistory.value = [
-      {
-        id: 1,
-        date: '2024-12-15',
-        type: 'general',
-        amount: 1000,
-        purpose: 'Monthly donation',
-        status: 'completed'
-      },
-      {
-        id: 2,
-        date: '2024-12-01',
-        type: 'seva',
-        amount: 500,
-        purpose: 'Abhisheka seva',
-        status: 'completed'
-      },
-      {
-        id: 3,
-        date: '2024-11-20',
-        type: 'festival',
-        amount: 2000,
-        purpose: 'Diwali celebration',
-        status: 'completed'
-      },
-      {
-        id: 4,
-        date: '2024-11-10',
-        type: 'construction',
-        amount: 5000,
-        purpose: 'Temple renovation fund',
-        status: 'completed'
-      }
-    ]
+
+    const entityId = localStorage.getItem('current_entity_id')
+    const response = await api.get('v1/donations/my')
+
+    donationHistory.value = response.data.data || [] // Adjust depending on your API structure
   } catch (error) {
     console.error('Error fetching donation history:', error)
+    donationHistory.value = []
   } finally {
     loading.value = false
   }

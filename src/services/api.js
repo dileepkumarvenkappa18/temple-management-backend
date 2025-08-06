@@ -29,7 +29,7 @@ axiosInstance.interceptors.request.use(
   (config) => {
     console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`)
 
-    let token = localStorage.getItem('auth_token')
+    let token = localStorage.getItem('access_token')
 
     if (!token) {
       try {
@@ -298,7 +298,7 @@ export const endpoints = {
     sevas: `/api/v1/entities/${entityId}/sevas`,
     seva: (sevaId) => `/api/v1/entities/${entityId}/sevas/${sevaId}`,
     donations: `/api/v1/entities/${entityId}/donations`,
-    donation: (donationId) => `/api/v1/entities/${entityId}/donations/${donationId}`,
+    donation: (donationId) => `/api/v1/entity/${entityId}/donations/${donationId}`,
     events: `/api/v1/entities/${entityId}/events`,
     event: (eventId) => `/api/v1/entities/${entityId}/events/${eventId}`,
     volunteers: `/api/v1/entities/${entityId}/volunteers`,
@@ -309,6 +309,10 @@ export const endpoints = {
     reports: `/api/v1/entities/${entityId}/reports`,
     settings: `/api/v1/entities/${entityId}/settings`
   }),
+
+  donations: {
+    my: '/api/v1/donations/my',
+  },
 
   // ✅ Updated: Use Devotee-accessible endpoint for temple listings
   public: {

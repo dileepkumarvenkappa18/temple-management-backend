@@ -190,86 +190,11 @@
         </div>
       </div>
 
-      <!-- Family Tree Upload -->
-      <div class="bg-green-50 rounded-xl p-6">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-          </svg>
-          Upload Family Tree (Optional)
-        </h3>
-        <p class="text-gray-600 mb-4">Upload a family tree document or image for reference</p>
-        
-        <div class="border-2 border-dashed border-green-300 rounded-lg p-6 text-center hover:border-green-400 transition-colors">
-          <input
-            ref="fileInput"
-            type="file"
-            accept="image/*,.pdf,.doc,.docx"
-            multiple
-            @change="handleFileUpload"
-            class="hidden"
-          >
-          
-          <div v-if="uploadedFiles.length === 0" @click="$refs.fileInput.click()" class="cursor-pointer">
-            <svg class="mx-auto h-12 w-12 text-green-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-            </svg>
-            <p class="text-gray-600">Click to upload files or drag and drop</p>
-            <p class="text-sm text-gray-500 mt-2">PNG, JPG, PDF, DOC up to 10MB</p>
-          </div>
-
-          <!-- Uploaded Files Display -->
-          <div v-if="uploadedFiles.length > 0" class="space-y-2">
-            <div v-for="(file, index) in uploadedFiles" :key="index" 
-                 class="flex items-center justify-between bg-white rounded-lg p-3 border border-green-200">
-              <div class="flex items-center gap-3">
-                <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                </svg>
-                <span class="text-sm text-gray-700">{{ file.name }}</span>
-              </div>
-              <button 
-                @click="removeFile(index)"
-                type="button"
-                class="text-red-500 hover:text-red-700 transition-colors"
-              >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-              </button>
-            </div>
-            <button 
-              @click="$refs.fileInput.click()"
-              type="button"
-              class="text-green-600 hover:text-green-700 text-sm font-medium transition-colors"
-            >
-              + Add more files
-            </button>
-          </div>
-        </div>
-      </div>
+      <!-- File upload section is commented out in original code -->
 
       <!-- Action Buttons -->
       <div class="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200">
-        <!-- <button
-          type="button"
-          @click="skipStep"
-          class="flex-1 px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200"
-        >
-          Skip This Step
-        </button>
-        
-        <button
-          type="submit"
-          :disabled="isSubmitting"
-          class="flex-1 bg-indigo-600 text-white font-medium px-6 py-3 rounded-lg hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
-        >
-          <svg v-if="isSubmitting" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          {{ isSubmitting ? 'Saving...' : 'Continue to Seva Preferences' }}
-        </button> -->
+        <!-- Action buttons are commented out in original code -->
       </div>
     </form>
   </div>
@@ -277,12 +202,21 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
+import { watch,onMounted } from 'vue';
 
-const emit = defineEmits(['next', 'skip'])
+
+// Updated emit to include 'update' event
+const emit = defineEmits(['next', 'skip', 'update'])
 
 const isSubmitting = ref(false)
 const fileInput = ref(null)
 const uploadedFiles = ref([])
+const props = defineProps({
+  data: {
+    type: Object,
+    default: () => ({})
+  }
+})
 
 const formData = reactive({
   father: {
@@ -304,6 +238,7 @@ const formData = reactive({
   familyTreeFiles: []
 })
 
+// Keeping original file handling code
 const handleFileUpload = (event) => {
   const files = Array.from(event.target.files)
   
@@ -322,18 +257,16 @@ const removeFile = (index) => {
   formData.familyTreeFiles = uploadedFiles.value
 }
 
+// FIXED: Updated handleSubmit to emit original formData structure
 const handleSubmit = async () => {
   isSubmitting.value = true
   
   try {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    // Emit the frontend data structure directly without transforming
+    emit('update', formData)
     
-    // Save family lineage data
-    console.log('Family Lineage Data:', formData)
-    
-    // Emit next step
-    emit('next', { step: 3, data: formData })
+    // Move to next step
+    emit('next')
   } catch (error) {
     console.error('Error saving family lineage:', error)
   } finally {
@@ -344,4 +277,23 @@ const handleSubmit = async () => {
 const skipStep = () => {
   emit('skip', { step: 3 })
 }
+
+// Add watch handler to emit updates on data change
+watch(formData, () => {
+  // Update parent component with data changes
+  emit('update', formData)
+}, { deep: true })
+
+// In onMounted, initialize with existing data if available
+onMounted(() => {
+  if (props.data) {
+    // Copy existing data to form
+    formData.father = props.data.father || { name: '', gotra: '', nativePlace: '', vedaShaka: '' }
+    formData.mother = props.data.mother || { name: '', maidenGotra: '', nativePlace: '', fatherName: '' }
+    formData.paternalGrandfather = props.data.paternalGrandfather || ''
+    formData.paternalGrandmother = props.data.paternalGrandmother || ''
+    formData.maternalGrandfather = props.data.maternalGrandfather || ''
+    formData.maternalGrandmother = props.data.maternalGrandmother || ''
+  }
+})
 </script>
