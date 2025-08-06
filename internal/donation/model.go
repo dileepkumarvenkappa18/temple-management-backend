@@ -6,83 +6,49 @@ import (
 	"gorm.io/gorm"
 )
 
-// ========================
-// 📊 Dashboard Response Struct
-// ========================
-// This struct is used only for returning aggregated donation data to the frontend.
-// GORM will ignore the `RecentDonors` field since it's not a DB column.
-type DonationDashboardResponse struct {
-	TotalDonations  float64 `json:"total_donations"`
-	TotalCount      int     `json:"total_count"`
-	TotalDonors     int     `json:"total_donors"`
-	AverageDonation float64 `json:"average_donation"`
-	ThisMonth       float64 `json:"this_month"`
-	RecentDonors    []Donor `json:"recent_donors" gorm:"-"` // Ignored by GORM
-}
-
-
-// ========================
-// 💡 Constants
-// ========================
-
+// DonationStatus represents valid payment states
 const (
-	// Donation statuses
 	StatusPending = "PENDING"
 	StatusSuccess = "SUCCESS"
 	StatusFailed  = "FAILED"
+)
 
-	// Payment methods
+// DonationMethod types (optional use, useful for validations/stats)
+const (
 	MethodUPI        = "UPI"
 	MethodCard       = "CARD"
 	MethodNetbanking = "NETBANKING"
 	MethodWallet     = "WALLET"
-	MethodCash       = "CASH"
-	MethodCheque     = "CHEQUE"
+)
 
-	// Donation types
+// DonationType values — for clarity in filtering/analytics
+const (
 	TypeGeneral  = "general"
 	TypeSeva     = "seva"
 	TypeEvent    = "event"
 	TypeFestival = "festival"
 )
 
-// ========================
-// 🧾 Donor Summary Struct (used in response only)
-// ========================
-
-type Donor struct {
-	Name   string    `json:"name"`
-	Email  string    `json:"email"`
-	Amount float64   `json:"amount"`
-	Date   time.Time `json:"date"`
-	Method string    `json:"method"`
-	Status string    `json:"status"`
-}
-
-// ========================
-// 💳 Donation Table Model
-// ========================
-
+// Donation represents a donation transaction via Razorpay
 type Donation struct {
 	ID uint `gorm:"primaryKey" json:"id"`
 
-	UserID   uint `gorm:"not null;index" json:"user_id"`   // Donor's user ID
-	EntityID uint `gorm:"not null;index" json:"entity_id"` // Temple or entity ID
+	UserID   uint `gorm:"not null;index" json:"user_id"`     // Devotee who donated
+	EntityID uint `gorm:"not null;index" json:"entity_id"`   // Temple ID
 
-	Amount       float64 `gorm:"type:decimal(10,2);not null" json:"amount"`
-	DonationType string  `gorm:"size:50;index" json:"donation_type"`
-	ReferenceID  string  `gorm:"index" json:"reference_id,omitempty"`
+	Amount       float64 `gorm:"type:decimal(10,2);not null" json:"amount"`     // Amount in INR (₹)
+	DonationType string  `gorm:"size:50;index" json:"donation_type"`            // general, seva, event, etc.
+	ReferenceID  *uint   `gorm:"index" json:"reference_id,omitempty"`           // Links to seva/event ID if needed
 
-	Method string `gorm:"size:50;not null;index" json:"method"`
-	Status string `gorm:"size:20;default:'PENDING';index" json:"status"`
+	Method string `gorm:"size:50;not null;index" json:"method"`                 // Razorpay method used (UPI, CARD, etc.)
+	Status string `gorm:"size:20;default:'PENDING';index" json:"status"`        // PENDING, SUCCESS, FAILED
 
-	OrderID   string  `gorm:"size:100;uniqueIndex" json:"order_id"`
-	PaymentID *string `gorm:"size:100;index" json:"payment_id,omitempty"`
+	OrderID   string  `gorm:"size:100;uniqueIndex" json:"order_id"`            // Razorpay Order ID
+	PaymentID *string `gorm:"size:100;index" json:"payment_id,omitempty"`      // Razorpay Payment ID (only if success)
 
-	ReceiptURL *string `gorm:"type:text" json:"receipt_url,omitempty"`
-	Note       *string `gorm:"type:text" json:"note,omitempty"`
+	Note *string `gorm:"type:text" json:"note,omitempty"`                       // Optional donor message/intention
 
-	DonatedAt *time.Time     `json:"donated_at,omitempty"` // Set when status is success
+	DonatedAt *time.Time     `json:"donated_at,omitempty"`                      // Set only on successful payment
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`

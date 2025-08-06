@@ -27,6 +27,8 @@ type Repository interface {
 	GetTempleByID(entityID uint) (*entity.Entity, error)
 	GetFullTempleByID(entityID uint) (*entity.Entity, error)
 	FetchRecentTemples() ([]entity.Entity, error)
+	UpdateMembershipStatus(userID uint, entityID uint, status string) error
+
 
 }
 
@@ -43,20 +45,75 @@ func NewRepository(db *gorm.DB) Repository {
 // ==============================
 
 func (r *repository) Create(profile *DevoteeProfile) error {
-	return r.db.Create(profile).Error
+	err := r.db.Create(profile).Error
+	if err != nil {
+		return err
+	}
+
+	// Save Children
+	for _, child := range profile.Children {
+		child.ProfileID = profile.ID
+		if err := r.db.Create(child).Error; err != nil {
+			return err
+		}
+	}
+
+	// Save Emergency Contacts
+	for _, contact := range profile.EmergencyContacts {
+		contact.ProfileID = profile.ID
+		if err := r.db.Create(contact).Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
+
 
 func (r *repository) GetByUserID(userID uint) (*DevoteeProfile, error) {
 	var profile DevoteeProfile
-	if err := r.db.Where("user_id = ?", userID).First(&profile).Error; err != nil {
+	if err := r.db.Preload("Children").Preload("EmergencyContacts").
+		Where("user_id = ?", userID).First(&profile).Error; err != nil {
 		return nil, err
 	}
 	return &profile, nil
 }
 
+
 func (r *repository) Update(profile *DevoteeProfile) error {
-	return r.db.Save(profile).Error
+	// Start a transaction to keep things consistent
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		// Save base profile
+		if err := tx.Save(profile).Error; err != nil {
+			return err
+		}
+
+		// Clear old children and re-insert
+		if err := tx.Where("profile_id = ?", profile.ID).Delete(&Child{}).Error; err != nil {
+			return err
+		}
+		for _, child := range profile.Children {
+			child.ProfileID = profile.ID
+			if err := tx.Create(child).Error; err != nil {
+				return err
+			}
+		}
+
+		// Clear old emergency contacts and re-insert
+		if err := tx.Where("profile_id = ?", profile.ID).Delete(&EmergencyContact{}).Error; err != nil {
+			return err
+		}
+		for _, contact := range profile.EmergencyContacts {
+			contact.ProfileID = profile.ID
+			if err := tx.Create(contact).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
+
 
 // ==============================
 // 🔹 Membership Operations
@@ -158,4 +215,11 @@ func (r *repository) FetchRecentTemples() ([]entity.Entity, error) {
 		Find(&temples).Error
 	return temples, err
 }
+
+func (r *repository) UpdateMembershipStatus(userID uint, entityID uint, status string) error {
+	return r.db.Model(&UserEntityMembership{}).
+		Where("user_id = ? AND entity_id = ?", userID, entityID).
+		Update("status", status).Error
+}
+
 

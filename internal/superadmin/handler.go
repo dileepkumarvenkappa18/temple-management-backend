@@ -166,15 +166,30 @@ func (h *Handler) UpdateEntityApprovalStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Entity status updated successfully"})
 }
 
-// =========================== DASHBOARD METRICS ===========================
 
-// GET /superadmin/dashboard
-func (h *Handler) GetDashboardMetrics(c *gin.Context) {
-	metrics, err := h.service.GetDashboardMetrics(c.Request.Context())
+// GET /superadmin/tenant-approval-counts
+func (h *Handler) GetTenantApprovalCounts(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	counts, err := h.service.GetTenantApprovalCounts(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch dashboard metrics"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tenant approval counts"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": metrics})
+	c.JSON(http.StatusOK, counts)
+}
+
+
+// GET /superadmin/temple-approval-counts
+func (h *Handler) GetTempleApprovalCounts(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	counts, err := h.service.GetTempleApprovalCounts(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch temple approval counts"})
+		return
+	}
+
+	c.JSON(http.StatusOK, counts)
 }

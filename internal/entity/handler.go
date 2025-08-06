@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auth"
+	// "github.com/sharath018/temple-management-backend/utils"
 )
 
 type Handler struct {
@@ -29,11 +30,13 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 		return
 	}
 
+	// Validate required dropdown fields
 	if input.TempleType == "" || input.State == "" || input.EstablishedYear == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Temple Type, State, and Established Year are required"})
 		return
 	}
 
+	// Get authenticated user
 	user, exists := c.Get("user")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -55,30 +58,30 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"message": "Temple registration request submitted successfully"})
 }
 
-// Super Admin → View all temples
-// Temple Admin → View only temples they created
+// Super Admin → View all temples, Temple Admin → View only their created temples
 func (h *Handler) GetAllEntities(c *gin.Context) {
-	userData, exists := c.Get("user")
+	// Get authenticated user
+	userVal, exists := c.Get("user")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-
-	user, ok := userData.(auth.User)
+	
+	user, ok := userVal.(auth.User)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user object"})
 		return
 	}
 
-	var (
-		entities []Entity
-		err      error
-	)
+	var entities []Entity
+	var err error
 
-	switch user.Role.RoleName {
-	case "superadmin":
+	// Check user role - if super admin, get all entities; if temple admin, get only their created entities
+	// TODO: Replace "Role.RoleName" with the correct field from your auth.User struct
+	if user.Role.RoleName == "superadmin" {
 		entities, err = h.Service.GetAllEntities()
-	default:
+	} else {
+		// For temple admin or other roles, get only entities created by them
 		entities, err = h.Service.GetEntitiesByCreator(user.ID)
 	}
 
@@ -86,13 +89,8 @@ func (h *Handler) GetAllEntities(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch temples", "details": err.Error()})
 		return
 	}
-
+	
 	c.JSON(http.StatusOK, entities)
-}
-
-// Alias for route compatibility
-func (h *Handler) GetAllEntitiesByUser(c *gin.Context) {
-	h.GetAllEntities(c)
 }
 
 // Anyone → View a specific temple by ID
@@ -108,7 +106,6 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Temple not found", "details": err.Error()})
 		return
 	}
-
 	c.JSON(http.StatusOK, entity)
 }
 
@@ -156,38 +153,118 @@ func (h *Handler) DeleteEntity(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Temple deleted successfully"})
 }
 
-// Entity Dashboard → Summary (donation count, seva count, etc.)
-func (h *Handler) GetEntityDashboard(c *gin.Context) {
-	entityID, err := strconv.Atoi(c.Param("id"))
+// Temple Admin → Get devotees by entity
+func (h *Handler) GetDevoteesByEntity(c *gin.Context) {
+	entityIDParam := c.Param("id")
+	entityIDUint, err := strconv.ParseUint(entityIDParam, 10, 64)
+
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entity ID"})
 		return
 	}
 
-	dashboard, err := h.Service.GetEntityDashboard(uint(entityID))
-	if err != nil {
-		log.Printf("Dashboard Error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch dashboard", "details": err.Error()})
+	// ✅ Get authenticated user from context
+	userVal, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized or missing user"})
+		return
+	}
+	user, ok := userVal.(auth.User)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user object"})
 		return
 	}
 
-	c.JSON(http.StatusOK, dashboard)
+	// ✅ Check if the entity ID matches the user's entity (or your permission rules)
+	if user.EntityID == nil || *user.EntityID != uint(entityIDUint) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized or missing entity"})
+		return
+	}
+
+	// ✅ Fetch devotees for the given entity
+	devotees, err := h.Service.GetDevotees(uint(entityIDUint))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch devotees"})
+		return
+	}
+
+	c.JSON(http.StatusOK, devotees)
 }
 
-// Anyone → Get top donors by temple ID
-func (h *Handler) GetTopDonors(c *gin.Context) {
-	entityID, err := strconv.Atoi(c.Param("id"))
+// Temple Admin → Get devotee statistics for entity
+func (h *Handler) GetDevoteeStats(c *gin.Context) {
+	entityIDStr := c.Param("id")
+	entityID, err := strconv.Atoi(entityIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid temple ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entity ID"})
 		return
 	}
 
-	donors, err := h.Service.GetTopDonors(c.Request.Context(), uint(entityID))
+	stats, err := h.Service.GetDevoteeStats(uint(entityID))
 	if err != nil {
-		log.Printf("Top Donors Error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch top donors", "details": err.Error()})
+		log.Printf("Error fetching devotee stats: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch devotee stats"})
 		return
 	}
 
-	c.JSON(http.StatusOK, donors)
+	c.JSON(http.StatusOK, stats)
+}
+
+// Temple Admin → Update devotee membership status
+// PATCH /entities/:entityID/devotees/:userID/status
+func (h *Handler) UpdateDevoteeMembershipStatus(c *gin.Context) {
+	entityID, err := strconv.ParseUint(c.Param("entityID"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entity ID"})
+		return
+	}
+
+	userID, err := strconv.ParseUint(c.Param("userID"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	var req struct {
+	Status string `json:"status" binding:"required,oneof=active inactive"`
+}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err = h.Service.MembershipService.UpdateMembershipStatus(uint(userID), uint(entityID), req.Status)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not update status"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Membership status updated successfully"})
+}
+
+// Temple Admin → Dashboard Summary
+// GET /entities/dashboard-summary
+func (h *Handler) GetDashboardSummary(c *gin.Context) {
+	// Extract the authenticated user
+	userVal, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	user, ok := userVal.(auth.User)
+	if !ok || user.EntityID == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing or invalid entity"})
+		return
+	}
+
+	// Call service
+	summary, err := h.Service.GetDashboardSummary(*user.EntityID)
+	if err != nil {
+		log.Printf("Dashboard Summary Error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch dashboard summary"})
+		return
+	}
+
+	c.JSON(http.StatusOK, summary)
 }

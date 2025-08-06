@@ -81,10 +81,10 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		superadminRoutes.GET("/entities", superadminHandler.GetEntitiesWithFilters)
 		superadminRoutes.PATCH("/entities/:id/approval", superadminHandler.UpdateEntityApprovalStatus)
 
-		superadminRoutes.GET("/dashboard", superadminHandler.GetDashboardMetrics)
+		superadminRoutes.GET("/tenant-approval-count", superadminHandler.GetTenantApprovalCounts)
+		superadminRoutes.GET("/temple-approval-count", superadminHandler.GetTempleApprovalCounts)
 	}
 
-	// ========== Seva ==========
 	// ========== Seva ==========
 	sevaRepo := seva.NewRepository(database.DB)
 	sevaService := seva.NewService(sevaRepo)
@@ -109,8 +109,10 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	// ========== Entity ==========
 	{
 		entityRepo := entity.NewRepository(database.DB)
-		donationRepo := donation.NewRepository(database.DB)
-		entityService := entity.NewService(entityRepo, donationRepo)
+		// donationRepo := donation.NewRepository(database.DB)
+		profileRepo := userprofile.NewRepository(database.DB)
+		profileService := userprofile.NewService(profileRepo, authRepo)
+		entityService := entity.NewService(entityRepo, profileService)
 		entityHandler := entity.NewHandler(entityService)
 
 		entityRoutes := protected.Group("/entities")
@@ -119,8 +121,12 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		entityRoutes.GET("/:id", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.GetEntityByID)
 		entityRoutes.PUT("/:id", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.UpdateEntity)
 		entityRoutes.DELETE("/:id", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.DeleteEntity)
-		entityRoutes.GET("/:id/dashboard", middleware.RBACMiddleware("templeadmin"), entityHandler.GetEntityDashboard)
-		entityRoutes.GET("/:id/top-donors", middleware.RBACMiddleware("templeadmin"), entityHandler.GetTopDonors)
+		entityRoutes.GET("/:id/devotees", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.GetDevoteesByEntity)
+		entityRoutes.GET("/:id/devotee-stats", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.GetDevoteeStats)
+		entityRoutes.PATCH("/:entityID/devotees/:userID/status", middleware.RBACMiddleware("templeadmin"), entityHandler.UpdateDevoteeMembershipStatus)
+
+		entityRoutes.GET("/dashboard-summary", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.GetDashboardSummary)
+
 
 	}
 
@@ -129,16 +135,21 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	eventService := event.NewService(eventRepo)
 	eventHandler := event.NewHandler(eventService)
 
+	// Templeadmin-only routes (write operations)
 	eventRoutes := protected.Group("/events", middleware.RBACMiddleware("templeadmin"))
-	eventRoutes.POST("/", eventHandler.CreateEvent)
-	eventRoutes.POST("", eventHandler.CreateEvent)
-	eventRoutes.GET("/", eventHandler.ListEvents)
-	eventRoutes.GET("", eventHandler.ListEvents)
-	eventRoutes.GET("/upcoming", eventHandler.GetUpcomingEvents)
-	eventRoutes.GET("/:id", eventHandler.GetEventByID)
-	eventRoutes.GET("/stats", eventHandler.GetEventStats)
-	eventRoutes.PUT("/:id", eventHandler.UpdateEvent)
-	eventRoutes.DELETE("/:id", eventHandler.DeleteEvent)
+	{
+		eventRoutes.POST("/", eventHandler.CreateEvent)
+		eventRoutes.POST("", eventHandler.CreateEvent)
+		eventRoutes.GET("/stats", eventHandler.GetEventStats)
+		eventRoutes.PUT("/:id", eventHandler.UpdateEvent)
+		eventRoutes.DELETE("/:id", eventHandler.DeleteEvent)
+	}
+
+	// Shared routes for templeadmin and devotee (read operations)
+	// protected.GET("/events", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.ListEvents)
+	protected.GET("/events/", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.ListEvents)
+	protected.GET("/events/:id", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.GetEventByID)
+	protected.GET("/events/upcoming", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.GetUpcomingEvents)
 
 	{
 		rsvpRepo := eventrsvp.NewRepository(database.DB)
@@ -192,11 +203,15 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 			donationRoutes.POST("/verify", middleware.RBACMiddleware("devotee"), donationHandler.VerifyDonation)
 			donationRoutes.GET("/my", middleware.RBACMiddleware("devotee"), donationHandler.GetMyDonations)
 
-			donationRoutes.GET("/dashboard", middleware.RBACMiddleware("templeadmin"), donationHandler.GetDonationDashboard)
-		   	donationRoutes.GET("/top", middleware.RBACMiddleware("templeadmin"), donationHandler.GetTopDonors)
-
 			// Temple Admin: View all donations for their entity
 			donationRoutes.GET("/", middleware.RBACMiddleware("templeadmin"), donationHandler.GetDonationsByEntity)
+			donationRoutes.GET("/dashboard", middleware.RBACMiddleware("templeadmin"), donationHandler.GetDashboard)
+			donationRoutes.GET("/top-donors", middleware.RBACMiddleware("templeadmin"), donationHandler.GetTopDonors)
+			donationRoutes.GET("/analytics", middleware.RBACMiddleware("templeadmin"), donationHandler.GetAnalytics)
+			donationRoutes.GET("/export", middleware.RBACMiddleware("templeadmin"), donationHandler.ExportDonations)
+
+			// Both can generate receipts
+			donationRoutes.GET("/:id/receipt", middleware.RBACMiddleware("devotee", "templeadmin"), donationHandler.GenerateReceipt)
 		}
 	}
 

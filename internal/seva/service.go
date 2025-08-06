@@ -3,6 +3,7 @@ package seva
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 type Service interface {
@@ -83,24 +84,21 @@ func (s *service) BookSeva(ctx context.Context, booking *SevaBooking, userRole s
 		return errors.New("unauthorized: only devotee can book sevas")
 	}
 
-	seva, err := s.repo.GetSevaByID(ctx, booking.SevaID)
+	// Validate Seva exists
+	_, err := s.repo.GetSevaByID(ctx, booking.SevaID)
 	if err != nil {
 		return err
-	}
-
-	timeSlot := booking.BookingTime.Format("15:04")
-	count, err := s.repo.CountBookingsForSlot(ctx, booking.SevaID, booking.BookingDate, timeSlot)
-	if err != nil {
-		return err
-	}
-	if int(count) >= seva.MaxBookingsPerDay {
-		return errors.New("booking limit reached for selected time slot")
 	}
 
 	booking.UserID = userID
 	booking.EntityID = entityID
+	booking.BookingTime = time.Now() // ✅ Fix: Set current time
+	booking.Status = "pending"
+
 	return s.repo.BookSeva(ctx, booking)
 }
+
+
 
 func (s *service) GetBookingsForUser(ctx context.Context, userID uint) ([]SevaBooking, error) {
 	return s.repo.ListBookingsByUserID(ctx, userID)

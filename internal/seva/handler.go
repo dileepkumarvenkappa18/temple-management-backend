@@ -31,16 +31,18 @@ type CreateSevaRequest struct {
 	MaxBookingsPerDay int       `json:"max_bookings_per_day"`
 }
 
-
-
 type BookSevaRequest struct {
-	SevaID          uint    `json:"seva_id" binding:"required"`
-	BookingDate     string  `json:"booking_date" binding:"required"` // format: YYYY-MM-DD
-	BookingTime     string  `json:"booking_time" binding:"required"` // format: HH:MM
-	SpecialRequests string  `json:"special_requests"`
-	AmountPaid      float64 `json:"amount_paid"`
-	PaymentStatus   string  `json:"payment_status"`
+	SevaID uint `json:"seva_id" binding:"required"`
 }
+
+// type BookSevaRequest struct {
+// 	SevaID          uint    `json:"seva_id" binding:"required"`
+// 	BookingDate     string  `json:"booking_date" binding:"required"` // format: YYYY-MM-DD
+// 	BookingTime     string  `json:"booking_time" binding:"required"` // format: HH:MM
+// 	SpecialRequests string  `json:"special_requests"`
+// 	AmountPaid      float64 `json:"amount_paid"`
+// 	PaymentStatus   string  `json:"payment_status"`
+// }
 
 // ========================= SEVA HANDLERS =============================
 
@@ -114,6 +116,8 @@ func (h *Handler) GetSevas(c *gin.Context) {
 
 // ========================= BOOKING HANDLERS =============================
 
+
+
 func (h *Handler) BookSeva(c *gin.Context) {
 	var input BookSevaRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -127,27 +131,12 @@ func (h *Handler) BookSeva(c *gin.Context) {
 		return
 	}
 
-	date, err := time.Parse("2006-01-02", input.BookingDate)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid booking_date format"})
-		return
-	}
-	timeSlot, err := time.Parse("15:04", input.BookingTime)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid booking_time format"})
-		return
-	}
-
 	booking := SevaBooking{
-		SevaID:          input.SevaID,
-		UserID:          user.ID,
-		EntityID:        *user.EntityID,
-		BookingDate:     date,
-		BookingTime:     timeSlot,
-		SpecialRequests: input.SpecialRequests,
-		AmountPaid:      input.AmountPaid,
-		PaymentStatus:   input.PaymentStatus,
-		Status:          "pending",
+		SevaID:      input.SevaID,
+		UserID:      user.ID,
+		EntityID:    *user.EntityID,
+		BookingTime: time.Now(),       // ⏱️ Auto-generated now
+		Status:      "pending",        // default state
 	}
 
 	if err := h.service.BookSeva(c, &booking, "devotee", user.ID, *user.EntityID); err != nil {
@@ -155,8 +144,56 @@ func (h *Handler) BookSeva(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "Seva booked successfully", "booking": booking})
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Seva booked successfully",
+		"booking": booking,
+	})
 }
+
+
+// func (h *Handler) BookSeva(c *gin.Context) {
+// 	var input BookSevaRequest
+// 	if err := c.ShouldBindJSON(&input); err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
+// 		return
+// 	}
+
+// 	user := c.MustGet("user").(auth.User)
+// 	if user.Role.RoleName != "devotee" || user.EntityID == nil {
+// 		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized or invalid entity"})
+// 		return
+// 	}
+
+// 	date, err := time.Parse("2006-01-02", input.BookingDate)
+// 	if err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid booking_date format"})
+// 		return
+// 	}
+// 	timeSlot, err := time.Parse("15:04", input.BookingTime)
+// 	if err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid booking_time format"})
+// 		return
+// 	}
+
+// 	booking := SevaBooking{
+// 		SevaID:          input.SevaID,
+// 		UserID:          user.ID,
+// 		EntityID:        *user.EntityID,
+// 		BookingDate:     date,
+// 		BookingTime:     timeSlot,
+// 		SpecialRequests: input.SpecialRequests,
+// 		AmountPaid:      input.AmountPaid,
+// 		PaymentStatus:   input.PaymentStatus,
+// 		Status:          "pending",
+// 	}
+
+// 	if err := h.service.BookSeva(c, &booking, "devotee", user.ID, *user.EntityID); err != nil {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Booking failed: " + err.Error()})
+// 		return
+// 	}
+
+// 	c.JSON(http.StatusCreated, gin.H{"message": "Seva booked successfully", "booking": booking})
+// }
 
 func (h *Handler) GetMyBookings(c *gin.Context) {
 	user := c.MustGet("user").(auth.User)

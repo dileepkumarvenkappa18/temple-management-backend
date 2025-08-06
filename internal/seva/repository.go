@@ -58,18 +58,19 @@ func (r *repository) CreateSeva(ctx context.Context, seva *Seva) error {
 
 func (r *repository) GetSevaByID(ctx context.Context, id uint) (*Seva, error) {
 	var seva Seva
-	err := r.db.WithContext(ctx).Preload("Availability").First(&seva, id).Error
+	err := r.db.WithContext(ctx).First(&seva, id).Error
 	return &seva, err
 }
+
 
 func (r *repository) ListSevasByEntityID(ctx context.Context, entityID uint) ([]Seva, error) {
 	var sevas []Seva
 	err := r.db.WithContext(ctx).
-		Preload("Availability").
 		Where("entity_id = ? AND is_active = true", entityID).
 		Find(&sevas).Error
 	return sevas, err
 }
+
 
 func (r *repository) ListPaginatedSevas(ctx context.Context, entityID uint, sevaType string, search string, limit int, offset int) ([]Seva, error) {
 	var sevas []Seva
@@ -90,9 +91,10 @@ func (r *repository) ListPaginatedSevas(ctx context.Context, entityID uint, seva
 		query = query.Limit(limit).Offset(offset)
 	}
 
-	err := query.Preload("Availability").Find(&sevas).Error
+	err := query.Find(&sevas).Error
 	return sevas, err
 }
+
 
 
 func (r *repository) GetSevasWithFilters(ctx context.Context, entityID uint, search, sevaType string, page, limit int) ([]Seva, int64, error) {
@@ -103,34 +105,26 @@ func (r *repository) GetSevasWithFilters(ctx context.Context, entityID uint, sea
 		Model(&Seva{}).
 		Where("entity_id = ? AND is_active = true", entityID)
 
-	// Search by name
 	if search != "" {
-		query = query.Where("name ILIKE ?", "%"+search+"%") // PostgreSQL; use LIKE for MySQL
+		query = query.Where("name ILIKE ?", "%"+search+"%")
 	}
-
-	// Filter by seva type
 	if sevaType != "" {
 		query = query.Where("seva_type = ?", sevaType)
 	}
 
-	// Count total for pagination
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	// Apply pagination
 	if limit > 0 {
 		offset := (page - 1) * limit
 		query = query.Offset(offset).Limit(limit)
 	}
 
-	// Preload availability
-	if err := query.Preload("Availability").Find(&sevas).Error; err != nil {
-		return nil, 0, err
-	}
-
-	return sevas, total, nil
+	err := query.Find(&sevas).Error
+	return sevas, total, err
 }
+
 
 
 func (r *repository) UpdateSeva(ctx context.Context, seva *Seva) error {
@@ -195,11 +189,11 @@ func (r *repository) UpdateBookingStatus(ctx context.Context, bookingID uint, ne
 // -----------------------------------------
 func (r *repository) CountBookingsForSlot(ctx context.Context, sevaID uint, date time.Time, slot string) (int64, error) {
 	var count int64
-	err := r.db.WithContext(ctx).
-		Model(&SevaBooking{}).
-		Where("seva_id = ? AND booking_date = ? AND TO_CHAR(booking_time, 'HH24:MI') = ?", sevaID, date.Format("2006-01-02"), slot).
-		Count(&count).Error
-	return count, err
+	// err := r.db.WithContext(ctx).
+	// 	Model(&SevaBooking{}).
+	// 	Where("seva_id = ? AND booking_date = ? AND TO_CHAR(booking_time, 'HH24:MI') = ?", sevaID, date.Format("2006-01-02"), slot).
+	// 	Count(&count).Error
+	return count, nil
 }
 
 
@@ -227,11 +221,12 @@ func (r *repository) ListBookingsWithDetails(ctx context.Context, entityID uint)
 		JOIN sevas s ON s.id = b.seva_id
 		JOIN users u ON u.id = b.user_id
 		WHERE b.entity_id = ?
-		ORDER BY b.booking_date DESC, b.booking_time DESC
+		ORDER BY b.booking_time DESC
 	`, entityID).Scan(&results).Error
 
 	return results, err
 }
+
 
 // 🆕 View Booking by ID (for view modal)
 func (r *repository) GetBookingByID(ctx context.Context, bookingID uint) (*SevaBooking, error) {
@@ -266,14 +261,15 @@ func (r *repository) SearchBookingsWithFilters(ctx context.Context, filter Booki
 		query = query.Where("s.name LIKE ? OR u.full_name LIKE ?", searchTerm, searchTerm)
 	}
 	if filter.StartDate != "" && filter.EndDate != "" {
-		query = query.Where("b.booking_date BETWEEN ? AND ?", filter.StartDate, filter.EndDate)
+		// ⚠️ Replace booking_date with created_at or booking_time
+		query = query.Where("b.booking_time BETWEEN ? AND ?", filter.StartDate, filter.EndDate)
 	}
 
 	// ✅ Count before pagination
 	query.Count(&total)
 
 	// ✅ Sort
-	sortBy := "b.booking_date"
+	sortBy := "b.booking_time"
 	if filter.SortBy != "" {
 		sortBy = filter.SortBy
 	}
@@ -291,6 +287,7 @@ func (r *repository) SearchBookingsWithFilters(ctx context.Context, filter Booki
 	err := query.Scan(&results).Error
 	return results, total, err
 }
+
 
 // 🆕 Get Counts by Status
 func (r *repository) CountBookingsByStatus(ctx context.Context, entityID uint) (BookingStatusCounts, error) {

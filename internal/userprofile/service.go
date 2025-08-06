@@ -18,6 +18,8 @@ type Service interface {
 	ListMemberships(userID uint) ([]UserEntityMembership, error)
 	SearchTemples(query, state, templeType string) ([]entity.Entity, error) // ✅ Changed return type
 	GetRecentTemples() ([]entity.Entity, error)
+	UpdateMembershipStatus(userID uint, entityID uint, status string) error
+
 
 }
 
@@ -272,3 +274,7 @@ func (s *service) GetRecentTemples() ([]entity.Entity, error) {
 	return s.repo.FetchRecentTemples()
 }
 
+
+func (s *service) UpdateMembershipStatus(userID uint, entityID uint, status string) error {
+	return s.repo.UpdateMembershipStatus(userID, entityID, status)
+}

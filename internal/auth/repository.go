@@ -2,6 +2,7 @@ package auth
 
 import (
 	"time"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -46,8 +47,22 @@ func (r *repository) FindByEmail(email string) (*User, error) {
 func (r *repository) FindByID(userID uint) (User, error) {
 	var user User
 	err := r.db.Preload("Role").First(&user, userID).Error
-	return user, err
+	if err != nil {
+		return user, err
+	}
+
+	// Dynamically resolve EntityID if nil and user is temple-related
+	roleName := strings.ToLower(user.Role.RoleName)
+	if user.EntityID == nil && (roleName == "templeadmin" || roleName == "devotee" || roleName == "volunteer") {
+		entityID, err := r.FindEntityIDByUserID(user.ID)
+		if err == nil && entityID != nil {
+			user.EntityID = entityID
+		}
+	}
+
+	return user, nil
 }
+
 
 // Find user role by name
 func (r *repository) FindRoleByName(name string) (*UserRole, error) {

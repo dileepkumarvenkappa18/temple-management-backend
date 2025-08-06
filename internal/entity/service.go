@@ -1,34 +1,42 @@
 package entity
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"time"
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
-	"github.com/sharath018/temple-management-backend/internal/donation"
 )
 
-type Service struct {
-	Repo         Repository
-	DonationRepo donation.Repository
+type MembershipService interface {
+	UpdateMembershipStatus(userID, entityID uint, status string) error
 }
 
-func NewService(r Repository, d donation.Repository) *Service {
+type Service struct {
+	Repo              *Repository
+	MembershipService MembershipService
+}
+
+
+func NewService(r *Repository, ms MembershipService) *Service {
 	return &Service{
-		Repo:         r,
-		DonationRepo: d,
+		Repo:              r,
+		MembershipService: ms,
 	}
 }
+
+
+
 
 var (
 	ErrMissingFields = errors.New("temple name, deity, phone, and email are required")
 )
 
-// CreateEntity handles the creation of a new temple by a Temple Admin
+// ========== ENTITY CORE ==========
+
+// Temple Admin → Create Entity
 func (s *Service) CreateEntity(e *Entity, userID uint) error {
-	// Basic validation
+	// Validate required fields
 	if strings.TrimSpace(e.Name) == "" ||
 		e.MainDeity == nil || strings.TrimSpace(*e.MainDeity) == "" ||
 		strings.TrimSpace(e.Phone) == "" ||
@@ -37,12 +45,14 @@ func (s *Service) CreateEntity(e *Entity, userID uint) error {
 	}
 
 	now := time.Now()
+
+	// Set metadata
 	e.Status = "pending"
 	e.CreatedBy = userID
 	e.CreatedAt = now
 	e.UpdatedAt = now
 
-	// Field sanitization
+	// Sanitize inputs
 	e.Name = strings.TrimSpace(e.Name)
 	e.Email = strings.TrimSpace(e.Email)
 	e.Phone = strings.TrimSpace(e.Phone)
@@ -53,16 +63,18 @@ func (s *Service) CreateEntity(e *Entity, userID uint) error {
 	e.State = strings.TrimSpace(e.State)
 	e.District = strings.TrimSpace(e.District)
 	e.Pincode = strings.TrimSpace(e.Pincode)
-	e.MapLink = strings.TrimSpace(e.MapLink)
+
+	// Trim main deity if present
+	if e.MainDeity != nil {
+		trimmed := strings.TrimSpace(*e.MainDeity)
+		e.MainDeity = &trimmed
+	}
+
+	// Trim document URLs
 	e.RegistrationCertURL = strings.TrimSpace(e.RegistrationCertURL)
 	e.TrustDeedURL = strings.TrimSpace(e.TrustDeedURL)
 	e.PropertyDocsURL = strings.TrimSpace(e.PropertyDocsURL)
 	e.AdditionalDocsURLs = strings.TrimSpace(e.AdditionalDocsURLs)
-
-	if e.MainDeity != nil {
-		mainDeity := strings.TrimSpace(*e.MainDeity)
-		e.MainDeity = &mainDeity
-	}
 
 	// Save entity
 	if err := s.Repo.CreateEntity(e); err != nil {
@@ -82,58 +94,115 @@ func (s *Service) CreateEntity(e *Entity, userID uint) error {
 	return s.Repo.CreateApprovalRequest(req)
 }
 
-// GetAllEntities fetches all temples (for Super Admin)
+// Super Admin → Get all temples
 func (s *Service) GetAllEntities() ([]Entity, error) {
 	return s.Repo.GetAllEntities()
 }
 
-// GetEntitiesByCreator fetches temples created by a specific user (Temple Admin)
-func (s *Service) GetEntitiesByCreator(userID uint) ([]Entity, error) {
-	return s.Repo.GetEntitiesByCreator(userID)
+// Temple Admin → Get entities created by specific user
+func (s *Service) GetEntitiesByCreator(creatorID uint) ([]Entity, error) {
+	return s.Repo.GetEntitiesByCreator(creatorID)
 }
 
-// GetEntityByID retrieves a temple by ID (public)
+// Anyone → View a temple by ID
 func (s *Service) GetEntityByID(id int) (Entity, error) {
 	return s.Repo.GetEntityByID(id)
 }
 
-// UpdateEntity modifies an existing temple (Temple Admin)
+// Temple Admin → Update own temple
 func (s *Service) UpdateEntity(e Entity) error {
 	e.UpdatedAt = time.Now()
 	return s.Repo.UpdateEntity(e)
 }
 
-// DeleteEntity removes a temple (Super Admin)
+// Super Admin → Delete temple
 func (s *Service) DeleteEntity(id int) error {
 	return s.Repo.DeleteEntity(id)
 }
 
-// GetEntityDashboardStats returns donation summary stats for a temple
-func (s *Service) GetEntityDashboardStats(ctx context.Context, entityID int) (map[string]interface{}, error) {
-	totalAmount, err := s.DonationRepo.GetTotalAmountByEntityID(ctx, uint(entityID))
-	if err != nil {
-		return nil, err
-	}
+// ========== DEVOTEE MANAGEMENT ==========
 
-	donationCount, err := s.DonationRepo.GetDonationCountByEntityID(ctx, uint(entityID))
-	if err != nil {
-		return nil, err
-	}
-
-	return map[string]interface{}{
-		"totalAmount":     totalAmount,
-		"donationCount":   donationCount,
-		"lastUpdatedTime": time.Now(),
-	}, nil
+// Temple Admin → Get devotees for specific entity
+func (s *Service) GetDevotees(entityID uint) ([]DevoteeDTO, error) {
+	return s.Repo.GetDevoteesByEntityID(entityID)
 }
 
-// GetEntityDashboard is a context-less wrapper for dashboard stats
-func (s *Service) GetEntityDashboard(entityID uint) (interface{}, error) {
-	ctx := context.Background()
-	return s.GetEntityDashboardStats(ctx, int(entityID))
+// Temple Admin → Get devotee statistics for entity
+func (s *Service) GetDevoteeStats(entityID uint) (DevoteeStats, error) {
+	return s.Repo.GetDevoteeStats(entityID)
 }
 
-// GetTopDonors returns the top donors of a temple
-func (s *Service) GetTopDonors(ctx context.Context, templeID uint) ([]donation.TopDonor, error) {
-	return s.DonationRepo.GetTopDonors(ctx, templeID)
+
+// DashboardSummary is the structured JSON response
+type DashboardSummary struct {
+	RegisteredDevotees struct {
+		Total     int64 `json:"total"`
+		ThisMonth int64 `json:"this_month"`
+	} `json:"registered_devotees"`
+
+	SevaBookings struct {
+		Today     int64 `json:"today"`
+		ThisMonth int64 `json:"this_month"`
+	} `json:"seva_bookings"`
+
+	MonthDonations struct {
+		Amount        float64 `json:"amount"`
+		PercentChange float64 `json:"percent_change"`
+	} `json:"month_donations"`
+
+	UpcomingEvents struct {
+		Total     int64 `json:"total"`
+		ThisWeek  int64 `json:"this_week"`
+	} `json:"upcoming_events"`
+}
+
+// Temple Admin → Dashboard Summary
+func (s *Service) GetDashboardSummary(entityID uint) (DashboardSummary, error) {
+	var summary DashboardSummary
+
+	// ============= DEVOTEES =============
+	totalDevotees, err := s.Repo.CountDevotees(entityID)
+	if err != nil {
+		return summary, err
+	}
+	thisMonthDevotees, err := s.Repo.CountDevoteesThisMonth(entityID)
+	if err != nil {
+		return summary, err
+	}
+	summary.RegisteredDevotees.Total = totalDevotees
+	summary.RegisteredDevotees.ThisMonth = thisMonthDevotees
+
+	// ============= SEVA BOOKINGS =============
+	todaySevas, err := s.Repo.CountSevaBookingsToday(entityID)
+	if err != nil {
+		return summary, err
+	}
+	monthSevas, err := s.Repo.CountSevaBookingsThisMonth(entityID)
+	if err != nil {
+		return summary, err
+	}
+	summary.SevaBookings.Today = todaySevas
+	summary.SevaBookings.ThisMonth = monthSevas
+
+	// ============= DONATIONS =============
+	monthDonationAmount, percentChange, err := s.Repo.GetMonthDonationsWithChange(entityID)
+	if err != nil {
+		return summary, err
+	}
+	summary.MonthDonations.Amount = monthDonationAmount
+	summary.MonthDonations.PercentChange = percentChange
+
+	// ============= UPCOMING EVENTS =============
+	totalUpcoming, err := s.Repo.CountUpcomingEvents(entityID)
+	if err != nil {
+		return summary, err
+	}
+	thisWeekUpcoming, err := s.Repo.CountUpcomingEventsThisWeek(entityID)
+	if err != nil {
+		return summary, err
+	}
+	summary.UpcomingEvents.Total = totalUpcoming
+	summary.UpcomingEvents.ThisWeek = thisWeekUpcoming
+
+	return summary, nil
 }

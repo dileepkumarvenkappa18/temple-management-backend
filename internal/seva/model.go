@@ -34,19 +34,16 @@ type Seva struct {
 // ======================
 
 type SevaBooking struct {
-	ID              uint      `gorm:"primaryKey" json:"id"`
-	SevaID          uint      `gorm:"not null" json:"seva_id"`
-	UserID          uint      `gorm:"not null" json:"user_id"`
-	EntityID        uint      `gorm:"not null" json:"entity_id"`
-	BookingDate     time.Time `gorm:"type:date;not null" json:"booking_date"`
-	BookingTime     time.Time `json:"booking_time"` // precise timestamp of the seva
-	Status          string    `gorm:"type:varchar(20);default:'pending'" json:"status"`
-	SpecialRequests string    `gorm:"type:text" json:"special_requests"`
-	AmountPaid      float64   `gorm:"type:decimal(10,2)" json:"amount_paid"`
-	PaymentStatus   string    `gorm:"type:varchar(20);default:'pending'" json:"payment_status"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID          uint      // PK
+	SevaID      uint      // Which Seva is being booked
+	UserID      uint      // Who is booking (devotee)
+	EntityID    uint      // Temple where the seva is hosted
+	BookingTime time.Time // Auto-timestamp
+	Status      string    // pending / approved / rejected
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
+
 
 // ✅ For Filtered Search (Admin Dashboard)
 type BookingFilter struct {
