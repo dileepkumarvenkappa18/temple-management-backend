@@ -42,23 +42,18 @@ api.interceptors.request.use(
       }
 
       const entityId = localStorage.getItem('current_entity_id')
-      if (tenantId) {
-  config.headers['X-Tenant-ID'] = tenantId
-  if (import.meta.env.DEV) {
-    console.log(`Request with Tenant ID: ${tenantId}`)
-  }
-}
+      if (entityId) {
+        config.headers['X-Entity-ID'] = entityId
+        if (import.meta.env.DEV) {
+          console.log(`Request with Entity ID: ${entityId}`)
+        }
+      }
     }
-const entityId = localStorage.getItem('current_entity_id')
-if (entityId) {
-  config.headers['X-Entity-ID'] = entityId
-  if (import.meta.env.DEV) {
-    console.log(`Request with Entity ID: ${entityId}`)
-  }
-}
 
     if (import.meta.env.DEV) {
       console.log(`API Request: ${config.method.toUpperCase()} ${config.url}`)
+      console.log('Request headers:', config.headers)
+      console.log('Request data:', config.data)
     }
 
     return config
@@ -88,6 +83,7 @@ api.interceptors.response.use(
       console.error(`Status: ${error.response.status}`, 
                    `Method: ${error.config?.method?.toUpperCase()}`, 
                    `URL: ${error.config?.url}`)
+      console.error('Response data:', error.response.data)
       
       // Handle 401 errors (except during login attempts)
       if (error.response.status === 401) {
@@ -198,6 +194,7 @@ const communicationAPI = {
 
   getStats: (entityId, query) => api.get(`/entities/${entityId}/communication/stats?${query}`),
 
+  // Fixed: Single method definition for direct notifications
   sendDirectNotification: (payload) => api.post(`/v1/notifications/send`, payload)
 };
 

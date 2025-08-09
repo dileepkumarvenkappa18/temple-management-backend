@@ -130,15 +130,6 @@
         <div class="px-6 py-4 border-b border-gray-200">
           <div class="flex items-center justify-between">
             <h3 class="text-lg font-semibold text-gray-900">Donation History</h3>
-            <!-- <button 
-              @click="downloadReport"
-              class="text-indigo-600 hover:text-indigo-700 font-medium text-sm flex items-center gap-2"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-              </svg>
-              Download Report
-            </button> -->
           </div>
         </div>
 
@@ -149,42 +140,26 @@
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Purpose</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Receipt</th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-for="donation in filteredDonations" :key="donation.id" class="hover:bg-gray-50">
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {{ formatDate(donation.date) }}
+                  {{ formatDate(donation.created_at || donation.donated_at || donation.donation_date) }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
-                  <span :class="getDonationTypeClass(donation.type)" class="px-2 py-1 text-xs font-medium rounded-full">
-                    {{ donation.type }}
+                  <span :class="getDonationTypeClass(donation.type || donation.donation_type)" class="px-2 py-1 text-xs font-medium rounded-full">
+                    {{ donation.type || donation.donation_type }}
                   </span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   ₹{{ donation.amount.toLocaleString() }}
                 </td>
-                <td class="px-6 py-4 text-sm text-gray-600">
-                  {{ donation.purpose }}
-                </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <span :class="getStatusClass(donation.status)" class="px-2 py-1 text-xs font-medium rounded-full">
                     {{ donation.status }}
                   </span>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                  <button 
-                    @click="downloadReceipt(donation.id)"
-                    class="text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
-                  >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                    </svg>
-                    Download
-                  </button>
                 </td>
               </tr>
             </tbody>
@@ -262,9 +237,10 @@
             </button>
             <button 
               type="submit"
-              class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200"
+              :disabled="submittingDonation"
+              class="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200"
             >
-              Proceed to Payment
+              {{ submittingDonation ? 'Processing...' : 'Proceed to Payment' }}
             </button>
           </div>
         </form>
@@ -275,8 +251,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import api from '@/plugins/axios';
-import axios from 'axios'
+import { donationService } from '@/services/donation.service'
 
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
@@ -292,6 +267,7 @@ const loadRazorpayScript = () => {
 const showDonationForm = ref(false)
 const donationHistory = ref([])
 const loading = ref(true)
+const submittingDonation = ref(false)
 
 // Filters
 const filters = ref({
@@ -318,7 +294,7 @@ const thisMonthDonated = computed(() => {
   
   return donationHistory.value
     .filter(donation => {
-      const donationDate = new Date(donation.date)
+      const donationDate = new Date(donation.date || donation.donated_at || donation.donation_date)
       return donationDate.getMonth() === thisMonth && donationDate.getFullYear() === thisYear
     })
     .reduce((total, donation) => total + donation.amount, 0)
@@ -331,7 +307,7 @@ const filteredDonations = computed(() => {
   if (filters.value.dateRange !== 'all') {
     const now = new Date()
     filtered = filtered.filter(donation => {
-      const donationDate = new Date(donation.date)
+      const donationDate = new Date(donation.date || donation.donated_at || donation.donation_date)
       
       switch (filters.value.dateRange) {
         case 'this-month':
@@ -349,7 +325,9 @@ const filteredDonations = computed(() => {
 
   // Donation type filter
   if (filters.value.donationType !== 'all') {
-    filtered = filtered.filter(donation => donation.type === filters.value.donationType)
+    filtered = filtered.filter(donation => 
+      (donation.type || donation.donation_type) === filters.value.donationType
+    )
   }
 
   // Amount range filter
@@ -371,11 +349,111 @@ const filteredDonations = computed(() => {
     })
   }
 
-  return filtered.sort((a, b) => new Date(b.date) - new Date(a.date))
+  return filtered.sort((a, b) => {
+    const dateA = new Date(a.date || a.donated_at || a.donation_date)
+    const dateB = new Date(b.date || b.donated_at || b.donation_date)
+    return dateB - dateA
+  })
 })
+
+// Debug function to analyze response structure
+const debugDonationResponse = (response) => {
+  console.log('=== DONATION RESPONSE DEBUG ===')
+  console.log('Full response object:', response)
+  console.log('Response type:', typeof response)
+  console.log('Response keys:', Object.keys(response || {}))
+  
+  // Check for nested data
+  if (response.data) {
+    console.log('response.data:', response.data)
+    console.log('response.data keys:', Object.keys(response.data || {}))
+  }
+  
+  // Check for different field name variations
+  const possibleOrderIds = [
+    response.order_id,
+    response.OrderID,
+    response.orderId,
+    response.data?.order_id,
+    response.data?.OrderID,
+    response.data?.orderId
+  ].filter(Boolean)
+  
+  const possibleKeys = [
+    response.razorpay_key,
+    response.RazorpayKey,
+    response.razorpayKey,
+    response.key,
+    response.data?.razorpay_key,
+    response.data?.RazorpayKey,
+    response.data?.razorpayKey,
+    response.data?.key
+  ].filter(Boolean)
+  
+  console.log('Found possible order_id values:', possibleOrderIds)
+  console.log('Found possible razorpay_key values:', possibleKeys)
+  
+  console.log('JSON stringified response:', JSON.stringify(response, null, 2))
+  console.log('=== END DEBUG ===')
+}
+
+// Comprehensive response parsing - handles multiple backend response formats
+const parseRazorpayResponse = (response) => {
+  // The response might be nested in different ways
+  const possibleDataSources = [
+    response,
+    response.data,
+    response.result,
+    response.payload,
+    response.order,
+    response.razorpay
+  ].filter(source => source && typeof source === 'object')
+  
+  let order_id, razorpay_key, amount
+  
+  for (const source of possibleDataSources) {
+    // Try different field name variations for order_id
+    order_id = order_id || 
+      source.order_id || 
+      source.OrderID || 
+      source.orderId || 
+      source.order_id || 
+      source.razorpay_order_id ||
+      source.RazorpayOrderID ||
+      source.orderID ||
+      source.id
+    
+    // Try different field name variations for razorpay_key
+    razorpay_key = razorpay_key || 
+      source.razorpay_key || 
+      source.RazorpayKey || 
+      source.razorpayKey || 
+      source.key || 
+      source.Key ||
+      source.api_key ||
+      source.ApiKey ||
+      source.razorpay_api_key ||
+      source.RazorpayApiKey
+    
+    // Try different field name variations for amount
+    amount = amount || 
+      source.amount || 
+      source.Amount || 
+      source.total || 
+      source.Total ||
+      source.payment_amount ||
+      source.PaymentAmount
+  }
+  
+  // Fallback for amount
+  amount = amount || Number(donationForm.value.amount)
+  
+  return { order_id, razorpay_key, amount }
+}
 
 // Methods
 const formatDate = (date) => {
+  if (!date) return 'N/A'
   return new Date(date).toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
@@ -388,18 +466,23 @@ const getDonationTypeClass = (type) => {
     'general': 'bg-blue-100 text-blue-800',
     'seva': 'bg-green-100 text-green-800',
     'festival': 'bg-amber-100 text-amber-800',
-    'construction': 'bg-purple-100 text-purple-800'
+    'construction': 'bg-purple-100 text-purple-800',
+    'event': 'bg-pink-100 text-pink-800'
   }
   return classes[type] || 'bg-gray-100 text-gray-800'
 }
 
 const getStatusClass = (status) => {
+  const statusLower = (status || '').toLowerCase()
   const classes = {
     'completed': 'bg-green-100 text-green-800',
+    'success': 'bg-green-100 text-green-800',
     'pending': 'bg-amber-100 text-amber-800',
-    'failed': 'bg-red-100 text-red-800'
+    'processing': 'bg-amber-100 text-amber-800',
+    'failed': 'bg-red-100 text-red-800',
+    'error': 'bg-red-100 text-red-800'
   }
-  return classes[status] || 'bg-gray-100 text-gray-800'
+  return classes[statusLower] || 'bg-gray-100 text-gray-800'
 }
 
 const resetFilters = () => {
@@ -410,55 +493,97 @@ const resetFilters = () => {
   }
 }
 
-const downloadReceipt = (donationId) => {
-  // Implement receipt download logic
-  console.log('Downloading receipt for donation:', donationId)
-}
-
-const downloadReport = () => {
-  // Implement report download logic
-  console.log('Downloading donation report')
-}
-
 const submitDonation = async () => {
+  if (submittingDonation.value) return
+  
   try {
+    submittingDonation.value = true
+
+    // Validate form
+    if (!donationForm.value.type || !donationForm.value.amount) {
+      alert('Please fill in all required fields')
+      return
+    }
+
+    // Load Razorpay script
     const scriptLoaded = await loadRazorpayScript();
     if (!scriptLoaded) {
-      alert("Razorpay SDK failed to load. Please check your internet.");
+      alert("Razorpay SDK failed to load. Please check your internet connection.");
       return;
     }
 
-    const entityId = localStorage.getItem("current_entity_id");
-
-    const response = await api.post("/v1/donations", {
-      amount: donationForm.value.amount,
-      donation_type: donationForm.value.type,
+    // Create donation using service layer
+    console.log('Creating donation with data:', {
+      amount: Number(donationForm.value.amount),
+      donationType: donationForm.value.type,
       note: donationForm.value.purpose,
-    });
+    })
 
-    const { order_id, razorpay_key, amount } = response.data;
+    const response = await donationService.createDonation({
+      amount: Number(donationForm.value.amount),
+      donationType: donationForm.value.type,
+      note: donationForm.value.purpose,
+    })
+
+    // Debug the response structure
+    debugDonationResponse(response)
+
+    // Parse response using comprehensive handler
+    const { order_id, razorpay_key, amount } = parseRazorpayResponse(response)
+
+    console.log('Extracted values:', { order_id, razorpay_key, amount })
+
+    if (!order_id || !razorpay_key) {
+      console.error('Missing required fields in response:', response)
+      
+      // Show more helpful error message
+      const missingFields = []
+      if (!order_id) missingFields.push('order_id/OrderID/orderId')
+      if (!razorpay_key) missingFields.push('razorpay_key/RazorpayKey/key')
+      
+      const errorMsg = `Server response missing required fields: ${missingFields.join(', ')}. 
+      
+Available response fields: ${Object.keys(response || {}).join(', ')}
+${response.data ? 'Data fields: ' + Object.keys(response.data).join(', ') : ''}
+
+Please check backend implementation or contact support.`
+      
+      alert(errorMsg)
+      throw new Error(`Server response missing required fields: ${missingFields.join(', ')}`)
+    }
 
     const options = {
       key: razorpay_key,
-      amount: amount * 100, // 💰 Razorpay expects paise
+      amount: amount * 100, // Razorpay expects paise
       currency: "INR",
       name: "Temple Donation",
       description: "Thank you for your generosity!",
       order_id: order_id,
       handler: async function (response) {
         try {
-          await api.post("/v1/donations/verify", {
+          console.log('Payment successful, verifying...', response)
+          
+          await donationService.verifyDonation({
             razorpay_payment_id: response.razorpay_payment_id,
             razorpay_order_id: response.razorpay_order_id,
             razorpay_signature: response.razorpay_signature,
           });
 
-          alert("🎉 Donation successful!");
+          alert("🎉 Donation successful! Thank you for your generosity.");
           showDonationForm.value = false;
-          fetchDonationHistory();
+          
+          // Reset form
+          donationForm.value = {
+            type: '',
+            amount: '',
+            purpose: ''
+          }
+          
+          // Refresh donation history
+          await fetchDonationHistory();
         } catch (verifyError) {
           console.error("❌ Verification failed:", verifyError);
-          alert("Payment verification failed. Please contact support.");
+          alert("Payment verification failed. Please contact support if amount was deducted.");
         }
       },
       prefill: {
@@ -468,29 +593,47 @@ const submitDonation = async () => {
       theme: {
         color: "#6366f1",
       },
+      modal: {
+        ondismiss: function() {
+          console.log('Payment modal dismissed')
+        }
+      }
     };
 
+    console.log('Opening Razorpay with options:', options)
     const rzp = new window.Razorpay(options);
     rzp.open();
   } catch (error) {
-    console.error("❌ Donation Flow Error:", error.response || error.message || error);
-    alert("Something went wrong: " + (error.response?.data?.error || error.message));
+    console.error("❌ Donation Flow Error:", error);
+    
+    const errorMessage = error.response?.data?.error || 
+                        error.response?.data?.message || 
+                        error.message || 
+                        'Something went wrong while processing your donation'
+    
+    alert("Error: " + errorMessage);
+  } finally {
+    submittingDonation.value = false
   }
 };
-
-
 
 const fetchDonationHistory = async () => {
   try {
     loading.value = true
 
-    const entityId = localStorage.getItem('current_entity_id')
-    const response = await api.get('v1/donations/my')
-
-    donationHistory.value = response.data.data || [] // Adjust depending on your API structure
+    console.log('Fetching donation history...')
+    const response = await donationService.getMyDonations()
+    
+    console.log('Donation history response:', response)
+    donationHistory.value = Array.isArray(response) ? response : []
   } catch (error) {
     console.error('Error fetching donation history:', error)
     donationHistory.value = []
+    
+    // Don't show alert for 404 errors (endpoint might not be implemented)
+    if (error.response?.status !== 404) {
+      alert('Failed to load donation history: ' + (error.response?.data?.error || error.message))
+    }
   } finally {
     loading.value = false
   }

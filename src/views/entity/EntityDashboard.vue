@@ -309,7 +309,7 @@
                 <p class="mt-4 text-sm text-gray-500">No donations yet</p>
               </div>
               <div v-else class="space-y-4">
-                <div v-for="(donor, index) in topDonors.slice(0, 5)" :key="donor.id" 
+                <div v-for="(donor, index) in topDonors.slice(0, 5)" :key="donor.id || donor.email || index" 
                      class="flex items-center space-x-3">
                   <div class="flex-shrink-0">
                     <div class="h-8 w-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center">
@@ -317,11 +317,11 @@
                     </div>
                   </div>
                   <div class="flex-1 min-w-0">
-                    <p class="text-sm font-medium text-gray-900">{{ donor.name }}</p>
-                    <p class="text-xs text-gray-500">{{ donor.totalDonations }} donations</p>
+                    <p class="text-sm font-medium text-gray-900">{{ donor.name || 'Unknown Donor' }}</p>
+                    <p class="text-xs text-gray-500">{{ donor.totalDonations || donor.donation_count || 0 }} donations</p>
                   </div>
                   <div class="text-sm font-semibold text-green-600">
-                    ₹{{ formatCurrency(donor.amount) }}
+                    ₹{{ formatCurrency(donor.amount || donor.total_amount || 0) }}
                   </div>
                 </div>
               </div>
@@ -341,6 +341,7 @@ import { useTempleStore } from '@/stores/temple'
 import { useToast } from '@/composables/useToast'
 import api from '@/plugins/axios'
 import { apiClient } from '@/plugins/axios'
+import { donationService } from '@/services/donation.service' // Added this import
 
 const route = useRoute()
 const entityId = computed(() => route.params.id)
@@ -395,43 +396,38 @@ const loadEntityData = async () => {
       }
     }
     
-    // Inside loadEntityData function in EntityDashboard.vue
-// Fixed dashboard data fetching code:
-
-// Fetch dashboard data from the new API endpoint
-try {
-  // Remove the /api prefix from the URL since it's likely already configured in Axios
-  // or is being handled by the proxy configuration
-  const dashboardResponse = await api.get(`/v1/entities/dashboard-summary?entity_id=${entityId.value}`)
-  
-  if (dashboardResponse && dashboardResponse.data) {
-    // Map the backend response to the structure expected by the frontend
-    dashboardData.value = {
-      devotees: {
-        total: dashboardResponse.data.registered_devotees.total || 0,
-        newThisMonth: dashboardResponse.data.registered_devotees.this_month || 0
-      },
-      sevas: {
-        today: dashboardResponse.data.seva_bookings.today || 0,
-        thisMonth: dashboardResponse.data.seva_bookings.this_month || 0
-      },
-      donations: {
-        thisMonth: dashboardResponse.data.month_donations.amount || 0,
-        growth: dashboardResponse.data.month_donations.percent_change || 0
-      },
-      events: {
-        upcoming: dashboardResponse.data.upcoming_events.total || 0,
-        thisWeek: dashboardResponse.data.upcoming_events.this_week || 0
+    // Fetch dashboard data from the new API endpoint
+    try {
+      const dashboardResponse = await api.get(`/v1/entities/dashboard-summary?entity_id=${entityId.value}`)
+      
+      if (dashboardResponse && dashboardResponse.data) {
+        // Map the backend response to the structure expected by the frontend
+        dashboardData.value = {
+          devotees: {
+            total: dashboardResponse.data.registered_devotees.total || 0,
+            newThisMonth: dashboardResponse.data.registered_devotees.this_month || 0
+          },
+          sevas: {
+            today: dashboardResponse.data.seva_bookings.today || 0,
+            thisMonth: dashboardResponse.data.seva_bookings.this_month || 0
+          },
+          donations: {
+            thisMonth: dashboardResponse.data.month_donations.amount || 0,
+            growth: dashboardResponse.data.month_donations.percent_change || 0
+          },
+          events: {
+            upcoming: dashboardResponse.data.upcoming_events.total || 0,
+            thisWeek: dashboardResponse.data.upcoming_events.this_week || 0
+          }
+        }
+        
+        console.log('Dashboard data loaded successfully:', dashboardData.value)
       }
+    } catch (err) {
+      console.error('Failed to fetch dashboard data:', err)
+      toast.error('Failed to load dashboard statistics')
+      // Keep the default values if API fails
     }
-    
-    console.log('Dashboard data loaded successfully:', dashboardData.value)
-  }
-} catch (err) {
-  console.error('Failed to fetch dashboard data:', err)
-  toast.error('Failed to load dashboard statistics')
-  // Keep the default values if API fails
-}
     
     // Fetch upcoming events
     try {
@@ -448,32 +444,66 @@ try {
       upcomingEvents.value = []
     }
     
-    // Fetch top donors
+    // Fetch top donors - FIXED VERSION
     try {
-      const donorsResponse = await api.get(`/v1/donations/top?entity_id=${entityId.value}&limit=5`)
+      console.log('Fetching top donors...')
+      const donorsResponse = await donationService.getTopDonors(5)
+      console.log('Top donors response:', donorsResponse)
       
-      if (donorsResponse && donorsResponse.data) {
-        topDonors.value = donorsResponse.data
+      // Handle the response structure from your backend
+      if (donorsResponse && donorsResponse.success && Array.isArray(donorsResponse.data)) {
+        topDonors.value = donorsResponse.data.map(donor => ({
+          id: donor.email || Math.random(),
+          name: donor.name || 'Unknown Donor',
+          email: donor.email || '',
+          amount: donor.total_amount || donor.totalAmount || 0,
+          totalDonations: donor.donation_count || donor.donationCount || 0
+        }))
+      } else if (Array.isArray(donorsResponse.data)) {
+        topDonors.value = donorsResponse.data.map(donor => ({
+          id: donor.email || Math.random(),
+          name: donor.name || 'Unknown Donor', 
+          email: donor.email || '',
+          amount: donor.total_amount || donor.totalAmount || 0,
+          totalDonations: donor.donation_count || donor.donationCount || 0
+        }))
+      } else if (Array.isArray(donorsResponse)) {
+        topDonors.value = donorsResponse.map(donor => ({
+          id: donor.email || Math.random(),
+          name: donor.name || 'Unknown Donor',
+          email: donor.email || '',
+          amount: donor.total_amount || donor.totalAmount || 0,
+          totalDonations: donor.donation_count || donor.donationCount || 0
+        }))
+      } else {
+        console.warn('Unexpected top donors response format:', donorsResponse)
+        topDonors.value = []
       }
+      
+      console.log('Final top donors data:', topDonors.value)
     } catch (err) {
       console.error('Failed to fetch top donors:', err)
       topDonors.value = []
+      // Don't show error toast for 404 as endpoint might not be implemented
+      if (err.response?.status !== 404) {
+        toast.error('Failed to load top donors')
+      }
     }
     
     // Fetch notifications
-    try {
-      const notificationsResponse = await api.get(`/v1/notifications?entity_id=${entityId.value}&limit=5`)
+    // try {
+    //   const notificationsResponse = await api.get(`/v1/notifications?entity_id=${entityId.value}&limit=5`)
       
-      if (notificationsResponse && notificationsResponse.data) {
-        notifications.value = notificationsResponse.data.map(notification => ({
-          ...notification,
-          createdAt: new Date(notification.created_at || notification.timestamp || Date.now())
-        }))
-      }
-    } catch (err) {
-      console.error('Failed to fetch notifications:', err)
-      notifications.value = []
-    }
+    //   if (notificationsResponse && notificationsResponse.data) {
+    //     notifications.value = notificationsResponse.data.map(notification => ({
+    //       ...notification,
+    //       createdAt: new Date(notification.created_at || notification.timestamp || Date.now())
+    //     }))
+    //   }
+    // } catch (err) {
+    //   console.error('Failed to fetch notifications:', err)
+    //   notifications.value = []
+    // }
     
   } catch (err) {
     console.error('Error loading entity data:', err)

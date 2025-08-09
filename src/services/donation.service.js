@@ -10,22 +10,39 @@ export const donationService = {
   // Create a new donation (initiate payment process)
   async createDonation(donationData) {
     try {
-      const response = await api.post('/v1/donations', {
-        amount: donationData.amount,
-        donationType: donationData.donationType,
-        note: donationData.note || donationData.purpose,
-        referenceID: donationData.referenceID || null,
-      })
+      console.log('Creating donation with data:', donationData)
+      
+      // Map frontend field names to backend expected field names (PascalCase)
+      const payload = {
+        Amount: Number(donationData.amount),
+        DonationType: donationData.donationType || donationData.type || donationData.donation_type,
+        Note: donationData.note || donationData.purpose || '',
+      }
+
+      // Add optional fields if provided
+      if (donationData.referenceID) {
+        payload.ReferenceID = donationData.referenceID
+      }
+
+      console.log('Sending donation payload:', payload)
+
+      const response = await api.post('/v1/donations', payload)
 
       console.log('Create donation response:', response.data)
+      console.log('Full response structure:', JSON.stringify(response.data, null, 2))
+      
+      // Return the response data - let the calling component handle structure variations
       return response.data
     } catch (error) {
       console.error('Error creating donation:', error)
+      
       if (error.response?.status === 401) {
         showToast('Please login to make a donation', 'error')
         logout()
       } else if (error.response?.status === 400) {
-        showToast(error.response.data?.error || 'Invalid donation data', 'error')
+        const errorMsg = error.response.data?.error || 'Invalid donation data'
+        showToast(errorMsg, 'error')
+        console.error('Validation error:', errorMsg)
       } else {
         showToast('Failed to create donation', 'error')
       }
@@ -36,12 +53,21 @@ export const donationService = {
   // Verify payment after successful Razorpay transaction
   async verifyDonation(paymentData) {
     try {
-      const response = await api.post('/v1/donations/verify', {
-        paymentID: paymentData.razorpay_payment_id,
-        orderID: paymentData.razorpay_order_id,
-        razorpaySig: paymentData.razorpay_signature,
-      })
+      console.log('Verifying donation with payment data:', paymentData)
+      
+      // Map payment data to backend expected format (matching Go struct JSON tags)
+      const payload = {
+        paymentID: paymentData.razorpay_payment_id || paymentData.paymentID,
+        orderID: paymentData.razorpay_order_id || paymentData.orderID,
+        razorpaySig: paymentData.razorpay_signature || paymentData.razorpaySig,
+      }
+
+      console.log('Sending verification payload:', payload)
+
+      const response = await api.post('/v1/donations/verify', payload)
       console.log('Verify donation response:', response.data)
+      console.log('Verification response structure:', JSON.stringify(response.data, null, 2))
+      
       return response.data
     } catch (error) {
       console.error('Error verifying donation:', error)
@@ -70,9 +96,12 @@ export const donationService = {
       } else if (Array.isArray(response.data)) {
         console.log('Response data is array:', response.data)
         return response.data
+      } else if (response.data && response.data.data) {
+        console.log('Response has data property:', response.data.data)
+        return response.data.data
       } else {
         console.log('Fallback: returning data or empty array')
-        return response.data?.data || []
+        return response.data || []
       }
     } catch (error) {
       console.error('Error fetching my donations:', error)
@@ -80,11 +109,74 @@ export const donationService = {
         showToast('Please login to view your donations', 'error')
         logout()
       } else if (error.response?.status === 404) {
-        showToast('My donations endpoint not found', 'error')
+        console.warn('My donations endpoint not found - this is expected if not implemented yet')
+        // Return empty array for 404, don't show error toast
+        return []
       } else {
         showToast('Failed to load your donations', 'error')
       }
       throw error
+    }
+  },
+
+  // Get recent donations for the current user
+  async getMyRecentDonations() {
+    try {
+      console.log('Calling getMyRecentDonations API...')
+      const response = await api.get('/v1/donations/recent')
+      console.log('Recent donations raw response:', response)
+      console.log('Recent donations response data:', response.data)
+
+      // Handle the response structure from your backend
+      if (response.data && response.data.recent_donations && Array.isArray(response.data.recent_donations)) {
+        const recentDonations = response.data.recent_donations.map(donation => ({
+          // Map backend field names to frontend expected names
+          id: donation.id || donation.ID || Math.random(),
+          amount: donation.amount || donation.Amount,
+          donation_type: donation.donation_type || donation.DonationType,
+          donationType: donation.donation_type || donation.DonationType,
+          type: donation.donation_type || donation.DonationType,
+          method: donation.method || donation.Method,
+          status: donation.status || donation.Status,
+          date: donation.donated_at || donation.DonatedAt || donation.date,
+          donation_date: donation.donated_at || donation.DonatedAt,
+          donated_at: donation.donated_at || donation.DonatedAt,
+          note: donation.note || donation.Note || donation.purpose
+        }))
+        
+        console.log('Mapped recent donations:', recentDonations)
+        return recentDonations
+      } else if (Array.isArray(response.data)) {
+        // Handle direct array response
+        return response.data.map(donation => ({
+          id: donation.id || donation.ID || Math.random(),
+          amount: donation.amount || donation.Amount,
+          donation_type: donation.donation_type || donation.DonationType,
+          donationType: donation.donation_type || donation.DonationType,
+          type: donation.donation_type || donation.DonationType,
+          method: donation.method || donation.Method,
+          status: donation.status || donation.Status,
+          date: donation.donated_at || donation.DonatedAt || donation.date,
+          donation_date: donation.donated_at || donation.DonatedAt,
+          donated_at: donation.donated_at || donation.DonatedAt,
+          note: donation.note || donation.Note || donation.purpose
+        }))
+      } else {
+        console.warn('Unexpected response format for recent donations:', response.data)
+        return []
+      }
+    } catch (error) {
+      console.error('Error fetching recent donations:', error)
+      if (error.response?.status === 401) {
+        showToast('Please login to view your recent donations', 'error')
+        logout()
+      } else if (error.response?.status === 404) {
+        console.warn('Recent donations endpoint not found')
+        return []
+      } else {
+        showToast('Failed to load recent donations', 'error')
+      }
+      return []
     }
   },
 
@@ -111,6 +203,15 @@ export const donationService = {
   // Get recent donations for dashboard
   async getRecentDonations(limit = 5) {
     try {
+      // First try to get recent donations from the specific endpoint
+      try {
+        const recentResponse = await this.getMyRecentDonations()
+        return recentResponse.slice(0, limit)
+      } catch (recentError) {
+        console.warn('Recent donations endpoint failed, falling back to general endpoint:', recentError)
+      }
+
+      // Fallback to the general donations endpoint with limit
       const response = await api.get('/v1/donations/', {
         params: { limit, page: 1 },
       })
@@ -288,6 +389,8 @@ export const donationService = {
       { value: 'annadanam', label: 'Annadanam' },
       { value: 'education', label: 'Education Fund' },
       { value: 'maintenance', label: 'Maintenance' },
+      { value: 'temple_maintenance', label: 'Temple Maintenance' },
+      { value: 'event', label: 'Event Donation' },
     ]
   },
 }

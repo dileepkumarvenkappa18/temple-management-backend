@@ -83,18 +83,87 @@ const communicationService = {
     }
   },
 
+  // Fixed: Single method definition with improved error handling and logging
   async sendDirectNotification(payload) {
-  try {
-    const response = await apiClient.communication.sendDirectNotification(payload);
-    return { success: true, data: response.data };
-  } catch (error) {
-    console.error('Error in sendDirectNotification:', error);
-    return { 
-      success: false, 
-      error: error.response?.data?.error || error.response?.data?.message || error.message || 'Server error' 
-    };
-  }
-},
+    try {
+      console.log('🚀 CommunicationService: Sending notification with payload:', payload);
+      
+      // Validate payload
+      if (!payload) {
+        throw new Error('Payload is required');
+      }
+
+      if (!payload.channel) {
+        throw new Error('Channel is required');
+      }
+
+      if (!payload.subject) {
+        throw new Error('Subject is required');
+      }
+
+      if (!payload.body) {
+        throw new Error('Body is required');
+      }
+
+      const response = await apiClient.communication.sendDirectNotification(payload);
+      
+      console.log('✅ CommunicationService: Notification sent successfully:', response.data);
+      return { success: true, data: response.data };
+      
+    } catch (error) {
+      console.error('❌ CommunicationService: Error in sendDirectNotification:', error);
+      
+      // Enhanced error handling
+      let errorMessage = 'Failed to send notification';
+      
+      if (error.response) {
+        // Server responded with error status
+        console.error('Server response error:', {
+          status: error.response.status,
+          data: error.response.data,
+          headers: error.response.headers
+        });
+        
+        if (error.response.data) {
+          if (typeof error.response.data === 'string') {
+            errorMessage = error.response.data;
+          } else if (error.response.data.error) {
+            errorMessage = error.response.data.error;
+          } else if (error.response.data.message) {
+            errorMessage = error.response.data.message;
+          } else if (error.response.data.details) {
+            errorMessage = error.response.data.details;
+          }
+        }
+        
+        if (error.response.status === 400) {
+          errorMessage = `Bad Request: ${errorMessage}`;
+        } else if (error.response.status === 401) {
+          errorMessage = 'Authentication failed';
+        } else if (error.response.status === 403) {
+          errorMessage = 'Access denied';
+        } else if (error.response.status === 404) {
+          errorMessage = 'Service not found';
+        } else if (error.response.status >= 500) {
+          errorMessage = `Server error: ${errorMessage}`;
+        }
+      } else if (error.request) {
+        // Request made but no response received
+        console.error('No response received:', error.request);
+        errorMessage = 'No response from server. Please check your connection.';
+      } else if (error.message) {
+        // Error in request setup
+        errorMessage = error.message;
+      }
+
+      return { 
+        success: false, 
+        error: errorMessage,
+        status: error.response?.status || 500,
+        details: error.response?.data || null
+      };
+    }
+  },
 
   async getUnreadNotifications(entityId, userId) {
     try {
@@ -119,16 +188,6 @@ const communicationService = {
       const response = await apiClient.communication.getStats(entityId, query);
       return { success: true, data: response.data };
     } catch (error) {
-      return this.handleError(error);
-    }
-  },
-
-  async sendDirectNotification(payload) {
-    try {
-      const response = await apiClient.communication.sendDirectNotification(payload);
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('Error in sendDirectNotification:', error);
       return this.handleError(error);
     }
   },
@@ -158,7 +217,7 @@ const communicationService = {
   },
 
   handleError(error) {
-    console.error('API Error:', error);
+    console.error('CommunicationService: API Error:', error);
     
     // Extract error message
     let errorMessage = 'An unexpected error occurred';
@@ -166,19 +225,34 @@ const communicationService = {
     if (error.response) {
       // The request was made and the server responded with a status code
       // that falls out of the range of 2xx
-      if (error.response.data && error.response.data.error) {
-        errorMessage = error.response.data.error;
-      } else if (error.response.data && error.response.data.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response.status === 500) {
-        errorMessage = 'Server error: Could not process your request';
+      console.error('Error response:', {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers
+      });
+      
+      if (error.response.data) {
+        if (typeof error.response.data === 'string') {
+          errorMessage = error.response.data;
+        } else if (error.response.data.error) {
+          errorMessage = error.response.data.error;
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        }
+      }
+      
+      if (error.response.status === 500) {
+        errorMessage = `Server error: ${errorMessage}`;
       } else if (error.response.status === 404) {
         errorMessage = 'Service not found';
       } else if (error.response.status === 401) {
         errorMessage = 'Authentication error';
+      } else if (error.response.status === 403) {
+        errorMessage = 'Access denied';
       }
     } else if (error.request) {
       // The request was made but no response was received
+      console.error('No response received:', error.request);
       errorMessage = 'No response from server. Check your connection.';
     } else if (error.message) {
       // Something happened in setting up the request that triggered an Error

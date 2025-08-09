@@ -30,7 +30,28 @@
         'p-4 rounded-lg text-sm',
         isError ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
       ]">
-        {{ statusMessage }}
+        <div class="flex items-center justify-between">
+          <span>{{ statusMessage }}</span>
+          <button @click="statusMessage = ''" class="ml-2 text-gray-500 hover:text-gray-700">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Debug Info (only in development) -->
+      <div v-if="isDevelopment && showDebugInfo" class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm">
+        <div class="font-semibold text-yellow-800 mb-2">Debug Info:</div>
+        <div class="space-y-1 text-yellow-700">
+          <div>Sender ID: {{ senderID || 'Not set' }}</div>
+          <div>Entity ID: {{ entityID || 'Not set' }}</div>
+          <div>Auth Token: {{ hasAuthToken ? 'Present' : 'Missing' }}</div>
+          <div>Recipient Type: {{ recipientType }}</div>
+          <div>Selected Recipients: {{ selectedRecipients.length }}</div>
+          <div>Delivery Methods: {{ deliveryMethods.join(', ') }}</div>
+        </div>
+        <button type="button" @click="showDebugInfo = false" class="text-yellow-600 underline mt-2">Hide Debug</button>
       </div>
 
       <!-- Recipients Section -->
@@ -173,6 +194,14 @@
             >
               Insert Template
             </button>
+            <button 
+              v-if="isDevelopment"
+              type="button"
+              @click="showDebugInfo = !showDebugInfo"
+              class="text-gray-500 hover:text-gray-700 font-medium"
+            >
+              {{ showDebugInfo ? 'Hide' : 'Show' }} Debug
+            </button>
           </div>
           <span class="text-gray-500">{{ message.length }}/1000 characters</span>
         </div>
@@ -236,26 +265,36 @@
 <script>
 import { ref, computed, onMounted } from 'vue'
 import { apiClient } from '@/plugins/axios'
-import { useAuthStore } from '@/stores/auth' // ✅ Auth store
+import { useAuthStore } from '@/stores/auth'
 import CommunicationService from '@/services/communication.service.js'
 import { useRoute } from 'vue-router'
 
 export default {
   name: 'MessageComposer',
   setup() {
-    const authStore = useAuthStore() // ✅ Access auth data
+    const authStore = useAuthStore()
+    const route = useRoute()
+    
+    // Reactive state
     const isSubmitting = ref(false)
     const statusMessage = ref('')
     const isError = ref(false)
+    const showDebugInfo = ref(false)
     
+    // Computed values
     const senderID = computed(() => authStore.user?.id)
-    const entityID = computed(() =>
-      authStore.user?.entity_id ??
-      authStore.user?.entityId ??
-      authStore.user?.current_entity?.id ??
+    const entityID = computed(() => 
+      authStore.user?.entity_id ?? 
+      authStore.user?.entityId ?? 
+      authStore.user?.current_entity?.id ?? 
+      localStorage.getItem('current_entity_id') ??
       null
     )
+    
+    const hasAuthToken = computed(() => !!localStorage.getItem('auth_token'))
+    const isDevelopment = computed(() => import.meta.env.DEV)
 
+    // Form data
     const recipientType = ref('all')
     const selectedRecipients = ref([])
     const messageType = ref('announcement')
@@ -267,7 +306,6 @@ export default {
     const scheduledTime = ref('')
     const isDraft = ref(false)
     const showRecipientModal = ref(false)
-    const route = useRoute()
 
     const canSend = computed(() => {
       const isCustom = recipientType.value === 'custom'
@@ -276,11 +314,12 @@ export default {
       return subject.value.trim() && 
              message.value.trim() && 
              deliveryMethods.value.length > 0 &&
-             hasRecipients
+             hasRecipients &&
+             !isSubmitting.value
     })
 
-    const showStatus = (message, error = false) => {
-      statusMessage.value = message
+    const showStatus = (msg, error = false) => {
+      statusMessage.value = msg
       isError.value = error
       
       // Auto-clear after 5 seconds
@@ -326,87 +365,129 @@ export default {
     }
 
     const sendMessage = async () => {
-  console.log('📤 Sending message...', {
-    recipientType: recipientType.value,
-    recipients: selectedRecipients.value,
-    messageType: messageType.value,
-    subject: subject.value,
-    message: message.value,
-    deliveryMethods: deliveryMethods.value,
-    scheduleType: scheduleType.value,
-    scheduledDate: scheduledDate.value,
-    scheduledTime: scheduledTime.value
-  })
-
-  if (!senderID.value || !entityID.value) {
-    console.warn('❌ Missing senderID or entityID')
-    alert('Missing sender or entity information')
-    return
-  }
-
-  if (!subject.value.trim() || !message.value.trim()) {
-    console.warn('⚠️ Subject or message is empty.')
-    alert('Subject and message are required')
-    return
-  }
-
-  if (!deliveryMethods.value.length) {
-    console.warn('⚠️ No delivery methods selected.')
-    alert('Please select at least one delivery method')
-    return
-  }
-
-  try {
-    const isCustom = recipientType.value === 'custom'
-    let allSuccess = true
-    let errorMessage = '';
-
-    for (const channel of deliveryMethods.value) {
-      const payload = {
-        channel: channel,
-        subject: subject.value,
-        body: message.value,
-        template_id: null, // or a selected template ID
-        recipients: isCustom
-          ? selectedRecipients.value.map(r => r.email)
-          : [],
-        audience: !isCustom ? recipientType.value : undefined
+      console.log('📤 Starting message send process...')
+      
+      // Validation checks
+      if (!senderID.value || !entityID.value) {
+        const errorMsg = `Missing required data - Sender ID: ${senderID.value}, Entity ID: ${entityID.value}`
+        console.error('❌ Validation failed:', errorMsg)
+        showStatus(errorMsg, true)
+        return
       }
 
-      console.log(`📡 Calling sendDirectNotification via ${channel}`, payload)
+      if (!hasAuthToken.value) {
+        const errorMsg = 'No authentication token found'
+        console.error('❌ Auth check failed:', errorMsg)
+        showStatus(errorMsg, true)
+        return
+      }
 
+      if (!subject.value.trim() || !message.value.trim()) {
+        const errorMsg = 'Subject and message are required'
+        console.error('❌ Content validation failed:', errorMsg)
+        showStatus(errorMsg, true)
+        return
+      }
+
+      if (!deliveryMethods.value.length) {
+        const errorMsg = 'Please select at least one delivery method'
+        console.error('❌ Delivery method validation failed:', errorMsg)
+        showStatus(errorMsg, true)
+        return
+      }
+
+      isSubmitting.value = true
+      
       try {
-        const result = await CommunicationService.sendDirectNotification(payload)
-        if (!result.success) {
-          allSuccess = false
-          errorMessage = result.error || 'Unknown error'
-          console.error(`Failed to send via ${channel}:`, result.error)
+        const isCustom = recipientType.value === 'custom'
+        let successCount = 0
+        let errorCount = 0
+        let lastError = ''
+
+        showStatus('Sending messages...', false)
+
+        for (const channel of deliveryMethods.value) {
+          console.log(`📡 Preparing to send via ${channel}...`)
+          
+          // Create payload matching expected backend format
+          const payload = {
+            channel: channel,
+            subject: subject.value.trim(),
+            body: message.value.trim(),
+            template_id: null,
+            // For custom recipients, send specific emails/phones
+            // For audience-based, let backend handle the recipient list
+            recipients: isCustom ? selectedRecipients.value.map(r => {
+              // Assuming recipients have email/phone fields
+              if (channel === 'email') return r.email
+              if (channel === 'sms') return r.phone
+              if (channel === 'whatsapp') return r.phone
+              return r.id
+            }).filter(Boolean) : [],
+            // Send audience type if not custom
+            audience: !isCustom ? recipientType.value : null,
+            // Additional metadata that might be useful
+            metadata: {
+              sender_id: senderID.value,
+              entity_id: entityID.value,
+              message_type: messageType.value,
+              scheduled_type: scheduleType.value
+            }
+          }
+
+          console.log(`📋 Payload for ${channel}:`, JSON.stringify(payload, null, 2))
+
+          try {
+            const result = await CommunicationService.sendDirectNotification(payload)
+            
+            if (result.success) {
+              successCount++
+              console.log(`✅ Successfully sent via ${channel}`)
+            } else {
+              errorCount++
+              lastError = result.error || 'Unknown error'
+              console.error(`❌ Failed to send via ${channel}:`, result.error)
+            }
+          } catch (err) {
+            errorCount++
+            lastError = err.message || 'Network error'
+            console.error(`💥 Exception sending via ${channel}:`, err)
+          }
         }
-      } catch (err) {
-        allSuccess = false
-        errorMessage = err.message || 'Network error'
-        console.error(`Error sending via ${channel}:`, err)
+
+        // Show final result
+        if (successCount > 0 && errorCount === 0) {
+          showStatus(`✅ Message sent successfully via ${successCount} channel(s)!`, false)
+          // Clear form on complete success
+          subject.value = ''
+          message.value = ''
+          selectedRecipients.value = []
+          updateRecipients() // Reset recipients
+        } else if (successCount > 0 && errorCount > 0) {
+          showStatus(`⚠️ Partially sent: ${successCount} successful, ${errorCount} failed. Last error: ${lastError}`, true)
+        } else {
+          showStatus(`❌ Failed to send message: ${lastError}`, true)
+        }
+
+      } catch (error) {
+        console.error('💥 Unexpected error in sendMessage:', error)
+        showStatus(`❌ Unexpected error: ${error.message}`, true)
+      } finally {
+        isSubmitting.value = false
       }
     }
-
-    if (allSuccess) {
-      alert('Message sent successfully!')
-      console.log('✅ Message sent successfully!')
-      subject.value = ''
-      message.value = ''
-      selectedRecipients.value = []
-    } else {
-      alert(`Failed to send message: ${errorMessage}`)
-      console.error(`❌ Failed to send message: ${errorMessage}`)
-    }
-  } catch (error) {
-    console.error('❌ Error sending message:', error)
-    alert(`Failed to send message: ${error.message || 'Unknown error'}`)
-  }
-}
 
     onMounted(() => {
+      console.log('🔧 MessageComposer mounted')
+      console.log('Auth state:', {
+        user: authStore.user,
+        senderID: senderID.value,
+        entityID: entityID.value,
+        hasToken: hasAuthToken.value
+      })
+      
       updateRecipients()
+      
       // Pre-fill if coming from a template
       const subjectFromQuery = route.query.subject
       const contentFromQuery = route.query.content
@@ -416,6 +497,7 @@ export default {
     })
 
     return {
+      // State
       recipientType,
       selectedRecipients,
       messageType,
@@ -427,10 +509,19 @@ export default {
       scheduledTime,
       isDraft,
       showRecipientModal,
-      canSend,
       isSubmitting,
       statusMessage,
       isError,
+      showDebugInfo,
+      
+      // Computed
+      canSend,
+      senderID,
+      entityID,
+      hasAuthToken,
+      isDevelopment,
+      
+      // Methods
       updateRecipients,
       removeRecipient,
       insertTemplate,

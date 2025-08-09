@@ -21,6 +21,10 @@ export const useSevaStore = defineStore('seva', () => {
   const recentSevas = ref([])
   const loadingRecentSevas = ref(false)
   
+  // New state for seva catalog (all available sevas)
+  const sevaCatalog = ref([])
+  const loadingCatalog = ref(false)
+  
   // Computed properties
   const filteredSevas = computed(() => {
     let filtered = sevas.value
@@ -84,6 +88,34 @@ export const useSevaStore = defineStore('seva', () => {
     }
   }
   
+  // New method to fetch seva catalog (all sevas for mapping)
+  const fetchSevaCatalog = async () => {
+    loadingCatalog.value = true
+    try {
+      const response = await sevaService.getSevas({
+        page: 1,
+        limit: 1000, // Get all sevas
+        search: ''
+      })
+      
+      if (response.success) {
+        sevaCatalog.value = response.data || []
+        console.log('Seva catalog loaded:', sevaCatalog.value)
+        return sevaCatalog.value
+      } else {
+        console.error('Failed to fetch seva catalog:', response.error)
+        sevaCatalog.value = []
+        return []
+      }
+    } catch (error) {
+      console.error('Error fetching seva catalog:', error)
+      sevaCatalog.value = []
+      return []
+    } finally {
+      loadingCatalog.value = false
+    }
+  }
+  
   const fetchEntityBookings = async () => {
     loading.value = true
     error.value = null
@@ -101,16 +133,49 @@ export const useSevaStore = defineStore('seva', () => {
     }
   }
   
-  // Fetch recent sevas for the devotee dashboard
+  // Fetch recent sevas for the devotee dashboard with seva names
   const fetchRecentSevas = async () => {
     loadingRecentSevas.value = true
     try {
+      // First get the bookings
       const response = await sevaService.getMyBookings()
+      
       if (response.success) {
+        let bookings = response.data || []
+        
+        // If we have bookings, ensure seva catalog is loaded
+        if (bookings.length > 0) {
+          // Fetch seva catalog if not already loaded
+          if (sevaCatalog.value.length === 0) {
+            await fetchSevaCatalog()
+          }
+          
+          // Map seva names to bookings
+          bookings = bookings.map(booking => {
+            const sevaId = booking.seva_id || booking.SevaID
+            const seva = sevaCatalog.value.find(s => s.id === sevaId || s.ID === sevaId)
+            
+            return {
+              ...booking,
+              seva_name: seva?.name || seva?.Name || `Seva ${sevaId}`,
+              seva_type: seva?.type || seva?.Type || seva?.seva_type || '',
+              seva_description: seva?.description || seva?.Description || '',
+              seva: seva ? {
+                id: seva.id || seva.ID,
+                name: seva.name || seva.Name,
+                type: seva.type || seva.Type || seva.seva_type,
+                description: seva.description || seva.Description
+              } : null
+            }
+          })
+          
+          console.log('Bookings with seva names:', bookings)
+        }
+        
         // Sort by booking time, newest first
-        const sorted = [...response.data].sort((a, b) => {
-          const dateA = new Date(a.booking_time || a.created_at || Date.now())
-          const dateB = new Date(b.booking_time || b.created_at || Date.now())
+        const sorted = [...bookings].sort((a, b) => {
+          const dateA = new Date(a.booking_time || a.BookingTime || a.created_at || Date.now())
+          const dateB = new Date(b.booking_time || b.BookingTime || b.created_at || Date.now())
           return dateB - dateA
         })
         
@@ -139,6 +204,8 @@ export const useSevaStore = defineStore('seva', () => {
       // Add the new seva to the list if successful
       if (response.success && response.data) {
         sevas.value.push(response.data)
+        // Also add to catalog
+        sevaCatalog.value.push(response.data)
       }
       
       return { 
@@ -171,6 +238,12 @@ export const useSevaStore = defineStore('seva', () => {
         if (index !== -1) {
           sevas.value[index] = response.data
         }
+        
+        // Also update in catalog
+        const catalogIndex = sevaCatalog.value.findIndex(s => s.id === sevaId)
+        if (catalogIndex !== -1) {
+          sevaCatalog.value[catalogIndex] = response.data
+        }
       }
       
       return { 
@@ -200,6 +273,8 @@ export const useSevaStore = defineStore('seva', () => {
       if (response.success) {
         // Remove the seva from the list
         sevas.value = sevas.value.filter(s => s.id !== sevaId)
+        // Also remove from catalog
+        sevaCatalog.value = sevaCatalog.value.filter(s => s.id !== sevaId)
       }
       
       return { 
@@ -282,6 +357,8 @@ export const useSevaStore = defineStore('seva', () => {
     selectedSeva,
     recentSevas,
     loadingRecentSevas,
+    sevaCatalog,
+    loadingCatalog,
     
     // Getters
     filteredSevas,
@@ -289,6 +366,7 @@ export const useSevaStore = defineStore('seva', () => {
     
     // Actions
     fetchSevas,
+    fetchSevaCatalog,
     fetchEntityBookings,
     fetchRecentSevas,
     createSeva,

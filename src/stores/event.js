@@ -253,75 +253,64 @@ const deleteEvent = async (id) => {
 const normalizeEvent = (event) => {
   if (!event) return null
 
-  // FIX 1: Debug logging to understand what we're receiving
-  // console.log('Raw event data:', JSON.stringify(event, null, 2))
-
-  // FIX 2: Better type handling - ensure we extract the correct event_type
-  let eventType = '';
-  if (event.event_type) {
-    eventType = event.event_type.toLowerCase();
-  } else if (event.eventType) {
-    eventType = event.eventType.toLowerCase();
-  } else if (event.type) {
-    eventType = event.type.toLowerCase();
-  } else {
-    eventType = 'other'; // Default if nothing is found
-  }
-
-  let rawDate = event.event_date || event.eventDate || '';
-  let rawTime = '';
+  // Extract time from event_time field
+  let eventTime = '00:00'; // default time
   
-  // FIX 3: Better time handling - prioritize event_time field
   if (event.event_time) {
-    if (typeof event.event_time === 'string') {
-      rawTime = event.event_time;
-    } else {
-      // It could be a date object or something else
-      try {
+    try {
+      // Handle PostgreSQL time format: "0001-01-01 18:00:00+00 BC"
+      const timeStr = event.event_time.toString();
+      
+      // Extract HH:MM from the time string using regex
+      const timeMatch = timeStr.match(/(\d{1,2}):(\d{2}):(\d{2})/);
+      if (timeMatch) {
+        const hours = String(timeMatch[1]).padStart(2, '0');
+        const minutes = String(timeMatch[2]).padStart(2, '0');
+        eventTime = `${hours}:${minutes}`;
+      } else {
+        // Fallback: try parsing as Date
         const timeObj = new Date(event.event_time);
         if (!isNaN(timeObj.getTime())) {
           const hours = String(timeObj.getHours()).padStart(2, '0');
           const minutes = String(timeObj.getMinutes()).padStart(2, '0');
-          rawTime = `${hours}:${minutes}`;
+          eventTime = `${hours}:${minutes}`;
         }
-      } catch (e) {
-        console.warn('Invalid event_time value:', event.event_time);
       }
+    } catch (e) {
+      console.warn('Error parsing event_time:', event.event_time, e);
+      eventTime = '00:00';
     }
-  } else if (event.eventTime) {
-    rawTime = event.eventTime;
   }
 
-  let fullDateTimeString = '';
-
-  // Safely build ISO datetime
-  if (typeof rawDate === 'string' && rawDate.includes('T')) {
-    fullDateTimeString = rawDate;
-  } else if (rawDate && rawTime && /^\d{2}:\d{2}/.test(rawTime)) {
-    fullDateTimeString = `${rawDate}T${rawTime}`;
-  } else if (rawDate) {
-    fullDateTimeString = `${rawDate}T00:00`;
+  // Build proper date with time
+  let eventDate = event.event_date || event.eventDate || '';
+  let fullDateTime = '';
+  
+  if (eventDate) {
+    // Extract just the date part (YYYY-MM-DD)
+    const datePart = eventDate.toString().split('T')[0];
+    fullDateTime = `${datePart}T${eventTime}:00`;
   } else {
-    console.warn('Missing event_date for event:', event);
-    fullDateTimeString = new Date().toISOString();
+    fullDateTime = new Date().toISOString();
   }
 
   let isoDateString = '';
   try {
-    const date = new Date(fullDateTimeString);
+    const date = new Date(fullDateTime);
     if (isNaN(date.getTime())) throw new Error('Invalid Date');
     isoDateString = date.toISOString();
   } catch (err) {
-    console.warn('Invalid date-time during normalizeEvent:', fullDateTimeString, err);
-    isoDateString = new Date().toISOString(); // Fallback to now
+    console.warn('Invalid date-time during normalizeEvent:', fullDateTime, err);
+    isoDateString = new Date().toISOString();
   }
 
   return {
     id: event.id,
     title: event.title,
     description: event.description,
-    type: eventType,
-    eventDate: isoDateString,
+    type: event.event_type || event.eventType || event.type,
+    eventDate: isoDateString, // This now includes the correct time
+    eventTime: eventTime, // Store time separately for easy access (24-hour format)
     location: event.location,
     isActive: event.is_active !== false,
     createdBy: event.created_by || event.createdBy,

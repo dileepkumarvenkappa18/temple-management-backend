@@ -65,29 +65,43 @@
     <!-- Dashboard Content -->
     <div v-else>
   <!-- Dashboard Stats -->
-  <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-6 mb-8">
-    <DashboardWidget 
-      title="Seva Bookings"
-      :value="stats.totalSevaBookings || mySevaBookings.length || 0"
-      icon="calendar"
-      color="indigo"
-      :subtitle="`${stats.upcomingSevas || mySevaBookings.length || 0} upcoming`"
-    />
-    <DashboardWidget 
-      title="Total Events"
-      :value="activityStats.totalEvents || stats.eventsAttended || 0"
-      icon="calendar-days"
-      color="emerald"
-      :subtitle="`${activityStats.upcomingEvents || stats.upcomingEvents || 0} upcoming`"
-    />
-    <DashboardWidget 
-      title="Temple Profile"
-      :value="currentTemple ? 'Active' : 'Select Temple'"
-      icon="building-library"
-      color="rose"
-      :subtitle="currentTemple ? currentTemple.name : 'Join a temple'"
-    />
-  </div>
+ <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+  <DashboardWidget 
+    title="Seva Bookings"
+    :value="stats.totalSevaBookings || mySevaBookings.length || 0"
+    icon="calendar"
+    color="indigo"
+    :subtitle="`${stats.upcomingSevas || mySevaBookings.length || 0} upcoming`"
+  />
+  <DashboardWidget 
+    title="Total Events"
+    :value="activityStats.totalEvents || stats.eventsAttended || 0"
+    icon="calendar-days"
+    color="emerald"
+    :subtitle="`${activityStats.upcomingEvents || stats.upcomingEvents || 0} upcoming`"
+  />
+  <!-- NEW: Birthday Card -->
+  <DashboardWidget 
+    title="My Birthday"
+    :value="formatBirthday()"
+    icon="cake"
+    color="purple"
+    :subtitle="getBirthdaySubtitle()"
+  />
+<router-link 
+  :to="{ name: 'DevoteeTempleSelection' }"
+  class="block transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 rounded-lg"
+>
+  <DashboardWidget 
+    title="Temple Profile"
+    :value="currentTemple ? 'Active' : 'Select Temple'"
+    icon="building-library"
+    color="rose"
+    :subtitle="currentTemple ? currentTemple.name : 'Join a temple'"
+    class="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+  />
+</router-link>
+</div>
 
       <!-- Main Content Grid -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -122,17 +136,17 @@
                   <div>
                     <p class="text-sm font-medium text-gray-900">₹{{ donation.amount || 0 }}</p>
                     <p class="text-xs text-gray-500">
-                      {{ formatDate(donation.donation_date || donation.date) }}
+                      {{ formatDate(donation.created_at || donation.date) }}
                     </p>
                   </div>
                 </div>
                 <div class="text-right">
-                  <span 
+                  <!-- <span 
                     :class="getDonationStatusClass(donation.status || 'completed')" 
                     class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
                   >
                     {{ donation.status || 'Completed' }}
-                  </span>
+                  </span> -->
                 </div>
               </div>
             </div>
@@ -458,7 +472,10 @@ import { useAuthStore } from '@/stores/auth'
 import { useDevoteeStore } from '@/stores/devotee'
 import { useTempleStore } from '@/stores/temple'
 import { useSevaStore } from '@/stores/seva'
+import { useDonationStore } from '@/stores/donation' // NEW: Import donation store
 import { useTempleActivities } from '@/composables/useTempleActivities'
+import devoteeService from '@/services/devotee.service' // ADD THIS IMPORT
+
 import WelcomeBanner from '@/components/dashboard/WelcomeBanner.vue'
 import DashboardWidget from '@/components/dashboard/DashboardWidget.vue'
 import ActivityFeed from '@/components/dashboard/ActivityFeed.vue'
@@ -482,6 +499,7 @@ const authStore = useAuthStore()
 const devoteeStore = useDevoteeStore()
 const templeStore = useTempleStore()
 const sevaStore = useSevaStore()
+const donationStore = useDonationStore() // NEW: Use donation store
 const { 
   loading: activitiesLoading, 
   error: activitiesError, 
@@ -499,7 +517,9 @@ const error = ref(null)
 const mySevaBookings = ref([])
 const upcomingEvents = ref([])
 const entityDetails = ref(null)
-const recentDonations = ref([])
+
+// UPDATED: Use donation store for recent donations instead of local ref
+// const recentDonations = ref([]) // Remove this line
 
 // Computed properties
 const currentUser = computed(() => authStore.user)
@@ -514,12 +534,27 @@ const profileCompletionPercentage = computed(() => {
   return devoteeStore.completionPercentage || 0
 })
 
+// NEW: Add this computed property for devotee profile
+const devoteeProfile = computed(() => {
+  return devoteeStore.profile || authStore.user || {}
+})
+
+// NEW: Get recent donations from donation store
+const recentDonations = computed(() => {
+  return donationStore.recentDonations || []
+})
+
+// NEW: Get loading state for recent donations
+const loadingRecentDonations = computed(() => {
+  return donationStore.loadingRecent
+})
+
 // Use existing data from store if available
 const stats = computed(() => ({
   totalSevaBookings: devoteeStore.totalSevaBookings || 0,
   upcomingSevas: devoteeStore.upcomingSevas?.length || 0,
-  totalDonations: devoteeStore.totalDonations || 0,
-  donationCount: devoteeStore.donations?.length || 0,
+  totalDonations: donationStore.donationStats?.total || devoteeStore.totalDonations || 0,
+  donationCount: donationStore.donations?.length || devoteeStore.donations?.length || 0,
   eventsAttended: devoteeStore.eventsAttended || 0,
   upcomingEvents: devoteeStore.upcomingEvents?.length || 0
 }))
@@ -611,6 +646,130 @@ const getStatusClass = (status) => {
   return classes[status.toLowerCase()] || 'bg-gray-100 text-gray-800'
 }
 
+// NEW: Birthday formatting methods
+// Method to format birthday from database format (2003-12-18 00:00:00+00)
+// FIXED: Method to format birthday - Updated to look in correct location
+// IMPROVED: Method to format birthday - Shows actual date
+const formatBirthday = () => {
+  const profile = devoteeProfile.value
+  
+  // Look in the correct location: profile.personal.dateOfBirth
+  const dob = profile.personal?.dateOfBirth || 
+             profile.dob || 
+             profile.date_of_birth || 
+             profile.birthday
+  
+  console.log('🎂 Checking birthday data:', {
+    'profile.personal?.dateOfBirth': profile.personal?.dateOfBirth,
+    'profile.dob': profile.dob,
+    'finalDob': dob,
+    'fullProfile': profile
+  })
+  
+  if (!dob) {
+    return 'Not Set'
+  }
+  
+  try {
+    // Parse the database format (2003-12-18T00:00:00Z)
+    const date = new Date(dob)
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.error('❌ Invalid date:', dob)
+      return 'Invalid Date'
+    }
+    
+    // Return in a nice format like "18 Dec" (without year to save space)
+    return date.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short'
+    })
+  } catch (error) {
+    console.error('❌ Error formatting birthday:', error)
+    return 'Invalid Date'
+  }
+}
+
+// Method to get birthday subtitle with countdown
+// FIXED: Method to get birthday subtitle with countdown - Updated to look in correct location
+// IMPROVED: Method to get birthday subtitle with better countdown logic
+const getBirthdaySubtitle = () => {
+  const profile = devoteeProfile.value
+  
+  // Look in the correct location: profile.personal.dateOfBirth  
+  const dob = profile.personal?.dateOfBirth || 
+             profile.dob || 
+             profile.date_of_birth || 
+             profile.birthday
+  
+  if (!dob) {
+    return 'Add your birthday in profile'
+  }
+  
+  try {
+    // Parse the database format
+    const birthDate = new Date(dob)
+    
+    // Check if date is valid
+    if (isNaN(birthDate.getTime())) {
+      console.error('❌ Invalid date for subtitle:', dob)
+      return 'Add your birthday in profile'
+    }
+    
+    const today = new Date()
+    const currentYear = today.getFullYear()
+    
+    // Get this year's birthday
+    const thisYearBirthday = new Date(currentYear, birthDate.getMonth(), birthDate.getDate())
+    
+    // If birthday already passed this year, check next year
+    if (thisYearBirthday < today) {
+      thisYearBirthday.setFullYear(currentYear + 1)
+    }
+    
+    // Calculate days until birthday
+    const diffTime = thisYearBirthday - today
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    // Calculate age (current year - birth year, adjust if birthday hasn't happened yet)
+    let age = currentYear - birthDate.getFullYear()
+    if (thisYearBirthday > today) {
+      // Birthday hasn't happened this year yet, so they're still the previous age
+      age = age  // Keep current calculation
+    } else {
+      // Birthday has passed this year, so add 1 to age for next year's birthday
+      age = age + 1
+    }
+    
+    if (diffDays === 0) {
+      return `🎉 Happy ${age}th Birthday!`
+    } else if (diffDays === 1) {
+      return `🎂 Tomorrow! Turning ${age}`
+    } else if (diffDays <= 7) {
+      return `🎈 In ${diffDays} days (${age}th)`
+    } else if (diffDays <= 30) {
+      return `In ${diffDays} days • ${age} years`
+    } else if (diffDays <= 100) {
+      // Show months for longer periods
+      const months = Math.floor(diffDays / 30)
+      const remainingDays = diffDays % 30
+      if (remainingDays === 0) {
+        return `In ${months} month${months === 1 ? '' : 's'}`
+      } else {
+        return `In ${months}m ${remainingDays}d • Turning ${age}`
+      }
+    } else {
+      // For very far dates, show year and age
+      const nextYear = thisYearBirthday.getFullYear()
+      return `${birthDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}, ${nextYear} • Age ${age}`
+    }
+  } catch (error) {
+    console.error('❌ Error calculating birthday countdown:', error)
+    return 'Add your birthday in profile'
+  }
+}
+
 // Methods
 const formatDate = (date) => {
   if (!date) return 'N/A'
@@ -660,6 +819,7 @@ const getDonationStatusClass = (status) => {
     pending: 'bg-yellow-100 text-yellow-800',
     processing: 'bg-blue-100 text-blue-800',
     completed: 'bg-green-100 text-green-800',
+    success: 'bg-green-100 text-green-800', // NEW: Handle SUCCESS status from backend
     cancelled: 'bg-red-100 text-red-800',
     failed: 'bg-red-100 text-red-800'
   }
@@ -669,7 +829,7 @@ const getDonationStatusClass = (status) => {
   return statusMap[normalizedStatus] || 'bg-gray-100 text-gray-800'
 }
 
-// Load dashboard data from API
+// UPDATED: Enhanced loadDashboardData to ensure profile is loaded
 const loadDashboardData = async () => {
   const entityId = route.params.id
   if (!entityId) {
@@ -689,9 +849,23 @@ const loadDashboardData = async () => {
     // Make parallel API requests
     const promises = []
 
-    // Load profile from Pinia store if available
+    // IMPORTANT: Load profile data to get birthday info
     if (devoteeStore.loadProfileData) {
       promises.push(devoteeStore.loadProfileData())
+    } else {
+      // Fallback: directly call the service if store method doesn't exist
+      promises.push(
+        devoteeService.getProfile()
+          .then(response => {
+            if (response && response.data) {
+              devoteeStore.profile = response.data
+              console.log('Profile loaded with dob:', response.data.dob)
+            }
+          })
+          .catch(err => {
+            console.error('Error loading profile:', err)
+          })
+      )
     }
 
     // Load temple data
@@ -734,22 +908,16 @@ const loadDashboardData = async () => {
       })
     )
 
-    // Load donations data
+    // UPDATED: Load recent donations using the new donation store method
     promises.push(
-      // If we have a fetchDonations method, use it
-      devoteeStore.fetchDonations 
-        ? devoteeStore.fetchDonations()
-            .then(data => {
-              if (Array.isArray(data)) {
-                recentDonations.value = data.slice(0, 5)
-              }
-            })
-        // Otherwise try to use store data
-        : Promise.resolve().then(() => {
-            if (devoteeStore.donations && Array.isArray(devoteeStore.donations)) {
-              recentDonations.value = devoteeStore.donations.slice(0, 5)
-            }
-          })
+      donationStore.fetchRecentDonations()
+        .then(data => {
+          console.log('Dashboard: Recent donations loaded:', data)
+        })
+        .catch(err => {
+          console.error('Dashboard: Error loading recent donations:', err)
+          // Don't throw error to avoid breaking the entire dashboard
+        })
     )
     
     // Load recent sevas
@@ -779,6 +947,9 @@ const loadDashboardData = async () => {
     // Debug the loaded data
     console.log('Recent sevas:', sevaStore.recentSevas)
     console.log('Seva catalog:', sevaStore.sevaCatalog)
+    console.log('Recent donations:', donationStore.recentDonations)
+    console.log('Profile with birthday:', devoteeStore.profile)
+    console.log('DOB value:', devoteeStore.profile?.dob)
     
   } catch (err) {
     console.error('Error loading dashboard data:', err)

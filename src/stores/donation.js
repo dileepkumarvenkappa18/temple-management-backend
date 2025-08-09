@@ -5,7 +5,9 @@ import { donationService } from '@/services/donation.service'
 export const useDonationStore = defineStore('donation', () => {
   // State
   const donations = ref([])
+  const recentDonationsData = ref([])
   const loading = ref(false)
+  const loadingRecent = ref(false)
   const error = ref(null)
   const selectedDonation = ref(null)
 
@@ -51,6 +53,30 @@ export const useDonationStore = defineStore('donation', () => {
     byMethod: [],
   })
 
+  // Helper function to normalize donation data from different API responses
+  const normalizeDonationData = (donation) => {
+    return {
+      id: donation.id || donation.ID || Math.random(),
+      amount: donation.amount || donation.Amount || 0,
+      donation_type: donation.donation_type || donation.DonationType || donation.type,
+      donationType: donation.donation_type || donation.DonationType || donation.type,
+      type: donation.donation_type || donation.DonationType || donation.type,
+      method: donation.method || donation.Method || 'online',
+      status: donation.status || donation.Status || 'pending',
+      date: donation.donated_at || donation.DonatedAt || donation.date || donation.donation_date,
+      donation_date: donation.donated_at || donation.DonatedAt || donation.donation_date,
+      donated_at: donation.donated_at || donation.DonatedAt,
+      note: donation.note || donation.Note || donation.purpose || '',
+      purpose: donation.note || donation.Note || donation.purpose || '',
+      // Add any other fields that might be in the response
+      devotee_name: donation.devotee_name || donation.DevoteeName,
+      payment_id: donation.payment_id || donation.PaymentID,
+      order_id: donation.order_id || donation.OrderID,
+      created_at: donation.created_at || donation.CreatedAt,
+      updated_at: donation.updated_at || donation.UpdatedAt,
+    }
+  }
+
   // Getters
   const donationStats = computed(() => {
     return {
@@ -65,14 +91,57 @@ export const useDonationStore = defineStore('donation', () => {
     }
   })
 
-  const recentDonations = computed(() =>
-    donations.value
-      .filter(d => ['success', 'completed'].includes((d.status || '').toLowerCase()))
-      .sort((a, b) => new Date(b.donatedAt || b.date) - new Date(a.donatedAt || a.date))
+  const recentDonations = computed(() => {
+    // First try to use the specific recent donations data
+    if (recentDonationsData.value && recentDonationsData.value.length > 0) {
+      return recentDonationsData.value.slice(0, 5)
+    }
+    
+    // Fallback to filtering from all donations
+    return donations.value
+      .filter(d => ['success', 'completed', 'SUCCESS', 'COMPLETED'].includes((d.status || '').toUpperCase()))
+      .sort((a, b) => {
+        const dateA = new Date(a.donated_at || a.date || a.donation_date || 0)
+        const dateB = new Date(b.donated_at || b.date || b.donation_date || 0)
+        return dateB - dateA
+      })
       .slice(0, 5)
-  )
+  })
 
   // Actions
+
+  // Fetch recent donations specifically
+  async function fetchRecentDonations() {
+    loadingRecent.value = true
+    error.value = null
+    try {
+      console.log('Store: Fetching recent donations...')
+      const response = await donationService.getMyRecentDonations()
+      console.log('Store: Received recent donations:', response)
+
+      if (Array.isArray(response)) {
+        recentDonationsData.value = response.map(normalizeDonationData)
+        console.log('Store: Updated recent donations data:', recentDonationsData.value)
+      } else {
+        console.warn('Store: Expected array but got:', response)
+        recentDonationsData.value = []
+      }
+
+      return recentDonationsData.value
+    } catch (err) {
+      console.error('Store: Error fetching recent donations:', err)
+      error.value = err.message || 'Error fetching recent donations'
+      recentDonationsData.value = []
+      // Don't throw error for 404s as endpoint might not be implemented
+      if (err.response?.status !== 404) {
+        throw err
+      }
+      return []
+    } finally {
+      loadingRecent.value = false
+    }
+  }
+
   async function fetchMyDonations() {
     loading.value = true
     error.value = null
@@ -82,30 +151,37 @@ export const useDonationStore = defineStore('donation', () => {
       console.log('Store: Received donations response:', response)
 
       // Handle different response structures
-      if (response && typeof response === 'object') {
-        if (Array.isArray(response)) {
-          donations.value = response
-          pagination.value.totalItems = response.length
-        } else if (response.data && Array.isArray(response.data)) {
-          donations.value = response.data
-          // Update pagination if provided
-          if (response.pagination) {
-            pagination.value = {
-              ...pagination.value,
-              ...response.pagination
-            }
-          } else {
-            pagination.value.totalItems = response.total || response.data.length
+      let donationsArray = []
+      
+      if (Array.isArray(response)) {
+        donationsArray = response
+      } else if (response && response.data && Array.isArray(response.data)) {
+        donationsArray = response.data
+        // Update pagination if provided
+        if (response.pagination) {
+          pagination.value = {
+            ...pagination.value,
+            ...response.pagination
           }
-        } else if (response.success && Array.isArray(response.data)) {
-          donations.value = response.data
-          pagination.value.totalItems = response.total || response.data.length
-        } else {
-          console.warn('Unexpected response format:', response)
-          donations.value = []
+        } else if (response.total !== undefined) {
+          pagination.value.totalItems = response.total
         }
+      } else if (response && response.success && Array.isArray(response.data)) {
+        donationsArray = response.data
+        pagination.value.totalItems = response.total || response.data.length
+      } else if (response) {
+        // Handle case where response is not an array but contains donation data
+        donationsArray = []
+        console.warn('Unexpected response format:', response)
       } else {
-        donations.value = []
+        donationsArray = []
+      }
+
+      // Normalize all donations
+      donations.value = donationsArray.map(normalizeDonationData)
+      
+      if (!pagination.value.totalItems) {
+        pagination.value.totalItems = donations.value.length
       }
 
       console.log('Store: Final donations:', donations.value)
@@ -115,7 +191,12 @@ export const useDonationStore = defineStore('donation', () => {
       console.error('Store: Error fetching my donations:', err)
       error.value = err.message || 'Error fetching donations'
       donations.value = []
-      throw err
+      
+      // Don't throw error for 404s as endpoint might not be implemented
+      if (err.response?.status !== 404) {
+        throw err
+      }
+      return []
     } finally {
       loading.value = false
     }
@@ -147,7 +228,8 @@ export const useDonationStore = defineStore('donation', () => {
       // Handle response
       if (response && typeof response === 'object') {
         // Set donations
-        donations.value = response.data || response.donations || []
+        const donationsArray = response.data || response.donations || []
+        donations.value = donationsArray.map(normalizeDonationData)
 
         // Update pagination from response
         pagination.value = {
@@ -190,14 +272,14 @@ export const useDonationStore = defineStore('donation', () => {
       // Handle different response structures
       const data = response.data || response
       dashboardData.value = {
-        totalAmount: data.totalAmount || 0,
-        averageAmount: data.averageAmount || 0,
-        thisMonth: data.thisMonth || 0,
-        totalDonors: data.totalDonors || data.uniqueDonors || 0,
-        completed: data.completed || data.success || 0,
-        pending: data.pending || 0,
-        failed: data.failed || 0,
-        totalCount: data.totalCount || data.total || 0,
+        totalAmount: data.totalAmount || data.TotalAmount || 0,
+        averageAmount: data.averageAmount || data.AverageAmount || 0,
+        thisMonth: data.thisMonth || data.ThisMonth || 0,
+        totalDonors: data.totalDonors || data.TotalDonors || data.uniqueDonors || 0,
+        completed: data.completed || data.Completed || data.success || 0,
+        pending: data.pending || data.Pending || 0,
+        failed: data.failed || data.Failed || 0,
+        totalCount: data.totalCount || data.TotalCount || data.total || 0,
       }
 
       return response
@@ -267,7 +349,10 @@ export const useDonationStore = defineStore('donation', () => {
     try {
       const response = await donationService.verifyDonation(paymentData)
       // Refresh donations after verification
-      await fetchMyDonations()
+      await Promise.all([
+        fetchMyDonations(),
+        fetchRecentDonations()
+      ])
       return response
     } catch (err) {
       error.value = err.message || 'Error verifying donation'
@@ -331,7 +416,9 @@ export const useDonationStore = defineStore('donation', () => {
 
   function resetStore() {
     donations.value = []
+    recentDonationsData.value = []
     loading.value = false
+    loadingRecent.value = false
     error.value = null
     selectedDonation.value = null
     resetFilters()
@@ -360,7 +447,9 @@ export const useDonationStore = defineStore('donation', () => {
   return {
     // State
     donations,
+    recentDonationsData,
     loading,
+    loadingRecent,
     error,
     selectedDonation,
     filters,
@@ -374,6 +463,7 @@ export const useDonationStore = defineStore('donation', () => {
     recentDonations,
 
     // Actions
+    fetchRecentDonations,
     fetchMyDonations,
     fetchDonations,
     fetchDashboard,

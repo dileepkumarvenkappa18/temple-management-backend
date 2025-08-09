@@ -231,7 +231,7 @@
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="text-sm text-gray-900">{{ formatDate(event.eventDate) }}</div>
-                  <div class="text-sm text-gray-500">{{ formatTime(event.eventDate) }}</div>
+                  <div class="text-sm text-gray-500">{{ formatEventTime(event) }}</div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" :class="getTypeClass(event.type)">
@@ -694,6 +694,19 @@ const getStatusClass = (event) => {
   }
   
   return statusMap[status] || 'bg-gray-100 text-gray-800'
+}
+
+const formatEventTime = (event) => {
+  if (event.eventTime && event.eventTime !== '00:00') {
+    // Convert 24-hour format to 12-hour format
+    const [hours, minutes] = event.eventTime.split(':');
+    const hour24 = parseInt(hours);
+    const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
+    const ampm = hour24 >= 12 ? 'PM' : 'AM';
+    return `${hour12}:${minutes} ${ampm}`;
+  }
+  // Fallback to the existing formatTime function
+  return formatTime(event.eventDate);
 }
 
 const truncateText = (text, maxLength) => {

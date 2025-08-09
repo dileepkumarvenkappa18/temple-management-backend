@@ -11,7 +11,7 @@
                 <path d="M12 2L2 7v10c0 5.55 3.84 9.739 9 11 5.16-1.261 9-5.45 9-11V7l-10-5z"/>
               </svg>
             </div>
-            <span class="text-xl font-bold text-gray-900">TempleSaaS</span>
+            <span class="text-xl font-bold text-gray-900">Devotee Connect</span>
           </div>
           
           <!-- Navigation Links -->
@@ -180,7 +180,7 @@
                   <path d="M12 2L2 7v10c0 5.55 3.84 9.739 9 11 5.16-1.261 9-5.45 9-11V7l-10-5z"/>
                 </svg>
               </div>
-              <span class="text-xl font-bold">TempleSaaS</span>
+              <span class="text-xl font-bold">Devotee Connect</span>
             </div>
             <p class="text-gray-400 mb-4 max-w-md">
               Empowering temples worldwide with modern technology for better devotee management and spiritual community building.
@@ -208,7 +208,7 @@
         </div>
         
         <div class="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-          <p>&copy; 2025 TempleSaaS. All rights reserved.</p>
+          <p>&copy; 2025 Devotee Connect. All rights reserved.</p>
         </div>
       </div>
     </footer>

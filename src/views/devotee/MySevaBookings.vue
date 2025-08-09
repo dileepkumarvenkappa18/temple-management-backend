@@ -66,7 +66,7 @@
     </div>
 
     <!-- Loading State -->
-    <div v-if="loading" class="bg-white p-6 rounded-xl shadow-sm flex justify-center">
+    <div v-if="loading || sevaStore.loadingRecentSevas || sevaStore.loadingCatalog" class="bg-white p-6 rounded-xl shadow-sm flex justify-center">
       <div class="flex flex-col items-center">
         <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
         <p class="mt-2 text-gray-600">Loading your seva bookings...</p>
@@ -103,27 +103,24 @@
                 Date & Time
               </th>
               <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Price
-              </th>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Status
               </th>
-              <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <!-- <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
-              </th>
+              </th> -->
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-for="booking in filteredBookings" :key="booking.id" class="hover:bg-gray-50">
+            <tr v-for="booking in filteredBookings" :key="booking.id || booking.ID" class="hover:bg-gray-50">
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">
                   <div class="flex-shrink-0 h-10 w-10 bg-indigo-100 rounded-full flex items-center justify-center">
                     <svg class="h-5 w-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002 2z"/>
                     </svg>
                   </div>
                   <div class="ml-4">
-                    <div class="text-sm font-medium text-gray-900">{{ booking.seva_name || (booking.seva && booking.seva.name) || 'Seva' }}</div>
+                    <div class="text-sm font-medium text-gray-900">{{ booking.seva_name || (booking.seva && booking.seva.name) || `Seva ${booking.seva_id || booking.SevaID || ''}` }}</div>
                     <div class="text-xs text-gray-500">{{ booking.seva_type || (booking.seva && booking.seva.type) || '' }}</div>
                   </div>
                 </div>
@@ -133,9 +130,6 @@
                 <div class="text-xs text-gray-500">{{ formatTime(booking.booking_time || booking.BookingTime) }}</div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm text-gray-900">₹{{ booking.price || booking.amount || 0 }}</div>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap">
                 <span 
                   :class="getStatusClass(booking.status || booking.Status)"
                   class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
@@ -143,21 +137,21 @@
                   {{ formatStatus(booking.status || booking.Status) }}
                 </span>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button
+              <!-- <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button 
                   @click="viewBookingDetails(booking)"
                   class="text-indigo-600 hover:text-indigo-900 mr-3"
                 >
                   View
                 </button>
-                <button
+                <button 
                   v-if="(booking.status || booking.Status || '').toLowerCase() === 'pending'"
                   @click="cancelBooking(booking)"
                   class="text-red-600 hover:text-red-900"
                 >
                   Cancel
                 </button>
-              </td>
+              </td> -->
             </tr>
           </tbody>
         </table>
@@ -167,7 +161,7 @@
     <!-- Empty State -->
     <div v-else class="bg-white p-8 rounded-xl shadow-sm text-center">
       <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002 2z"/>
       </svg>
       <h3 class="mt-2 text-lg font-medium text-gray-900">No seva bookings found</h3>
       <p class="mt-1 text-sm text-gray-500">You haven't booked any sevas yet.</p>
@@ -190,7 +184,7 @@
       <div v-if="selectedBooking" class="p-4">
         <div class="space-y-4">
           <div class="flex justify-between">
-            <h3 class="text-lg font-medium text-gray-900">{{ selectedBooking.seva_name || (selectedBooking.seva && selectedBooking.seva.name) || 'Seva' }}</h3>
+            <h3 class="text-lg font-medium text-gray-900">{{ selectedBooking.seva_name || (selectedBooking.seva && selectedBooking.seva.name) || `Seva ${selectedBooking.seva_id || selectedBooking.SevaID || ''}` }}</h3>
             <span 
               :class="getStatusClass(selectedBooking.status || selectedBooking.Status)" 
               class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
@@ -218,7 +212,7 @@
             </div>
             <div class="col-span-2">
               <p class="text-gray-500">Description</p>
-              <p class="font-medium">{{ selectedBooking.description || (selectedBooking.seva && selectedBooking.seva.description) || 'No description available' }}</p>
+              <p class="font-medium">{{ selectedBooking.seva_description || (selectedBooking.seva && selectedBooking.seva.description) || 'No description available' }}</p>
             </div>
             <div v-if="selectedBooking.special_requests || selectedBooking.SpecialRequests" class="col-span-2">
               <p class="text-gray-500">Special Requests</p>
@@ -416,14 +410,10 @@ const fetchSevaBookings = async () => {
   error.value = null
   
   try {
+    // The store method now handles both fetching bookings and mapping seva names
     await sevaStore.fetchRecentSevas()
     
-    // After fetching, retrieve catalog/seva names
-    if (sevaStore.fetchSevaCatalog) {
-      await sevaStore.fetchSevaCatalog()
-    }
-    
-    console.log("Fetched seva bookings:", sevaStore.recentSevas)
+    console.log("Fetched seva bookings with names:", sevaStore.recentSevas)
   } catch (err) {
     console.error('Error fetching seva bookings:', err)
     error.value = err.message || 'Failed to load seva bookings'
@@ -466,27 +456,16 @@ const confirmCancelBooking = async () => {
   }
 }
 
-// Call your API to get the real seva catalog data and match it with bookings
-const fetchSevaNamesForBookings = async () => {
-  if (sevaStore.fetchSevaCatalog) {
-    try {
-      await sevaStore.fetchSevaCatalog()
-    } catch (error) {
-      console.error("Error fetching seva catalog:", error)
-    }
-  }
-}
-
 // Lifecycle hooks
-onMounted(() => {
-  fetchSevaBookings()
-  fetchSevaNamesForBookings()
+onMounted(async () => {
+  await fetchSevaBookings()
   
   // Log store state for debugging
-  console.log("Initial sevaStore state:", {
+  console.log("Final sevaStore state:", {
     recentSevas: sevaStore.recentSevas,
     sevaCatalog: sevaStore.sevaCatalog,
-    sevaList: sevaStore.sevaList
+    loadingRecentSevas: sevaStore.loadingRecentSevas,
+    loadingCatalog: sevaStore.loadingCatalog
   })
 })
 </script>
