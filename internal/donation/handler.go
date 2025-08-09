@@ -458,6 +458,23 @@ func parseIntQuery(c *gin.Context, key string, defaultValue int) int {
 }
 
 
+func (h *Handler) GetRecentDonations(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "10")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 10
+	}
+
+	recent, err := h.svc.GetRecentDonations(c.Request.Context(), limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch recent donations"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"recent_donations": recent})
+}
+
+
 
 // package donation
 

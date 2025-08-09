@@ -34,6 +34,8 @@ type Service interface {
 	// Receipt and export
 	GenerateReceipt(donationID uint, userID uint) (*Receipt, error)
 	ExportDonations(filters DonationFilters, format string) ([]byte, string, error)
+
+	GetRecentDonations(ctx context.Context, limit int) ([]RecentDonation, error)
 }
 
 type service struct {
@@ -390,6 +392,18 @@ func (s *service) exportAsCSV(donations []DonationWithUser) ([]byte, string, err
 }
 
 
+type RecentDonation struct {
+	Amount       float64   `json:"amount"`
+	DonationType string    `json:"donation_type"`
+	Method       string    `json:"method"`
+	Status       string    `json:"status"`
+	DonatedAt    time.Time `json:"donated_at"`
+}
+
+// New method to fetch recent donations
+func (s *service) GetRecentDonations(ctx context.Context, limit int) ([]RecentDonation, error) {
+	return s.repo.GetRecentDonations(ctx, limit)
+}
 
 
 

@@ -124,11 +124,14 @@ func (r *repository) UpdateEntityID(userID uint, entityID uint) error {
 func (r *repository) GetUserEmailsByRole(roleName string, entityID uint) ([]string, error) {
 	var emails []string
 
+	// Join with user_entity_memberships for devotees/volunteers
 	err := r.db.
 		Table("users").
-		Select("email").
+		Select("users.email").
 		Joins("JOIN user_roles ON users.role_id = user_roles.id").
-		Where("user_roles.role_name = ? AND users.entity_id = ? AND users.status = ?", roleName, entityID, "active").
+		Joins("JOIN user_entity_memberships ON users.id = user_entity_memberships.user_id").
+		Where("user_roles.role_name = ? AND user_entity_memberships.entity_id = ? AND users.status = ? AND user_entity_memberships.status = ?", 
+			roleName, entityID, "active", "active").
 		Scan(&emails).Error
 
 	return emails, err

@@ -26,6 +26,7 @@ type Repository interface {
 	GetDonationTrends(ctx context.Context, entityID uint, days int) ([]TrendData, error)
 	GetDonationsByType(ctx context.Context, entityID uint) ([]TypeData, error)
 	GetDonationsByMethod(ctx context.Context, entityID uint) ([]MethodData, error)
+	GetRecentDonations(ctx context.Context, limit int) ([]RecentDonation, error)
 }
 
 type repository struct {
@@ -343,6 +344,17 @@ func (r *repository) GetDonationsByMethod(ctx context.Context, entityID uint) ([
 		Scan(&methodData).Error
 
 	return methodData, err
+}
+
+func (r *repository) GetRecentDonations(ctx context.Context, limit int) ([]RecentDonation, error) {
+	var recent []RecentDonation
+	err := r.db.WithContext(ctx).
+		Model(&Donation{}).
+		Select("amount", "donation_type", "method", "status", "donated_at").
+		Order("donated_at DESC").
+		Limit(limit).
+		Scan(&recent).Error
+	return recent, err
 }
 
 

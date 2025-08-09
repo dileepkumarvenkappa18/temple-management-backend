@@ -97,11 +97,14 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	sevaRoutes.GET("/entity-bookings", middleware.RBACMiddleware("templeadmin"), sevaHandler.GetEntityBookings)
 	sevaRoutes.PATCH("/bookings/:id/status", middleware.RBACMiddleware("templeadmin"), sevaHandler.UpdateBookingStatus)
 	sevaRoutes.GET("/bookings/:id", middleware.RBACMiddleware("templeadmin"), sevaHandler.GetBookingByID)
-	sevaRoutes.GET("/booking-counts", middleware.RBACMiddleware("templeadmin"), sevaHandler.GetBookingCounts)
+	
 
 	// 🔐 Devotee Only (Booking Seva + Filters)
 	sevaRoutes.POST("/bookings", middleware.RBACMiddleware("devotee"), sevaHandler.BookSeva)
 	sevaRoutes.GET("/my-bookings", middleware.RBACMiddleware("devotee"), sevaHandler.GetMyBookings)
+	// Updated: Both templeadmin and devotee
+
+	sevaRoutes.GET("/booking-counts", middleware.RBACMiddleware("templeadmin", "devotee"), sevaHandler.GetBookingCounts)
 
 	// 🔍 Devotee View: Paginated & Filterable Sevas
 	sevaRoutes.GET("/", middleware.RBACMiddleware("devotee"), sevaHandler.GetSevas) // Now secured for devotee search
@@ -127,7 +130,6 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 
 		entityRoutes.GET("/dashboard-summary", middleware.RBACMiddleware("superadmin", "templeadmin"), entityHandler.GetDashboardSummary)
 
-
 	}
 
 	// ========== Event & RSVP ==========
@@ -140,7 +142,6 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	{
 		eventRoutes.POST("/", eventHandler.CreateEvent)
 		eventRoutes.POST("", eventHandler.CreateEvent)
-		eventRoutes.GET("/stats", eventHandler.GetEventStats)
 		eventRoutes.PUT("/:id", eventHandler.UpdateEvent)
 		eventRoutes.DELETE("/:id", eventHandler.DeleteEvent)
 	}
@@ -150,6 +151,9 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	protected.GET("/events/", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.ListEvents)
 	protected.GET("/events/:id", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.GetEventByID)
 	protected.GET("/events/upcoming", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.GetUpcomingEvents)
+	// Shared stats route (templeadmin + devotee)
+
+	protected.GET("/events/stats", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.GetEventStats)
 
 	{
 		rsvpRepo := eventrsvp.NewRepository(database.DB)
@@ -212,6 +216,8 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 
 			// Both can generate receipts
 			donationRoutes.GET("/:id/receipt", middleware.RBACMiddleware("devotee", "templeadmin"), donationHandler.GenerateReceipt)
+			donationRoutes.GET("/recent", middleware.RBACMiddleware("devotee", "templeadmin"), donationHandler.GetRecentDonations)
+
 		}
 	}
 

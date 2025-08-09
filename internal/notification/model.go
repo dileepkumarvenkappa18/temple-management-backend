@@ -13,7 +13,8 @@ type NotificationTemplate struct {
 	Name     string `gorm:"size:100;not null;index:idx_name_entity,unique" json:"name"`
 	EntityID uint   `gorm:"not null;index:idx_name_entity,unique" json:"entity_id"`
 
-	Channel   string    `gorm:"size:20;not null" json:"channel"`   // email, sms, whatsapp
+	Category string `gorm:"size:20;not null" json:"category"` // email, sms, whatsapp
+
 	Subject   string    `gorm:"size:255" json:"subject,omitempty"` // optional for email
 	Body      string    `gorm:"type:text;not null" json:"body"`    // Go template format
 	CreatedAt time.Time `json:"created_at"`
