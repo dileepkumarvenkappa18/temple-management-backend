@@ -93,7 +93,7 @@
                 </label>
                 <input
                   id="deity"
-                  v-model="form.deity"
+                  v-model="form.mainDeity"
                   type="text"
                   required
                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200"
@@ -108,7 +108,7 @@
                 </label>
                 <select
                   id="templeType"
-                  v-model="form.type"
+                  v-model="form.templeType"
                   required
                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200"
                 >
@@ -196,7 +196,7 @@
                 </label>
                 <input
                   id="address"
-                  v-model="form.address"
+                  v-model="form.streetAddress"
                   type="text"
                   required
                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200"
@@ -266,7 +266,7 @@
                 </label>
                 <input
                   id="pinCode"
-                  v-model="form.pinCode"
+                  v-model="form.pincode"
                   type="text"
                   pattern="[0-9]{6}"
                   required
@@ -296,7 +296,7 @@
                 </label>
                 <input
                   id="googleMapsLink"
-                  v-model="form.googleMapsLink"
+                  v-model="form.mapLink"
                   type="url"
                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200"
                   placeholder="https://maps.google.com/..."
@@ -516,8 +516,6 @@ export default defineComponent({
    const route = useRoute();
    const templeStore = useTempleStore();
    const toast = useToast();
-   
-   console.log('Toast object:', toast);
 
    // Temple ID from route params
    const templeId = computed(() => route.params.id);
@@ -528,22 +526,22 @@ export default defineComponent({
    const isLoading = ref(true);
    const loadError = ref(null);
 
-   // Form data
+   // Form data - FIXED FIELD NAMES to match backend structure
    const form = reactive({
      name: '',
-     deity: '',
-     type: '',
+     mainDeity: '', // Changed from deity to mainDeity
+     templeType: '', // Changed from type to templeType
      establishedYear: '',
      phone: '',
      email: '',
      description: '',
-     address: '',
+     streetAddress: '', // Changed from address to streetAddress
      city: '',
      state: '',
      district: '',
-     pinCode: '',
+     pincode: '', // Changed from pinCode to pincode
      landmark: '',
-     googleMapsLink: '',
+     mapLink: '', // Changed from googleMapsLink to mapLink
      documents: {
        registration: null,
        trustDeed: null,
@@ -595,7 +593,8 @@ export default defineComponent({
 
    // Computed properties
    const statusClass = computed(() => {
-     switch(form.status) {
+     const status = form.status?.toUpperCase() || '';
+     switch(status) {
        case 'APPROVED':
          return 'text-green-600 font-medium';
        case 'PENDING':
@@ -613,67 +612,27 @@ export default defineComponent({
      loadError.value = null;
      
      try {
-       // Mock data for development (use this during API development)
-       const mockData = {
-         name: 'Sri Venkateshwara Temple',
-         presiding_deity: 'Lord Venkateshwara',
-         category: 'traditional',
-         establishedYear: '1988',
-         contact: {
-           phone: '+91 9876543210',
-           email: 'info@venkateshwara.org'
-         },
-         description: 'A beautiful temple dedicated to Lord Venkateshwara, built in traditional South Indian style architecture.',
-         location: {
-           street: '123 Temple Street, Jayanagar',
-           city: 'Bengaluru',
-           state: 'Karnataka',
-           district: 'Bengaluru Urban',
-           pinCode: '560041',
-           landmark: 'Near Central Park',
-           googleMapsLink: 'https://maps.google.com/?q=12.9456,77.5678'
-         },
-         status: 'APPROVED',
-         documents: {
-           registration: 'registration_certificate.pdf',
-           trustDeed: 'trust_deed.pdf',
-           property: 'property_documents.pdf',
-           additional: ['additional_doc1.pdf', 'additional_doc2.pdf']
-         }
-       };
+       // Get the temple data from API
+       const response = await templeService.getTempleById(templeId.value);
+       const templeData = response.data || response;
        
-       let templeData;
-       
-       // Try to get data from API, but fall back to mock data if API call fails
-       try {
-         // Try to use temple service
-         const response = await templeService.getTempleById(templeId.value);
-         templeData = response.data;
-       } catch (apiError) {
-         console.warn('API call failed, using mock data instead:', apiError);
-         // Use mock data if API call fails
-         templeData = mockData;
-       }
-       
-       // Populate form with temple data
+       // Populate form with temple data - USING CORRECT FIELD NAMES
        form.name = templeData.name || '';
-       form.deity = templeData.presiding_deity || templeData.mainDeity || '';
-       form.type = templeData.category || templeData.templeType || '';
-       form.establishedYear = templeData.establishedYear || '';
-       form.phone = templeData.contact?.phone || templeData.phone || '';
-       form.email = templeData.contact?.email || templeData.email || '';
+       form.mainDeity = templeData.main_deity || '';
+       form.templeType = templeData.temple_type || '';
+       form.establishedYear = templeData.established_year || '';
+       form.phone = templeData.phone || '';
+       form.email = templeData.email || '';
        form.description = templeData.description || '';
        
        // Address details
-       if (templeData.location) {
-         form.address = templeData.location.street || '';
-         form.city = templeData.location.city || '';
-         form.state = templeData.location.state || '';
-         form.district = templeData.location.district || '';
-         form.pinCode = templeData.location.pinCode || '';
-         form.landmark = templeData.location.landmark || '';
-         form.googleMapsLink = templeData.location.googleMapsLink || '';
-       }
+       form.streetAddress = templeData.street_address || '';
+       form.city = templeData.city || '';
+       form.state = templeData.state || '';
+       form.district = templeData.district || '';
+       form.pincode = templeData.pincode || '';
+       form.landmark = templeData.landmark || '';
+       form.mapLink = templeData.map_link || '';
        
        // Status information
        form.status = templeData.status || 'PENDING';
@@ -681,11 +640,31 @@ export default defineComponent({
        form.adminNotes = templeData.admin_notes || '';
        
        // Document information
-       if (templeData.documents) {
-         existingFiles.registration = templeData.documents.registration || '';
-         existingFiles.trustDeed = templeData.documents.trustDeed || '';
-         existingFiles.property = templeData.documents.property || '';
-         existingFiles.additional = templeData.documents.additional || [];
+       if (templeData.registration_cert_url) {
+         existingFiles.registration = templeData.registration_cert_url.split('/').pop() || 'registration.pdf';
+       }
+       
+       if (templeData.trust_deed_url) {
+         existingFiles.trustDeed = templeData.trust_deed_url.split('/').pop() || 'trust_deed.pdf';
+       }
+       
+       if (templeData.property_docs_url) {
+         existingFiles.property = templeData.property_docs_url.split('/').pop() || 'property.pdf';
+       }
+       
+       if (templeData.additional_docs_urls) {
+         try {
+           // Try to parse if it's a JSON string
+           const additionalDocs = JSON.parse(templeData.additional_docs_urls);
+           if (Array.isArray(additionalDocs)) {
+             existingFiles.additional = additionalDocs.map(url => url.split('/').pop());
+           } else {
+             existingFiles.additional = Object.values(additionalDocs).map(url => url.split('/').pop());
+           }
+         } catch (e) {
+           // If not JSON, handle as a comma-separated string
+           existingFiles.additional = templeData.additional_docs_urls.split(',').map(url => url.trim().split('/').pop());
+         }
        }
        
      } catch (error) {
@@ -710,19 +689,38 @@ export default defineComponent({
    // Validation
    const validateCurrentStep = () => {
      if (currentStep.value === 1) {
-       const requiredFields = ['name', 'deity', 'type', 'phone'];
-       const missingFields = requiredFields.filter(field => !form[field].trim());
+       const requiredFields = [
+         { field: 'name', label: 'Temple Name' },
+         { field: 'mainDeity', label: 'Main Deity' },
+         { field: 'templeType', label: 'Temple Type' },
+         { field: 'phone', label: 'Phone Number' }
+       ];
+       
+       const missingFields = requiredFields.filter(({ field }) => !form[field]?.trim());
        
        if (missingFields.length > 0) {
-         showToast(`Please fill in all required fields: ${missingFields.join(', ')}`, 'error');
+         showToast(`Please fill in all required fields: ${missingFields.map(f => f.label).join(', ')}`, 'error');
          return false;
        }
      } else if (currentStep.value === 2) {
-       const requiredFields = ['address', 'city', 'state', 'district', 'pinCode'];
-       const missingFields = requiredFields.filter(field => !form[field].trim());
+       const requiredFields = [
+         { field: 'streetAddress', label: 'Street Address' },
+         { field: 'city', label: 'City' },
+         { field: 'state', label: 'State' },
+         { field: 'district', label: 'District' },
+         { field: 'pincode', label: 'PIN Code' }
+       ];
+       
+       const missingFields = requiredFields.filter(({ field }) => !form[field]?.trim());
        
        if (missingFields.length > 0) {
-         showToast(`Please fill in all required address fields: ${missingFields.join(', ')}`, 'error');
+         showToast(`Please fill in all required address fields: ${missingFields.map(f => f.label).join(', ')}`, 'error');
+         return false;
+       }
+       
+       // Validate PIN code format
+       if (form.pincode && !/^\d{6}$/.test(form.pincode)) {
+         showToast('PIN Code must be a 6-digit number', 'error');
          return false;
        }
      }
@@ -741,124 +739,54 @@ export default defineComponent({
      }
    };
 
-   // Form submission
-   const handleSubmit = async () => {
-     if (!validateCurrentStep()) return;
+   // Form submission - COMPLETELY REWRITTEN to properly format data
+  const handleSubmit = async () => {
+  if (!validateCurrentStep()) return;
 
-     // Check for required documents if they weren't already uploaded
-     if (!existingFiles.registration && !form.documents.registration) {
-       showToast('Please upload required document: Registration Certificate', 'error');
-       return;
-     }
-     
-     if (!existingFiles.trustDeed && !form.documents.trustDeed) {
-       showToast('Please upload required document: Trust Deed', 'error');
-       return;
-     }
+  try {
+    isSubmitting.value = true;
 
-     try {
-       isSubmitting.value = true;
+    // Ensure the established year is a valid number
+    let establishedYear = null;
+    if (form.establishedYear && !isNaN(parseInt(form.establishedYear))) {
+      establishedYear = parseInt(form.establishedYear);
+    }
 
-       // Prepare data for update
-       const updateData = {
-         id: templeId.value,
-         name: form.name.trim(),
-         presiding_deity: form.deity,
-         category: form.type,
-         establishedYear: form.establishedYear,
-         contact: {
-           phone: form.phone,
-           email: form.email
-         },
-         description: form.description,
-         location: {
-           street: form.address,
-           city: form.city,
-           state: form.state,
-           district: form.district,
-           pinCode: form.pinCode,
-           landmark: form.landmark,
-           googleMapsLink: form.googleMapsLink
-         },
-         // Include existing documents that weren't changed
-         documents: {
-           registration: form.documents.registration ? null : existingFiles.registration,
-           trustDeed: form.documents.trustDeed ? null : existingFiles.trustDeed,
-           property: form.documents.property ? null : existingFiles.property,
-           additional: existingFiles.additional
-         }
-       };
+    // Prepare data in the format expected by the backend
+    const payload = {
+      id: parseInt(templeId.value),
+      name: form.name.trim(),
+      main_deity: form.mainDeity.trim(),
+      temple_type: form.templeType,
+      established_year: establishedYear,
+      phone: form.phone.trim(),
+      email: form.email.trim(),
+      description: form.description.trim(),
+      street_address: form.streetAddress.trim(),
+      city: form.city.trim(),
+      state: form.state.trim(),
+      district: form.district.trim(),
+      pincode: form.pincode.trim(),
+      landmark: form.landmark.trim(),
+      map_link: form.mapLink.trim()
+    };
 
-       // Check if we have new files to upload
-       const hasNewFiles = form.documents.registration || 
-                           form.documents.trustDeed || 
-                           form.documents.property || 
-                           (form.documents.additional && form.documents.additional.length > 0);
+    console.log('Submitting update with data:', payload);
+    
+    await templeService.updateTemple(templeId.value, payload);
 
-       try {
-         // Use the appropriate method based on whether we have files
-         if (hasNewFiles) {
-           // Create a FormData object for file uploads
-           const formData = new FormData();
-           
-           // Add basic temple data
-           Object.entries(updateData).forEach(([key, value]) => {
-             if (key !== 'documents' && key !== 'contact' && key !== 'location') {
-               formData.append(key, value);
-             }
-           });
-           
-           // Add contact info
-           formData.append('contact[phone]', updateData.contact.phone);
-           formData.append('contact[email]', updateData.contact.email);
-           
-           // Add location data
-           Object.entries(updateData.location).forEach(([key, value]) => {
-             formData.append(`location[${key}]`, value);
-           });
-           
-           // Add documents
-           if (form.documents.registration) {
-             formData.append('documents[registration]', form.documents.registration);
-           }
-           
-           if (form.documents.trustDeed) {
-             formData.append('documents[trustDeed]', form.documents.trustDeed);
-           }
-           
-           if (form.documents.property) {
-             formData.append('documents[property]', form.documents.property);
-           }
-           
-           if (form.documents.additional && form.documents.additional.length > 0) {
-             form.documents.additional.forEach((file, index) => {
-               formData.append(`documents[additional][${index}]`, file);
-             });
-           }
-           
-           // Update temple with files
-           await templeService.updateTemple(templeId.value, formData);
-         } else {
-           // Update temple without files
-           await templeService.updateTemple(templeId.value, updateData);
-         }
-
-         showToast('Temple information updated successfully!');
-         router.push('/tenant/entities');
-       } catch (apiError) {
-         console.warn('API call failed, but form is valid:', apiError);
-         // Simulate success for development (remove in production)
-         showToast('Temple information updated successfully! (Development mode)');
-         router.push('/tenant/entities');
-       }
-     } catch (error) {
-       console.error('Failed to update temple:', error);
-       const errorMessage = typeof error === 'object' ? (error.message || 'Failed to update temple information. Please try again.') : 'Failed to update temple information. Please try again.';
-       showToast(errorMessage, 'error');
-     } finally {
-       isSubmitting.value = false;
-     }
-   };
+    showToast('Temple information updated successfully!');
+    
+    // Use the same routing as create temple - redirect to tenant dashboard
+    router.push('/tenant/dashboard');
+  } catch (error) {
+    console.error('Failed to update temple:', error);
+    const errorMessage = typeof error === 'object' ? (error.message || 'Failed to update temple information. Please try again.') : 'Failed to update temple information. Please try again.';
+    showToast(errorMessage, 'error');
+  } finally {
+    isSubmitting.value = false;
+  }
+};
 
    // Initialize component
    onMounted(() => {

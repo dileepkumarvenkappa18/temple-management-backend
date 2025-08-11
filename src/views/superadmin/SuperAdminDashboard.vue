@@ -62,12 +62,12 @@
           Test Counts API
         </button>
 
-        <button
+        <!-- <button
           @click="debugMode = !debugMode"
           class="inline-flex items-center px-4 py-2 bg-gray-200 text-gray-800 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors duration-200"
         >
           {{ debugMode ? 'Hide Debug' : 'Debug Mode' }}
-        </button>
+        </button> -->
       </div>
 
       <!-- Debug Info -->
@@ -505,102 +505,6 @@ const filteredApplications = computed(() => {
   }
   return templeApplications.value.filter(app => app.status.toLowerCase() === filterStatus.value.toLowerCase())
 })
-
-// Mock data for development (keeping for temple applications since that endpoint might not exist yet)
-const MOCK_TEMPLE_APPLICATIONS = [
-  {
-    id: '1',
-    templeName: 'Vishnu Temple',
-    adminName: 'Rajesh Kumar',
-    adminEmail: 'rajesh@temple.org',
-    phone: '+91 98765 43210',
-    city: 'Bengaluru',
-    state: 'Karnataka',
-    address: '123 Temple Road, Rajajinagar, Bengaluru, Karnataka',
-    status: 'pending',
-    submittedAt: new Date(Date.now() - 3 * 86400000).toISOString(), // 3 days ago
-    documents: [
-      { id: '1', name: 'Temple_Registration.pdf', size: '2.3 MB', type: 'PDF' },
-      { id: '2', name: 'Trust_Deed.pdf', size: '1.8 MB', type: 'PDF' }
-    ]
-  },
-  {
-    id: '2',
-    templeName: 'Shiva Temple',
-    adminName: 'Sanjay Sharma',
-    adminEmail: 'sanjay@temple.org',
-    phone: '+91 87654 32109',
-    city: 'Chennai',
-    state: 'Tamil Nadu',
-    address: '456 Temple Street, Mylapore, Chennai, Tamil Nadu',
-    status: 'pending',
-    submittedAt: new Date(Date.now() - 5 * 86400000).toISOString(), // 5 days ago
-    documents: [
-      { id: '3', name: 'Registration_Certificate.pdf', size: '1.5 MB', type: 'PDF' },
-      { id: '4', name: 'Property_Documents.pdf', size: '3.2 MB', type: 'PDF' }
-    ]
-  },
-  {
-    id: '3',
-    templeName: 'Hanuman Temple',
-    adminName: 'Praveen Reddy',
-    adminEmail: 'praveen@temple.org',
-    phone: '+91 76543 21098',
-    city: 'Hyderabad',
-    state: 'Telangana',
-    address: '789 Temple Avenue, Jubilee Hills, Hyderabad, Telangana',
-    status: 'approved',
-    submittedAt: new Date(Date.now() - 10 * 86400000).toISOString(), // 10 days ago
-    approvedAt: new Date(Date.now() - 7 * 86400000).toISOString(), // 7 days ago
-    documents: [
-      { id: '5', name: 'Trust_Documents.pdf', size: '2.1 MB', type: 'PDF' }
-    ]
-  },
-  {
-    id: '4',
-    templeName: 'Ganesh Temple',
-    adminName: 'Vinod Patel',
-    adminEmail: 'vinod@temple.org',
-    phone: '+91 65432 10987',
-    city: 'Mumbai',
-    state: 'Maharashtra',
-    address: '101 Temple Lane, Dadar, Mumbai, Maharashtra',
-    status: 'rejected',
-    submittedAt: new Date(Date.now() - 15 * 86400000).toISOString(), // 15 days ago
-    rejectedAt: new Date(Date.now() - 12 * 86400000).toISOString(), // 12 days ago
-    notes: 'Incomplete documentation. Missing property ownership records and trust deed details.',
-    documents: [
-      { id: '6', name: 'Partial_Documents.pdf', size: '1.2 MB', type: 'PDF' }
-    ]
-  }
-]
-
-const MOCK_ACTIVITIES = [
-  {
-    id: 1,
-    type: 'approval',
-    description: 'Approved Hanuman Temple registration for Praveen Reddy',
-    timestamp: new Date(Date.now() - 7 * 86400000).toISOString() // 7 days ago
-  },
-  {
-    id: 2,
-    type: 'rejection',
-    description: 'Rejected Ganesh Temple application due to incomplete documents',
-    timestamp: new Date(Date.now() - 12 * 86400000).toISOString() // 12 days ago
-  },
-  {
-    id: 3,
-    type: 'new_application',
-    description: 'New temple application received from Vishnu Temple',
-    timestamp: new Date(Date.now() - 3 * 86400000).toISOString() // 3 days ago
-  },
-  {
-    id: 4,
-    type: 'new_application',
-    description: 'New temple application received from Shiva Temple',
-    timestamp: new Date(Date.now() - 5 * 86400000).toISOString() // 5 days ago
-  }
-]
 
 // Simple function for the coming soon toast
 const showComingSoonToast = () => {
@@ -1071,4 +975,3 @@ onMounted(async () => {
   ])
 })
 </script>
-

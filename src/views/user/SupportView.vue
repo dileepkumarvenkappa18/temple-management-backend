@@ -24,62 +24,6 @@
           </div>
         </div>
         
-        <div class="mb-8">
-          <h2 class="text-lg font-semibold text-indigo-700 mb-4">Submit a Support Ticket</h2>
-          <form @submit.prevent="submitSupportTicket">
-            <div class="mb-4">
-              <label for="subject" class="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-              <BaseInput
-                id="subject"
-                v-model="ticketForm.subject"
-                placeholder="Brief description of your issue"
-                :error="ticketErrors.subject"
-                required
-              />
-            </div>
-            
-            <div class="mb-4">
-              <label for="category" class="block text-sm font-medium text-gray-700 mb-1">Category</label>
-              <BaseSelect
-                id="category"
-                v-model="ticketForm.category"
-                :options="supportCategories"
-                :error="ticketErrors.category"
-                required
-              />
-            </div>
-            
-            <div class="mb-4">
-              <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea
-                id="description"
-                v-model="ticketForm.description"
-                rows="4"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Please provide details about your issue"
-                :class="{'border-red-500': ticketErrors.description}"
-                required
-              ></textarea>
-              <p v-if="ticketErrors.description" class="mt-1 text-sm text-red-600">{{ ticketErrors.description }}</p>
-            </div>
-            
-            <div class="mb-4">
-              <label class="block text-sm font-medium text-gray-700 mb-1">Attachments (Optional)</label>
-              <BaseFileUpload
-                v-model="ticketForm.attachments"
-                accept="image/*,.pdf,.doc,.docx"
-                multiple
-              />
-            </div>
-            
-            <div class="flex justify-end">
-              <BaseButton type="submit" :loading="loading" variant="primary">
-                Submit Ticket
-              </BaseButton>
-            </div>
-          </form>
-        </div>
-        
         <div>
           <h2 class="text-lg font-semibold text-indigo-700 mb-4">Frequently Asked Questions</h2>
           <div v-for="(faq, index) in faqs" :key="index" class="mb-4 border-b border-gray-200 pb-4">
@@ -100,54 +44,23 @@
 </template>
 
 <script>
-import { ref, reactive } from 'vue';
+import { reactive } from 'vue';
 import { useToast } from '@/composables/useToast';
 
 // Import base components
 import BaseCard from '@/components/common/BaseCard.vue';
-import BaseInput from '@/components/common/BaseInput.vue';
-import BaseSelect from '@/components/common/BaseSelect.vue';
 import BaseButton from '@/components/common/BaseButton.vue';
-import BaseFileUpload from '@/components/common/BaseFileUpload.vue';
 
 export default {
   name: 'SupportView',
   
   components: {
     BaseCard,
-    BaseInput,
-    BaseSelect,
-    BaseButton,
-    BaseFileUpload
+    BaseButton
   },
   
   setup() {
     const { showToast } = useToast();
-    const loading = ref(false);
-    
-    const ticketForm = reactive({
-      subject: '',
-      category: '',
-      description: '',
-      attachments: []
-    });
-    
-    const ticketErrors = reactive({
-      subject: '',
-      category: '',
-      description: ''
-    });
-    
-    const supportCategories = [
-      { value: 'account', label: 'Account Issues' },
-      { value: 'billing', label: 'Billing & Payments' },
-      { value: 'temple', label: 'Temple Management' },
-      { value: 'devotee', label: 'Devotee Registration' },
-      { value: 'seva', label: 'Seva Booking' },
-      { value: 'donation', label: 'Donations' },
-      { value: 'technical', label: 'Technical Support' },
-      { value: 'other', label: 'Other' }
-    ];
     
     const faqs = reactive([
       {
@@ -181,76 +94,9 @@ export default {
       faqs[index].open = !faqs[index].open;
     };
     
-    const validateTicketForm = () => {
-      let isValid = true;
-      
-      // Reset errors
-      Object.keys(ticketErrors).forEach(key => {
-        ticketErrors[key] = '';
-      });
-      
-      if (!ticketForm.subject.trim()) {
-        ticketErrors.subject = 'Subject is required';
-        isValid = false;
-      }
-      
-      if (!ticketForm.category) {
-        ticketErrors.category = 'Please select a category';
-        isValid = false;
-      }
-      
-      if (!ticketForm.description.trim()) {
-        ticketErrors.description = 'Description is required';
-        isValid = false;
-      } else if (ticketForm.description.trim().length < 20) {
-        ticketErrors.description = 'Description must be at least 20 characters';
-        isValid = false;
-      }
-      
-      return isValid;
-    };
-    
-    const submitSupportTicket = async () => {
-      if (!validateTicketForm()) return;
-      
-      loading.value = true;
-      
-      try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        showToast({
-          type: 'success',
-          message: 'Support ticket submitted successfully! Our team will contact you soon.',
-          duration: 5000
-        });
-        
-        // Reset form
-        ticketForm.subject = '';
-        ticketForm.category = '';
-        ticketForm.description = '';
-        ticketForm.attachments = [];
-        
-      } catch (error) {
-        showToast({
-          type: 'error',
-          message: 'Failed to submit support ticket. Please try again later.',
-          duration: 5000
-        });
-        console.error('Error submitting support ticket:', error);
-      } finally {
-        loading.value = false;
-      }
-    };
-    
     return {
-      loading,
-      ticketForm,
-      ticketErrors,
-      supportCategories,
       faqs,
-      toggleFaq,
-      submitSupportTicket
+      toggleFaq
     };
   }
 };

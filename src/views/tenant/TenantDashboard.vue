@@ -43,15 +43,6 @@
               </div>
             </div>
              -->
-            <!-- Status message for non-approved tenants -->
-            <div v-if="!isUserApproved" class="mt-3 bg-yellow-400 bg-opacity-20 px-3 py-2 rounded-lg text-yellow-100">
-              <span v-if="isUserPending">
-                Your account is pending approval from the administrator. You'll be notified once approved.
-              </span>
-              <span v-else-if="isUserRejected">
-                Your account has been rejected. Please contact the administrator for more information.
-              </span>
-            </div>
           </div>
           
           <div class="mt-6 md:mt-0">
@@ -149,7 +140,7 @@
                   <h4 class="text-lg font-semibold text-gray-900 mr-3">{{ temple.name }}</h4>
                   <TempleApprovalStatus :status="temple.status" />
                 </div>
-                <p class="text-gray-600 mb-2">{{ temple.address }}</p>
+                <p class="text-gray-600 mb-2">{{ formatAddress(temple.address) }}</p>
                 <div class="flex flex-wrap items-center text-sm text-gray-500 gap-4">
                   <span class="flex items-center">
                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -382,6 +373,16 @@ const loadTempleData = async () => {
   } catch (error) {
     console.error('Error loading temple data:', error)
     showToast('Failed to load temple data. Please try again.', 'error')
+  }
+}
+
+const formatAddress = (address) => {
+  try {
+    const addr = typeof address === 'string' ? JSON.parse(address) : address
+    if (!addr) return ''
+    return `${addr.street || ''}, ${addr.city || ''}, ${addr.state || ''}, ${addr.pincode || ''}, ${addr.country || ''}`
+  } catch {
+    return address || ''
   }
 }
 

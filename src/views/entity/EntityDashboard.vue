@@ -49,7 +49,7 @@
 
       <!-- Stats Grid -->
       <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div v-for="i in 4" :key="i" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
+        <div v-for="i in 4" :key="i" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-32 hover:shadow-md transition-shadow duration-200">
           <div class="animate-pulse flex items-center">
             <div class="h-12 w-12 bg-gray-200 rounded-lg mr-4"></div>
             <div class="space-y-2 flex-1">
@@ -63,125 +63,93 @@
 
       <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <!-- Registered Devotees -->
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <div class="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"></path>
-                </svg>
+        <router-link :to="{ name: 'DevoteeManagement', params: { id: $route.params.id } }" class="block">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-32 hover:shadow-md transition-shadow duration-200 cursor-pointer">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"></path>
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Registered Devotees</p>
+                <p class="text-2xl font-bold text-gray-900">{{ dashboardData.devotees?.total || 0 }}</p>
+                <p class="text-xs text-green-600">+{{ dashboardData.devotees?.newThisMonth || 0 }} this month</p>
               </div>
             </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">Registered Devotees</p>
-              <p class="text-2xl font-bold text-gray-900">{{ dashboardData.devotees?.total || 0 }}</p>
-              <p class="text-xs text-green-600">+{{ dashboardData.devotees?.newThisMonth || 0 }} this month</p>
-            </div>
           </div>
-        </div>
+        </router-link>
 
-        <!-- Seva Bookings Today -->
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <div class="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                <svg class="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                </svg>
+        <!-- Seva Bookings -->
+        <router-link :to="{ name: 'SevaManagement', params: { id: $route.params.id } }" class="block">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-32 hover:shadow-md transition-shadow duration-200 cursor-pointer">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <svg class="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                  </svg>
+                </div>
               </div>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">Seva Bookings</p>
-              <div class="flex items-baseline space-x-2">
-                <p class="text-2xl font-bold text-gray-900">{{ dashboardData.sevas?.today || 0 }}</p>
-                <span class="text-sm text-gray-500">today</span>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Seva Bookings</p>
+                <div class="flex items-baseline">
+                  <p class="text-2xl font-bold text-gray-900">{{ dashboardData.sevas?.today || 0 }}</p>
+                  <span class="text-sm text-gray-500 ml-1">today</span>
+                </div>
+                <p class="text-xs text-blue-600">{{ dashboardData.sevas?.thisMonth || 0 }} this month</p>
               </div>
-              <p class="text-xs text-blue-600">{{ dashboardData.sevas?.thisMonth || 0 }} this month</p>
             </div>
           </div>
-        </div>
+        </router-link>
 
-        <!-- Donations This Month -->
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <div class="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
-                </svg>
-              </div>
-            </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">Month Donations</p>
-              <p class="text-2xl font-bold text-gray-900">₹{{ formatCurrency(dashboardData.donations?.thisMonth || 0) }}</p>
-              <p class="text-xs text-green-600">+{{ dashboardData.donations?.growth || 0 }}% from last month</p>
-            </div>
-          </div>
+       <!-- Donations -->
+<router-link :to="{ name: 'DonationManagement', params: { id: $route.params.id } }" class="block">
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-32 hover:shadow-md transition-shadow duration-200 cursor-pointer">
+    <div class="flex items-center h-full">
+      <div class="flex-shrink-0">
+        <div class="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
+          <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+          </svg>
         </div>
+      </div>
+      <div class="ml-4 flex flex-col">
+        <p class="text-sm font-medium text-gray-600 whitespace-nowrap">Month Donations</p>
+        <p class="text-2xl font-bold text-gray-900">₹{{ formatCurrency(dashboardData.donations?.thisMonth || 0) }}</p>
+        <p class="text-xs text-green-600 mb-4">+{{ dashboardData.donations?.growth || 0 }}% from last month</p>
+      </div>
+    </div>
+  </div>
+</router-link>
 
         <!-- Upcoming Events -->
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <div class="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <svg class="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                </svg>
+        <router-link :to="{ name: 'EventManagement', params: { id: $route.params.id } }" class="block">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-32 hover:shadow-md transition-shadow duration-200 cursor-pointer">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <svg class="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Upcoming Events</p>
+                <p class="text-2xl font-bold text-gray-900">{{ dashboardData.events?.upcoming || 0 }}</p>
+                <p class="text-xs text-purple-600">{{ dashboardData.events?.thisWeek || 0 }} this week</p>
               </div>
             </div>
-            <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">Upcoming Events</p>
-              <p class="text-2xl font-bold text-gray-900">{{ dashboardData.events?.upcoming || 0 }}</p>
-              <p class="text-xs text-purple-600">{{ dashboardData.events?.thisWeek || 0 }} this week</p>
-            </div>
           </div>
-        </div>
+        </router-link>
       </div>
 
       <!-- Main Content Grid -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <!-- Left Column: Recent Activity & Quick Actions -->
-        <div class="lg:col-span-2 space-y-8">
-          <!-- Recent Notifications -->
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200">
-            <!-- <div class="p-6 border-b border-gray-200">
-              <div class="flex items-center justify-between">
-                <h3 class="text-lg font-semibold text-gray-900">Recent Notifications</h3>
-                <router-link 
-                  to="/notifications" 
-                  class="text-sm text-indigo-600 hover:text-indigo-700 font-medium transition-colors duration-200">
-                  View All
-                </router-link>
-              </div>
-            </div> -->
-            <!-- <div class="p-6">
-              <div v-if="notifications.length === 0" class="text-center py-8">
-                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5 5v-5z M9 19H3m6 0V5l-6 5m0 9h6"></path>
-                </svg>
-                <p class="mt-4 text-sm text-gray-500">No new notifications</p>
-              </div>
-              <div v-else class="space-y-4">
-                <div v-for="notification in notifications.slice(0, 5)" :key="notification.id" 
-                     class="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors duration-200">
-                  <div class="flex-shrink-0">
-                    <div :class="getNotificationIconClass(notification.type)" class="h-8 w-8 rounded-full flex items-center justify-center">
-                      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getNotificationIconPath(notification.type)"></path>
-                      </svg>
-                    </div>
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <p class="text-sm font-medium text-gray-900">{{ notification.title }}</p>
-                    <p class="text-sm text-gray-500">{{ notification.message }}</p>
-                    <p class="text-xs text-gray-400 mt-1">{{ formatTimeAgo(notification.createdAt) }}</p>
-                  </div>
-                </div>
-              </div>
-            </div> -->
-          </div>
-
-          <!-- Quick Actions -->
+        <!-- Left Column: Quick Actions -->
+        <div class="lg:col-span-2">
           <div class="bg-white rounded-xl shadow-sm border border-gray-200">
             <div class="p-6 border-b border-gray-200">
               <h3 class="text-lg font-semibold text-gray-900">Quick Actions</h3>
@@ -244,9 +212,8 @@
           </div>
         </div>
 
-        <!-- Right Column: Upcoming Events & Top Donors -->
-        <div class="space-y-8">
-          <!-- Upcoming Events -->
+        <!-- Right Column: Upcoming Events -->
+        <div>
           <div class="bg-white rounded-xl shadow-sm border border-gray-200">
             <div class="p-6 border-b border-gray-200">
               <div class="flex items-center justify-between">
@@ -259,13 +226,13 @@
               </div>
             </div>
             <div class="p-6">
-              <div v-if="upcomingEvents.length === 0" class="text-center py-8">
+              <div v-if="upcomingEvents.length === 0" class="text-center py-4">
                 <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                 </svg>
-                <p class="mt-4 text-sm text-gray-500">No upcoming events</p>
+                <p class="mt-2 text-sm text-gray-500">No upcoming events</p>
                 <router-link :to="`/entity/${entityId}/events`" 
-                           class="mt-2 inline-flex items-center text-sm text-indigo-600 hover:text-indigo-700 font-medium">
+                           class="mt-1 inline-flex items-center text-sm text-indigo-600 hover:text-indigo-700 font-medium">
                   Create Event
                 </router-link>
               </div>
@@ -288,42 +255,42 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
 
-          <!-- Top Donors -->
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200">
-            <div class="p-6 border-b border-gray-200">
-              <div class="flex items-center justify-between">
-                <h3 class="text-lg font-semibold text-gray-900">Top Donors</h3>
-                <router-link 
-                  :to="`/entity/${entityId}/donations`" 
-                  class="text-sm text-indigo-600 hover:text-indigo-700 font-medium transition-colors duration-200">
-                  View All
-                </router-link>
-              </div>
-            </div>
-            <div class="p-6">
-              <div v-if="topDonors.length === 0" class="text-center py-8">
-                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
-                </svg>
-                <p class="mt-4 text-sm text-gray-500">No donations yet</p>
-              </div>
-              <div v-else class="space-y-4">
-                <div v-for="(donor, index) in topDonors.slice(0, 5)" :key="donor.id || donor.email || index" 
-                     class="flex items-center space-x-3">
-                  <div class="flex-shrink-0">
-                    <div class="h-8 w-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center">
-                      <span class="text-xs font-bold text-white">{{ index + 1 }}</span>
-                    </div>
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <p class="text-sm font-medium text-gray-900">{{ donor.name || 'Unknown Donor' }}</p>
-                    <p class="text-xs text-gray-500">{{ donor.totalDonations || donor.donation_count || 0 }} donations</p>
-                  </div>
-                  <div class="text-sm font-semibold text-green-600">
-                    ₹{{ formatCurrency(donor.amount || donor.total_amount || 0) }}
-                  </div>
+      <!-- Top Donors -->
+      <div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="p-6 border-b border-gray-200">
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-900">Top Donors</h3>
+            <router-link 
+              :to="`/entity/${entityId}/donations`" 
+              class="text-sm text-indigo-600 hover:text-indigo-700 font-medium transition-colors duration-200">
+              View All
+            </router-link>
+          </div>
+        </div>
+        <div class="p-6">
+          <div v-if="topDonors.length === 0" class="text-center py-4">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+            </svg>
+            <p class="mt-2 text-sm text-gray-500">No donations yet</p>
+          </div>
+          <div v-else class="space-y-4">
+            <div v-for="(donor, index) in topDonors.slice(0, 5)" :key="donor.id || donor.email || index" 
+                 class="flex items-center space-x-3">
+              <div class="flex-shrink-0">
+                <div class="h-8 w-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center">
+                  <span class="text-xs font-bold text-white">{{ index + 1 }}</span>
                 </div>
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-gray-900">{{ donor.name || 'Unknown Donor' }}</p>
+                <p class="text-xs text-gray-500">{{ donor.totalDonations || donor.donation_count || 0 }} donations</p>
+              </div>
+              <div class="text-sm font-semibold text-green-600">
+                ₹{{ formatCurrency(donor.amount || donor.total_amount || 0) }}
               </div>
             </div>
           </div>
@@ -341,7 +308,7 @@ import { useTempleStore } from '@/stores/temple'
 import { useToast } from '@/composables/useToast'
 import api from '@/plugins/axios'
 import { apiClient } from '@/plugins/axios'
-import { donationService } from '@/services/donation.service' // Added this import
+import { donationService } from '@/services/donation.service'
 
 const route = useRoute()
 const entityId = computed(() => route.params.id)
@@ -349,10 +316,7 @@ const authStore = useAuthStore()
 const templeStore = useTempleStore()
 const toast = useToast()
 
-// User info
 const user = computed(() => authStore.user)
-
-// Temple data
 const temple = ref(null)
 const loading = ref(true)
 const dashboardData = ref({
@@ -362,27 +326,21 @@ const dashboardData = ref({
   events: { upcoming: 0, thisWeek: 0 }
 })
 
-// Notifications
 const notifications = ref([])
-
-// Events and donors - will be loaded from API
 const upcomingEvents = ref([])
 const topDonors = ref([])
 
-// Load entity data
 const loadEntityData = async () => {
   try {
     loading.value = true
     console.log('Loading entity data for ID:', entityId.value)
     
-    // Try to get temple from store first
     const storedTemple = templeStore.getTempleById(entityId.value)
     
     if (storedTemple) {
       console.log('Found temple in store:', storedTemple)
       temple.value = storedTemple
     } else {
-      // Fetch temple details from API
       console.log('Temple not in store, fetching from API')
       try {
         const response = await api.get(`/v1/entities/${entityId.value}`)
@@ -396,12 +354,10 @@ const loadEntityData = async () => {
       }
     }
     
-    // Fetch dashboard data from the new API endpoint
     try {
       const dashboardResponse = await api.get(`/v1/entities/dashboard-summary?entity_id=${entityId.value}`)
       
       if (dashboardResponse && dashboardResponse.data) {
-        // Map the backend response to the structure expected by the frontend
         dashboardData.value = {
           devotees: {
             total: dashboardResponse.data.registered_devotees.total || 0,
@@ -426,10 +382,8 @@ const loadEntityData = async () => {
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err)
       toast.error('Failed to load dashboard statistics')
-      // Keep the default values if API fails
     }
     
-    // Fetch upcoming events
     try {
       const eventsResponse = await api.get(`/v1/events/upcoming?entity_id=${entityId.value}&limit=3`)
       
@@ -444,13 +398,11 @@ const loadEntityData = async () => {
       upcomingEvents.value = []
     }
     
-    // Fetch top donors - FIXED VERSION
     try {
       console.log('Fetching top donors...')
       const donorsResponse = await donationService.getTopDonors(5)
       console.log('Top donors response:', donorsResponse)
       
-      // Handle the response structure from your backend
       if (donorsResponse && donorsResponse.success && Array.isArray(donorsResponse.data)) {
         topDonors.value = donorsResponse.data.map(donor => ({
           id: donor.email || Math.random(),
@@ -484,26 +436,10 @@ const loadEntityData = async () => {
     } catch (err) {
       console.error('Failed to fetch top donors:', err)
       topDonors.value = []
-      // Don't show error toast for 404 as endpoint might not be implemented
       if (err.response?.status !== 404) {
         toast.error('Failed to load top donors')
       }
     }
-    
-    // Fetch notifications
-    // try {
-    //   const notificationsResponse = await api.get(`/v1/notifications?entity_id=${entityId.value}&limit=5`)
-      
-    //   if (notificationsResponse && notificationsResponse.data) {
-    //     notifications.value = notificationsResponse.data.map(notification => ({
-    //       ...notification,
-    //       createdAt: new Date(notification.created_at || notification.timestamp || Date.now())
-    //     }))
-    //   }
-    // } catch (err) {
-    //   console.error('Failed to fetch notifications:', err)
-    //   notifications.value = []
-    // }
     
   } catch (err) {
     console.error('Error loading entity data:', err)
@@ -513,7 +449,6 @@ const loadEntityData = async () => {
   }
 }
 
-// Helper functions
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-IN').format(amount)
 }
@@ -570,7 +505,6 @@ const getNotificationIconPath = (type) => {
 }
 
 onMounted(() => {
-  // Load dashboard data
   console.log('EntityDashboard mounted for entity:', entityId.value)
   loadEntityData()
 })

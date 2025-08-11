@@ -66,6 +66,11 @@
     <div v-else>
   <!-- Dashboard Stats -->
  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+  <!-- Seva Bookings Card -->
+<router-link 
+  :to="{ name: 'DevoteeMySevaBookings', params: { id: $route.params.id } }"
+  class="block"
+>
   <DashboardWidget 
     title="Seva Bookings"
     :value="stats.totalSevaBookings || mySevaBookings.length || 0"
@@ -73,6 +78,13 @@
     color="indigo"
     :subtitle="`${stats.upcomingSevas || mySevaBookings.length || 0} upcoming`"
   />
+</router-link>
+
+<!-- Total Events Card -->
+<router-link 
+  :to="{ name: 'DevoteeMyEvents', params: { id: $route.params.id } }"
+  class="block"
+>
   <DashboardWidget 
     title="Total Events"
     :value="activityStats.totalEvents || stats.eventsAttended || 0"
@@ -80,6 +92,8 @@
     color="emerald"
     :subtitle="`${activityStats.upcomingEvents || stats.upcomingEvents || 0} upcoming`"
   />
+</router-link>
+
   <!-- NEW: Birthday Card -->
   <DashboardWidget 
     title="My Birthday"

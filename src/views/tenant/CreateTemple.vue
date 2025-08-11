@@ -68,7 +68,7 @@
                 </label>
                 <input
                   id="deity"
-                  v-model="form.mainDeity"
+                  v-model="form.main_deity"
                   type="text"
                   required
                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200"
@@ -83,7 +83,7 @@
                 </label>
                 <select
                   id="templeType"
-                  v-model="form.templeType"
+                  v-model="form.temple_type"
                   required
                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200"
                 >
@@ -102,7 +102,7 @@
                 </label>
                 <input
                   id="establishedYear"
-                  v-model="form.establishedYear"
+                  v-model="form.established_year"
                   type="number"
                   min="1800"
                   :max="new Date().getFullYear()"
@@ -168,12 +168,12 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <!-- Street Address -->
               <div class="md:col-span-2">
-                <label for="address" class="block text-sm font-medium text-gray-700 mb-2">
+                <label for="street_address" class="block text-sm font-medium text-gray-700 mb-2">
                   Street Address *
                 </label>
                 <input
-                  id="address"
-                  v-model="form.addressLine1"
+                  id="street_address"
+                  v-model="form.street_address"
                   type="text"
                   required
                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200"
@@ -239,11 +239,11 @@
 
               <!-- PIN Code -->
               <div>
-                <label for="pinCode" class="block text-sm font-medium text-gray-700 mb-2">
+                <label for="pincode" class="block text-sm font-medium text-gray-700 mb-2">
                   PIN Code *
                 </label>
                 <input
-                  id="pinCode"
+                  id="pincode"
                   v-model="form.pincode"
                   type="text"
                   pattern="[0-9]{6}"
@@ -269,12 +269,12 @@
 
               <!-- Google Maps Link -->
               <div class="md:col-span-2">
-                <label for="googleMapsLink" class="block text-sm font-medium text-gray-700 mb-2">
+                <label for="map_link" class="block text-sm font-medium text-gray-700 mb-2">
                   Google Maps Link (Optional)
                 </label>
                 <input
-                  id="googleMapsLink"
-                  v-model="form.googleMapsLink"
+                  id="map_link"
+                  v-model="form.map_link"
                   type="url"
                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200"
                   placeholder="https://maps.google.com/..."
@@ -473,6 +473,7 @@ import { useRouter } from 'vue-router'
 import { useTempleStore } from '@/stores/temple'
 import { useToast } from '@/composables/useToast'
 import { validators } from '@/utils/validators'
+import api from '@/plugins/axios'
 
 const router = useRouter()
 const templeStore = useTempleStore()
@@ -483,22 +484,22 @@ const currentStep = ref(1)
 const isSubmitting = ref(false)
 const error = ref(null)
 
-// CRITICAL: Changed field names to match what backend expects
+// Form data with snake_case field names to EXACTLY match backend
 const form = reactive({
   name: '',
-  mainDeity: '', // CHANGED: Use mainDeity instead of deity
-  templeType: '', // CHANGED: Use templeType instead of type
-  establishedYear: '',
+  main_deity: '',
+  temple_type: '',
+  established_year: '',
   phone: '',
   email: '',
   description: '',
-  addressLine1: '', // CHANGED: Use addressLine1 instead of address
+  street_address: '',
   city: '',
   state: '',
   district: '',
-  pincode: '', // CHANGED: Use pincode instead of pinCode (match backend)
+  pincode: '',
   landmark: '',
-  googleMapsLink: '',
+  map_link: '',
   documents: {
     registration: null,
     trustDeed: null,
@@ -522,7 +523,7 @@ const previousStep = () => {
 const validateCurrentStep = () => {
   if (currentStep.value === 1) {
     // Check for all required fields in step 1
-    const requiredFields = ['name', 'mainDeity', 'templeType', 'phone', 'email', 'establishedYear']
+    const requiredFields = ['name', 'main_deity', 'temple_type', 'phone', 'email', 'established_year']
     const missingFields = requiredFields.filter(field => !form[field])
     
     if (missingFields.length > 0) {
@@ -531,7 +532,7 @@ const validateCurrentStep = () => {
     }
     
     // Validate establishedYear as a number
-    if (form.establishedYear && isNaN(parseInt(form.establishedYear))) {
+    if (form.established_year && isNaN(parseInt(form.established_year))) {
       toast.error('Established Year must be a valid number')
       return false
     }
@@ -548,11 +549,17 @@ const validateCurrentStep = () => {
       return false
     }
   } else if (currentStep.value === 2) {
-    const requiredFields = ['addressLine1', 'city', 'state', 'district', 'pincode']
+    const requiredFields = ['street_address', 'city', 'state', 'district', 'pincode']
     const missingFields = requiredFields.filter(field => !form[field])
     
     if (missingFields.length > 0) {
       toast.error(`Please fill in all required address fields: ${missingFields.join(', ')}`)
+      return false
+    }
+    
+    // Specifically validate street address is not empty
+    if (!form.street_address || form.street_address.trim() === '') {
+      toast.error('Street address is required')
       return false
     }
     
@@ -579,48 +586,46 @@ const handleFileUpload = (event, type) => {
 const handleSubmit = async () => {
   if (!validateCurrentStep()) return
 
-  if (!form.documents.registration || !form.documents.trustDeed) {
-    toast.error('Please upload required documents: Registration Certificate and Trust Deed')
-    return
-  }
-
-  if (!form.acceptTerms) {
-    toast.error('Please accept the terms and conditions to proceed')
-    return
-  }
-
   try {
     isSubmitting.value = true
-    error.value = null
 
-    // Prepare data in the format expected by the backend
-    // Using snake_case field names per the Entity struct JSON tags
-    const entityData = {
-      name: form.name.trim(),
-      main_deity: form.mainDeity,
-      temple_type: form.templeType,
-      established_year: parseInt(form.establishedYear),
-      phone: form.phone.replace(/[^0-9]/g, ''),
-      email: form.email,
+    // CRITICAL CHANGE: We'll now directly create the payload and call the API without going through the temple service
+    // This will help us ensure exactly what data is being sent
+    
+    console.log('🔍 FORM DATA AT SUBMISSION:')
+    console.log('Street address value:', form.street_address)
+    console.log('Main deity value:', form.main_deity)
+    console.log('Temple type value:', form.temple_type)
+
+    // Create the exact payload that matches the backend fields
+    const payload = {
+      name: form.name || "",
+      main_deity: form.main_deity || "",
+      temple_type: form.temple_type || "",
+      established_year: parseInt(form.established_year || 0),
+      phone: form.phone ? form.phone.replace(/[^0-9]/g, '') : "",
+      email: form.email || "",
       description: form.description || '',
-      street_address: form.addressLine1 || '',
-      city: form.city,
-      district: form.district,
-      state: form.state,
-      pincode: form.pincode,
+      street_address: form.street_address || '', // CRITICAL field we're having issues with
+      city: form.city || "",
+      district: form.district || "",
+      state: form.state || "",
+      pincode: form.pincode || "",
       landmark: form.landmark || '',
-      map_link: form.googleMapsLink || '',
+      map_link: form.map_link || '',
       accepted_terms: true,
       status: 'pending'
     }
 
-    // Log what's being sent
-    console.log('Submitting temple with payload:', entityData)
-    
-    // Submit to the API
-    await templeStore.createTemple(entityData)
+    console.log('📦 Final direct payload:', payload)
+    console.log('🧪 Checking street_address once more:', payload.street_address)
 
-    toast.success('Temple registration submitted successfully! You will receive an email confirmation shortly.')
+    // Make a direct API call to create the temple
+    const response = await api.post('/v1/entities', payload)
+    
+    console.log('✅ Temple created successfully:', response.data)
+
+    toast.success('Temple registration submitted successfully!')
     router.push('/tenant/dashboard')
   } catch (err) {
     error.value = err.response?.data?.error || 'Failed to submit temple registration. Please try again.'

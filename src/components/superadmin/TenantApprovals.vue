@@ -1,5 +1,11 @@
 <template>
   <div class="space-y-6">
+    <!-- Heading Section -->
+    <div class="border-b border-gray-200 pb-4">
+      <h1 class="text-2xl font-bold text-gray-900 font-roboto">Tenant Approvals</h1>
+      <p class="mt-1 text-sm text-gray-500">Review and manage tenant registration requests</p>
+    </div>
+
     <!-- Debug Info (remove in production) -->
     <div class="bg-gray-100 p-4 rounded-lg mb-4 text-xs font-mono overflow-auto max-h-40" v-if="debugMode">
       <div class="mb-2 font-bold">Debug Information:</div>
@@ -42,12 +48,12 @@
         </select>
         
         <!-- Debug Mode Toggle -->
-        <button 
+        <!-- <button 
           @click="debugMode = !debugMode" 
           class="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm"
         >
           {{ debugMode ? 'Hide Debug' : 'Debug Mode' }}
-        </button>
+        </button> -->
       </div>
       
       <!-- Refresh Button -->

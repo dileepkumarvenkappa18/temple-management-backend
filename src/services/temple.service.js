@@ -68,78 +68,23 @@ const templeService = {
       console.log('📡 Creating new temple entity')
       console.log('📋 Raw form data received:', templeData)
 
-      const mainDeity = templeData.MainDeity || templeData.mainDeity || templeData['main_deity'] || ''
-      const establishedYear = parseInt(templeData.EstablishedYear || templeData.establishedYear || templeData['established_year'] || '')
-
-      const payload = {
-        name: templeData.Name || templeData.name || "",
-        main_deity: mainDeity,
-        temple_type: templeData.TempleType || templeData.templeType || templeData['temple_type'] || "",
-        established_year: establishedYear,
-        phone: templeData.Phone || templeData.phone || "",
-        email: templeData.Email || templeData.email || "",
-        description: templeData.Description || templeData.description || '',
-        street_address: templeData.StreetAddress || templeData.addressLine1 || '',
-        city: templeData.City || templeData.city || "",
-        district: templeData.District || templeData.district || "",
-        state: templeData.State || templeData.state || "",
-        pincode: templeData.Pincode || templeData.pincode || "",
-        landmark: templeData.Landmark || templeData.landmark || '',
-        map_link: templeData.MapLink || templeData.googleMapsLink || '',
-        accepted_terms: true,
-        status: 'pending'
+      // CRITICAL: Pass the data exactly as it is
+      // Don't transform or create a new object
+      console.log('🚨 DIRECT API CALL WITH ORIGINAL DATA')
+      console.log('Street address check:', templeData.street_address)
+      
+      // Make sure the field exists
+      if (!templeData.street_address) {
+        console.warn('⚠️ street_address missing in form data!')
       }
 
-      console.log('🔍 FIELD VALIDATION CHECK:')
-      console.log(`name: "${payload.name}" - ${payload.name ? '✅' : '❌'}`)
-      console.log(`main_deity: "${payload.main_deity}" - ${payload.main_deity ? '✅' : '❌'}`)
-      console.log(`temple_type: "${payload.temple_type}" - ${payload.temple_type ? '✅' : '❌'}`)
-      console.log(`established_year: ${payload.established_year} - ${payload.established_year ? '✅' : '❌'}`)
-      console.log(`phone: "${payload.phone}" - ${payload.phone ? '✅' : '❌'}`)
-      console.log(`email: "${payload.email}" - ${payload.email ? '✅' : '❌'}`)
-      console.log(`city: "${payload.city}" - ${payload.city ? '✅' : '❌'}`)
-      console.log(`district: "${payload.district}" - ${payload.district ? '✅' : '❌'}`)
-      console.log(`state: "${payload.state}" - ${payload.state ? '✅' : '❌'}`)
-      console.log(`pincode: "${payload.pincode}" - ${payload.pincode ? '✅' : '❌'}`)
-
-      const missingFields = []
-      if (!payload.name) missingFields.push('Temple Name')
-      if (!payload.main_deity) missingFields.push('Main Deity')
-      if (!payload.temple_type) missingFields.push('Temple Type')
-      if (!payload.established_year) missingFields.push('Established Year')
-      if (!payload.phone) missingFields.push('Phone')
-      if (!payload.email) missingFields.push('Email')
-      if (!payload.city) missingFields.push('City')
-      if (!payload.district) missingFields.push('District')
-      if (!payload.state) missingFields.push('State')
-      if (!payload.pincode) missingFields.push('Pincode')
-
-      if (missingFields.length > 0) {
-        const errorMessage = `Missing required fields: ${missingFields.join(', ')}. Please fill in all required fields.`
-        console.error('❌ VALIDATION ERROR:', errorMessage)
-        throw new Error(errorMessage)
-      }
-
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(payload.email)) {
-        throw new Error('Please enter a valid email address.')
-      }
-
-      const phoneRegex = /^\d{10}$/
-      if (!phoneRegex.test(payload.phone.replace(/[^0-9]/g, ''))) {
-        throw new Error('Please enter a valid 10-digit phone number.')
-      }
-
-      console.log('✅ All required fields present!')
-      console.log('📦 Payload being sent to API:', payload)
-
-      const response = await api.post('/v1/entities', payload)
-      console.log('📥 Create temple response:', response)
-
+      // Just pass the data directly to the API
+      const response = await api.post('/v1/entities', templeData)
+      console.log('✅ Direct API response:', response)
+      
       return response.data || response
     } catch (error) {
       console.error('❌ Error creating temple:', error)
-      console.error('Error details:', error.message || error.response?.data)
       throw error
     }
   },
@@ -161,54 +106,37 @@ const templeService = {
 
   async updateTemple(id, updates) {
     try {
-      console.log(`📡 Updating temple with ID: ${id}`)
+      console.log(`📡 Updating temple with ID: ${id}`);
+      console.log('📦 Update data:', updates);
 
-      const mainDeity = updates.MainDeity || updates.mainDeity || updates['main_deity'] || ''
-      const establishedYear = parseInt(updates.EstablishedYear || updates.establishedYear || updates['established_year'] || '')
-
+      // For updates, we also use the direct field names
       const payload = {
-        name: updates.Name || updates.name || "",
-        main_deity: mainDeity,
-        temple_type: updates.TempleType || updates.templeType || updates['temple_type'] || "",
-        established_year: establishedYear,
-        phone: updates.Phone || updates.phone || "",
-        email: updates.Email || updates.email || "",
-        description: updates.Description || updates.description || '',
-        street_address: updates.StreetAddress || updates.addressLine1 || '',
-        city: updates.City || updates.city || "",
-        district: updates.District || updates.district || "",
-        state: updates.State || updates.state || "",
-        pincode: updates.Pincode || updates.pincode || "",
-        landmark: updates.Landmark || updates.landmark || '',
-        map_link: updates.MapLink || updates.googleMapsLink || ''
-      }
-
-      const missingFields = []
-      if (!payload.name) missingFields.push('Temple Name')
-      if (!payload.main_deity) missingFields.push('Main Deity')
-      if (!payload.temple_type) missingFields.push('Temple Type')
-      if (!payload.established_year) missingFields.push('Established Year')
-      if (!payload.phone) missingFields.push('Phone')
-      if (!payload.email) missingFields.push('Email')
-      if (!payload.city) missingFields.push('City')
-      if (!payload.district) missingFields.push('District')
-      if (!payload.state) missingFields.push('State')
-      if (!payload.pincode) missingFields.push('Pincode')
-
-      if (missingFields.length > 0) {
-        const errorMessage = `Missing required fields: ${missingFields.join(', ')}. Please fill in all required fields.`
-        console.error('❌ VALIDATION ERROR:', errorMessage)
-        throw new Error(errorMessage)
-      }
-
-      const response = await api.put(`/v1/entities/${id}`, payload)
-      console.log('📥 Update temple response:', response)
-
-      return response.data || response
+        id: parseInt(id),
+        name: updates.name || '',
+        main_deity: updates.main_deity || '',
+        temple_type: updates.temple_type || '',
+        established_year: parseInt(updates.established_year || 0),
+        phone: updates.phone || '',
+        email: updates.email || '',
+        description: updates.description || '',
+        street_address: updates.street_address || '',
+        city: updates.city || '',
+        district: updates.district || '',
+        state: updates.state || '',
+        pincode: updates.pincode || '',
+        landmark: updates.landmark || '',
+        map_link: updates.map_link || ''
+      };
+      
+      console.log('📦 Final update payload:', payload);
+      
+      const response = await api.put(`/v1/entities/${id}`, payload);
+      console.log('📥 Update temple response:', response);
+      return response.data || response;
     } catch (error) {
-      console.error(`❌ Error updating temple ID ${id}:`, error)
-      console.error('Error details:', error.message || error.response?.data)
-      throw error
+      console.error(`❌ Error updating temple ID ${id}:`, error);
+      console.error('Error details:', error.message || error.response?.data);
+      throw error;
     }
   },
 
