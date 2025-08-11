@@ -1,5 +1,5 @@
 <template>
-  <aside class="fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-gray-200 overflow-y-auto shadow-md z-40" style="margin-top: 48px; display: block !important;">
+  <aside class="fixed left-0 top-0 bottom-0 w-72 bg-white border-r border-gray-200 overflow-y-auto shadow-md z-40" style="margin-top: 48px; display: block !important;">
     <!-- Logo Area with INCREASED top padding -->
     <div class="p-4 pt-8 border-b border-gray-200"> <!-- Added pt-8 for extra top padding -->
       <h3 class="text-lg font-semibold text-indigo-600">Temple Management</h3>
@@ -30,6 +30,66 @@
           </svg>
           Create Temple
         </router-link>
+
+        <!-- NEW: Reports Dashboard with Subsections that Link to Separate Pages -->
+        <div class="mt-3">
+          <!-- Reports Dashboard Main Button -->
+          <div 
+            class="flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md bg-indigo-50 text-indigo-700 cursor-pointer"
+            @click="toggleReportsDashboard">
+            <div class="flex items-center">
+              <svg class="mr-3 h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>Reports Dashboard</span>
+            </div>
+            <!-- Replaced arrow SVG with text indicator -->
+            <span class="text-xs font-bold text-indigo-600">
+              {{ isReportsDashboardActive ? '−' : '+' }}
+            </span>
+          </div>
+
+          <!-- Reports Dashboard Subsections -->
+          <transition name="slide-down">
+            <div v-if="isReportsDashboardActive" class="mt-1 ml-6 space-y-1 bg-indigo-50 p-2 rounded-md">
+              <!-- Temple Register -->
+              <router-link 
+                to="/tenant/reports/temple-register" 
+                class="px-3 py-2 text-sm rounded-md cursor-pointer flex items-center"
+                :class="isActiveRoute('/tenant/reports/temple-register') ? 'text-indigo-700 font-medium' : 'text-gray-700 hover:bg-indigo-100'"
+              >
+                <svg class="mr-2 h-4 w-4" :class="isActiveRoute('/tenant/reports/temple-register') ? 'text-indigo-600' : 'text-gray-500'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Temple Register Report</span>
+              </router-link>
+
+              <!-- Temple Activities -->
+              <router-link 
+                to="/tenant/reports/temple-activities" 
+                class="px-3 py-2 text-sm rounded-md cursor-pointer flex items-center"
+                :class="isActiveRoute('/tenant/reports/temple-activities') ? 'text-indigo-700 font-medium' : 'text-gray-700 hover:bg-indigo-100'"
+              >
+                <svg class="mr-2 h-4 w-4" :class="isActiveRoute('/tenant/reports/temple-activities') ? 'text-indigo-600' : 'text-gray-500'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <span>Temple Activities Report</span>
+              </router-link>
+
+              <!-- Birthdays -->
+              <router-link 
+                to="/tenant/reports/birthdays" 
+                class="px-3 py-2 text-sm rounded-md cursor-pointer flex items-center"
+                :class="isActiveRoute('/tenant/reports/birthdays') ? 'text-indigo-700 font-medium' : 'text-gray-700 hover:bg-indigo-100'"
+              >
+                <svg class="mr-2 h-4 w-4" :class="isActiveRoute('/tenant/reports/birthdays') ? 'text-indigo-600' : 'text-gray-500'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.701 2.701 0 00-1.5-.454M9 6v2m3-2v2m3-2v2M9 3h.01M12 3h.01M15 3h.01M21 21v-7a2 2 0 00-2-2H5a2 2 0 00-2 2v7h18zm-3-9v-2a2 2 0 00-2-2H8a2 2 0 00-2 2v2h12z" />
+                </svg>
+                <span>Birthdays Report</span>
+              </router-link>
+            </div>
+          </transition>
+        </div>
       </div>
 
       <!-- ENTITY ADMIN Navigation -->
@@ -168,14 +228,6 @@
           </svg>
           Manage Temples
         </router-link>
-
-        <!-- <router-link to="/superadmin/settings" class="flex items-center px-3 py-2 text-sm font-medium rounded-md" :class="isActiveRoute('/superadmin/settings') ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-50'">
-          <svg class="mr-3 h-5 w-5" :class="isActiveRoute('/superadmin/settings') ? 'text-indigo-500' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          System Settings
-        </router-link> -->
       </div>
 
       <!-- Default message when no role is set -->
@@ -204,7 +256,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 
@@ -259,9 +311,16 @@ const actualRole = computed(() => {
   return '';
 });
 
+// Reports Dashboard state
+const isReportsDashboardActive = ref(false);
+
 // Methods
 const isActiveRoute = (path) => {
   return route.path.startsWith(path);
+};
+
+const toggleReportsDashboard = () => {
+  isReportsDashboardActive.value = !isReportsDashboardActive.value;
 };
 </script>
 
@@ -282,5 +341,27 @@ aside::-webkit-scrollbar-thumb {
 
 aside::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* Transitions */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease-out;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  transform: translateY(-20px);
+  opacity: 0;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

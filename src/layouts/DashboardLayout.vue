@@ -18,7 +18,7 @@
       />
 
       <!-- Main Content -->
-      <div class="flex-1 flex flex-col min-w-0 ml-64"> <!-- Kept ml-64 for sidebar width -->
+      <div class="flex-1 flex flex-col min-w-0 ml-72"> <!-- Extended from ml-64 to ml-72 (288px to match sidebar width) -->
         <!-- Page Content -->
         <main class="flex-1 p-4 lg:p-6 xl:p-8 pt-0"> <!-- Removed mt-16 and added pt-0 -->
           <router-view />

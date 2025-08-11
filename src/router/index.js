@@ -26,6 +26,11 @@ import ManageTemples from '@/views/tenant/ManageTemples.vue'
 import EditTemple from '@/views/tenant/EditTemple.vue'
 import TempleDetails from '@/views/tenant/TempleDetails.vue'  // Add import for TempleDetails
 
+// Report Views
+import TempleRegisterReport from '@/views/tenant/reports/TempleRegisterReport.vue'
+import TempleActivitiesReport from '@/views/tenant/reports/TempleActivitiesReport.vue'
+import BirthdaysReport from '@/views/tenant/reports/BirthdaysReport.vue'
+
 // Entity (Temple Admin) Views - Phase 5
 import EntityDashboard from '@/views/entity/EntityDashboard.vue'
 import DevoteeManagement from '@/views/entity/DevoteeManagement.vue'
@@ -236,6 +241,40 @@ const routes = [
         meta: { 
           title: 'Tenant Dashboard',
           breadcrumb: 'Dashboard'
+        }
+      },
+      // NEW REPORT ROUTES
+      {
+        path: 'reports/temple-register',
+        name: 'TempleRegisterReport',
+        component: TempleRegisterReport,
+        meta: {
+          title: 'Temple Register Report',
+          breadcrumb: 'Temple Register',
+          requiresAuth: true,
+          role: 'tenant'
+        }
+      },
+      {
+        path: 'reports/temple-activities',
+        name: 'TempleActivitiesReport',
+        component: TempleActivitiesReport,
+        meta: {
+          title: 'Temple Activities Report',
+          breadcrumb: 'Temple Activities',
+          requiresAuth: true,
+          role: 'tenant'
+        }
+      },
+      {
+        path: 'reports/birthdays',
+        name: 'BirthdaysReport',
+        component: BirthdaysReport,
+        meta: {
+          title: 'Birthdays Report',
+          breadcrumb: 'Birthdays',
+          requiresAuth: true,
+          role: 'tenant'
         }
       }
     ]

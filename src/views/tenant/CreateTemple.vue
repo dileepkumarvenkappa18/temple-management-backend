@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-50">
     <!-- Header Section -->
-    <div class="bg-white shadow-sm border-b border-gray-200">
+    <div class="bg-white shadow-sm border-b border-gray-200 rounded-2xl">
       <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div class="flex items-center justify-between">
           <div>
