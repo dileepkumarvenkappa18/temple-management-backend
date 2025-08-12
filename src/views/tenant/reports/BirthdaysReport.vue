@@ -23,6 +23,31 @@
 
     <!-- Main Content -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Error Display -->
+      <div v-if="reportsStore.error" class="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+        <div class="flex">
+          <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+            </svg>
+          </div>
+          <div class="ml-3">
+            <h3 class="text-sm font-medium text-red-800">Error</h3>
+            <div class="mt-2 text-sm text-red-700">
+              {{ reportsStore.error }}
+            </div>
+            <div class="mt-4">
+              <button 
+                @click="reportsStore.clearError()"
+                class="text-sm bg-red-100 text-red-800 px-3 py-1 rounded hover:bg-red-200"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Filter & Download Card -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-8">
         <div class="p-6 border-b border-gray-200">
@@ -37,7 +62,8 @@
             <div class="relative">
               <select 
                 v-model="selectedTemple" 
-                class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                :disabled="reportsStore.loading || reportsStore.downloadLoading"
+                class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
                 <option value="all">All Temples</option>
                 <option v-for="temple in templeStore.temples" :key="temple.id" :value="temple.id">
@@ -60,7 +86,8 @@
                   v-for="filter in timeFilters" 
                   :key="filter.value"
                   @click="setActiveFilter(filter.value)"
-                  class="px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+                  :disabled="reportsStore.loading || reportsStore.downloadLoading"
+                  class="px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   :class="activeFilter === filter.value ? 
                     'bg-indigo-600 text-white' : 
                     'bg-gray-100 text-gray-700 hover:bg-gray-200'"
@@ -79,7 +106,8 @@
                 <input 
                   type="date" 
                   v-model="startDate"
-                  class="w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  :disabled="reportsStore.loading || reportsStore.downloadLoading"
+                  class="w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
@@ -87,7 +115,8 @@
                 <input 
                   type="date" 
                   v-model="endDate"
-                  class="w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  :disabled="reportsStore.loading || reportsStore.downloadLoading"
+                  class="w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -105,7 +134,8 @@
                 <div class="relative">
                   <select 
                     v-model="selectedFormat" 
-                    class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    :disabled="reportsStore.loading || reportsStore.downloadLoading"
+                    class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
                     <option v-for="format in formats" :key="format.value" :value="format.value">
                       {{ format.label }}
@@ -119,12 +149,17 @@
                 <!-- Download Button -->
                 <button 
                   @click="downloadReport"
-                  class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  :disabled="reportsStore.loading || reportsStore.downloadLoading"
+                  class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <svg class="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg v-if="reportsStore.downloadLoading" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <svg v-else class="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
-                  Download
+                  {{ reportsStore.downloadLoading ? 'Downloading...' : 'Download' }}
                 </button>
               </div>
             </div>
@@ -165,6 +200,50 @@
           </p>
         </div>
       </div>
+
+      <!-- Loading State -->
+      <div v-if="reportsStore.loading" class="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-center">
+          <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span class="text-gray-600">Loading report data...</span>
+        </div>
+      </div>
+
+      <!-- Report Preview (if available) -->
+      <div v-if="reportsStore.hasReportData && reportsStore.reportPreview" class="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div class="p-6 border-b border-gray-200">
+          <h3 class="text-lg font-medium text-gray-900">Report Preview</h3>
+          <p class="text-sm text-gray-600 mt-1">
+            Showing {{ reportsStore.reportPreview.totalRecords }} records
+          </p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th v-for="column in reportsStore.reportPreview.columns" :key="column.key" 
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {{ column.label }}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr v-for="(row, index) in reportsStore.reportPreview.data.slice(0, 10)" :key="index">
+                <td v-for="column in reportsStore.reportPreview.columns" :key="column.key" 
+                    class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {{ row[column.key] || '-' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="reportsStore.reportPreview.data.length > 10" class="p-4 border-t border-gray-200 text-center text-sm text-gray-600">
+          Showing first 10 records. Download the full report to see all {{ reportsStore.reportPreview.totalRecords }} records.
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -174,23 +253,22 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useTempleStore } from '@/stores/temple';
 import { useAuthStore } from '@/stores/auth';
+import { useReportsStore } from '@/stores/reports';
 import { useToast } from '@/composables/useToast';
 
 // Composables
 const route = useRoute();
 const templeStore = useTempleStore();
 const userStore = useAuthStore();
+const reportsStore = useReportsStore();
 const { showToast } = useToast();
 
 // Reactive state
 const selectedTemple = ref('all');
 const activeFilter = ref('monthly');
-const ageGroup = ref('all');
 const selectedFormat = ref('pdf');
-const startDate = ref(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
-const endDate = ref(new Date().toISOString().split('T')[0]);
-const includeContactInfo = ref(true);
-const includeFamilyMembers = ref(false);
+const startDate = ref(new Date().toISOString().split('T')[0]);
+const endDate = ref(new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0]);
 
 // Filter options
 const timeFilters = [
@@ -198,14 +276,6 @@ const timeFilters = [
   { label: 'Monthly', value: 'monthly' },
   { label: 'Yearly', value: 'yearly' },
   { label: 'Custom Range', value: 'custom' },
-];
-
-const ageGroups = [
-  { label: 'All Ages', value: 'all' },
-  { label: 'Children (0-12)', value: 'children' },
-  { label: 'Teens (13-19)', value: 'teens' },
-  { label: 'Adults (20-59)', value: 'adults' },
-  { label: 'Seniors (60+)', value: 'seniors' },
 ];
 
 const formats = [
@@ -229,11 +299,15 @@ const setActiveFilter = (filter) => {
   if (filter === 'weekly') {
     // Next 7 days
     startDate.value = new Date().toISOString().split('T')[0];
-    endDate.value = new Date(today.setDate(today.getDate() + 7)).toISOString().split('T')[0];
+    const weekEnd = new Date();
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    endDate.value = weekEnd.toISOString().split('T')[0];
   } else if (filter === 'monthly') {
     // Next 30 days
     startDate.value = new Date().toISOString().split('T')[0];
-    endDate.value = new Date(today.setDate(today.getDate() + 30)).toISOString().split('T')[0];
+    const monthEnd = new Date();
+    monthEnd.setDate(monthEnd.getDate() + 30);
+    endDate.value = monthEnd.toISOString().split('T')[0];
   } else if (filter === 'yearly') {
     // Current year
     const currentYear = today.getFullYear();
@@ -242,10 +316,9 @@ const setActiveFilter = (filter) => {
   }
   
   // For custom, we leave the dates as they are
-};
-
-const setAgeGroup = (group) => {
-  ageGroup.value = group;
+  
+  // Automatically fetch preview when filter changes
+  fetchPreview();
 };
 
 const getTempleName = (templeId) => {
@@ -256,11 +329,6 @@ const getTempleName = (templeId) => {
 
 const getTimeFilterLabel = (filter) => {
   const found = timeFilters.find(f => f.value === filter);
-  return found ? found.label : 'Unknown';
-};
-
-const getAgeGroupLabel = (group) => {
-  const found = ageGroups.find(g => g.value === group);
   return found ? found.label : 'Unknown';
 };
 
@@ -279,23 +347,65 @@ const formatDate = (dateString) => {
   });
 };
 
-const downloadReport = () => {
-  // Simulate downloading a report
-  console.log('Downloading birthdays report with the following parameters:');
-  console.log('- Temple:', selectedTemple.value === 'all' ? 'All Temples' : getTempleName(selectedTemple.value));
-  console.log('- Time filter:', getTimeFilterLabel(activeFilter.value));
-  console.log('- Date range:', formatDate(startDate.value), 'to', formatDate(endDate.value));
-  console.log('- Age Group:', getAgeGroupLabel(ageGroup.value));
-  console.log('- Include Contact Info:', includeContactInfo.value);
-  console.log('- Include Family Members:', includeFamilyMembers.value);
-  console.log('- Format:', getFormatLabel(selectedFormat.value));
-  
-  // In a real implementation, you would make an API call here
-  showToast(`Birthdays Report downloaded in ${getFormatLabel(selectedFormat.value)} format`, 'success');
+const buildReportParams = () => {
+  return {
+    entityId: selectedTemple.value === 'all' ? 'all' : selectedTemple.value.toString(),
+    dateRange: activeFilter.value,
+    startDate: startDate.value,
+    endDate: endDate.value,
+    format: selectedFormat.value
+  };
+};
+
+const fetchPreview = async () => {
+  try {
+    const params = buildReportParams();
+    delete params.format; // Don't include format for preview
+    
+    await reportsStore.getDevoteeBirthdaysPreview(params);
+  } catch (error) {
+    console.error('Error fetching preview:', error);
+    // Error is already handled by the store
+  }
+};
+
+const downloadReport = async () => {
+  try {
+    // Clear any previous errors
+    reportsStore.clearError();
+    
+    // Validate required fields
+    if (activeFilter.value === 'custom' && (!startDate.value || !endDate.value)) {
+      showToast('Please select both start and end dates for custom range', 'error');
+      return;
+    }
+    
+    if (new Date(startDate.value) > new Date(endDate.value)) {
+      showToast('Start date must be before end date', 'error');
+      return;
+    }
+
+    const params = buildReportParams();
+    
+    console.log('Downloading devotee birthdays report with parameters:', params);
+    
+    const result = await reportsStore.downloadDevoteeBirthdaysReport(params);
+    
+    showToast(`Devotee Birthdays Report downloaded successfully in ${getFormatLabel(selectedFormat.value)} format`, 'success');
+    
+    console.log('Download completed:', result);
+    
+  } catch (error) {
+    console.error('Error downloading report:', error);
+    showToast(error.message || 'Failed to download report. Please try again.', 'error');
+  }
 };
 
 // Lifecycle hooks
 onMounted(async () => {
+  // Clear any previous report data
+  reportsStore.clearReportData();
+  
   // Fetch temples if not already loaded
   if (templeStore.temples.length === 0) {
     try {
@@ -305,5 +415,8 @@ onMounted(async () => {
       showToast('Failed to load temple data. Please try again.', 'error');
     }
   }
+  
+  // Fetch initial preview
+  await fetchPreview();
 });
 </script>

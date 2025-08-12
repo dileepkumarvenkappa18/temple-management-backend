@@ -1,3 +1,5 @@
+//TempleActivities.vue
+
 <template>
   <div class="min-h-screen bg-gray-50">
     <!-- Header Section -->
@@ -21,6 +23,37 @@
       </div>
     </div>
 
+    <!-- Loading Overlay -->
+    <div v-if="reportsStore.loading" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg p-6 flex items-center space-x-3">
+        <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
+        <span class="text-gray-900 font-medium">Loading report data...</span>
+      </div>
+    </div>
+
+    <!-- Error Alert -->
+    <div v-if="reportsStore.error" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+      <div class="bg-red-50 border border-red-200 rounded-md p-4">
+        <div class="flex">
+          <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+          </svg>
+          <div class="ml-3">
+            <h3 class="text-sm font-medium text-red-800">Error</h3>
+            <p class="mt-1 text-sm text-red-700">{{ reportsStore.error }}</p>
+          </div>
+          <div class="ml-auto pl-3">
+            <button @click="reportsStore.clearError" class="text-red-400 hover:text-red-500">
+              <span class="sr-only">Dismiss</span>
+              <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Main Content -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <!-- Filter & Download Card -->
@@ -38,15 +71,13 @@
               <select 
                 v-model="selectedTemple" 
                 class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                @change="handleTempleChange"
               >
                 <option value="all">All Temples</option>
                 <option v-for="temple in templeStore.temples" :key="temple.id" :value="temple.id">
                   {{ temple.name }}
                 </option>
               </select>
-              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                <!-- <span class="text-xs">▼</span> -->
-              </div>
             </div>
           </div>
 
@@ -89,7 +120,7 @@
             </div>
           </div>
 
-          <!-- Custom Date Range (shown only when custom date range is selected) -->
+          <!-- Custom Date Range -->
           <div v-if="activeFilter === 'custom'" class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -98,6 +129,7 @@
                   type="date" 
                   v-model="startDate"
                   class="w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  @change="handleDateChange"
                 />
               </div>
               <div>
@@ -106,10 +138,73 @@
                   type="date" 
                   v-model="endDate"
                   class="w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  @change="handleDateChange"
                 />
               </div>
             </div>
           </div>
+
+          <!-- Preview Section -->
+          <!-- <div class="mb-6">
+            <div class="flex items-center justify-between mb-4">
+              <h4 class="text-lg font-medium text-gray-900">Report Preview</h4>
+              <button 
+                @click="loadReportPreview"
+                :disabled="reportsStore.loading"
+                class="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-indigo-600 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+              >
+                <svg class="mr-1 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh Preview
+              </button>
+            </div>
+            
+            Preview Data
+            <div v-if="reportsStore.hasReportData" class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-medium text-gray-900">
+                  {{ reportsStore.reportSummary?.totalRecords || 0 }} records found
+                </span>
+                <span class="text-xs text-gray-600">
+                  {{ getActivityTypeLabel(activityType) }} | {{ getTimeFilterLabel(activeFilter) }}
+                </span>
+              </div>
+              
+              Preview Table
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                  <thead class="bg-gray-100">
+                    <tr>
+                      <th v-for="column in reportsStore.reportPreview?.columns" :key="column.key" 
+                          class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        {{ column.label }}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="bg-white divide-y divide-gray-200">
+                    <tr v-for="(row, index) in previewRows" :key="index">
+                      <td v-for="column in reportsStore.reportPreview?.columns" :key="column.key"
+                          class="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                        {{ row[column.key] || '-' }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              
+              <p v-if="reportsStore.reportPreview?.data.length > 5" class="text-xs text-gray-500 mt-2 text-center">
+                Showing first 5 rows. Download full report to see all {{ reportsStore.reportSummary?.totalRecords }} records.
+              </p>
+            </div>
+            
+            <div v-else-if="!reportsStore.loading" class="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
+              <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p class="mt-2 text-sm text-gray-600">No data available. Click "Refresh Preview" to load data.</p>
+            </div>
+          </div> -->
 
           <!-- Download Section -->
           <div class="border-t border-gray-200 pt-6">
@@ -129,20 +224,22 @@
                       {{ format.label }}
                     </option>
                   </select>
-                  <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                    <!-- <span class="text-xs">▼</span> -->
-                  </div>
                 </div>
 
                 <!-- Download Button -->
                 <button 
                   @click="downloadReport"
-                  class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  :disabled="reportsStore.downloadLoading"
+                  class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <svg class="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg v-if="reportsStore.downloadLoading" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <svg v-else class="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
-                  Download
+                  {{ reportsStore.downloadLoading ? 'Downloading...' : 'Download' }}
                 </button>
               </div>
             </div>
@@ -194,16 +291,18 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useTempleStore } from '@/stores/temple';
 import { useAuthStore } from '@/stores/auth';
+import { useReportsStore } from '@/stores/reports';
 import { useToast } from '@/composables/useToast';
 
 // Composables
 const route = useRoute();
 const templeStore = useTempleStore();
 const userStore = useAuthStore();
+const reportsStore = useReportsStore();
 const { showToast } = useToast();
 
 // Reactive state
@@ -239,30 +338,43 @@ const tenantId = computed(() => {
   return route.params.tenantId || userStore.user?.id || localStorage.getItem('current_tenant_id');
 });
 
+const previewRows = computed(() => {
+  if (!reportsStore.reportPreview?.data) return []
+  // Show only first 5 rows for preview
+  return reportsStore.formatReportData(
+    reportsStore.reportPreview.data.slice(0, 5), 
+    activityType.value
+  )
+});
+
 // Methods
-const setActivityType = (type) => {
+const setActivityType = async (type) => {
   activityType.value = type;
+  await loadReportPreview();
 };
 
 const setActiveFilter = (filter) => {
   activeFilter.value = filter;
   
   // Set appropriate date range based on filter
-  const today = new Date();
-  
-  if (filter === 'weekly') {
-    // Last 7 days
-    startDate.value = new Date(today.setDate(today.getDate() - 7)).toISOString().split('T')[0];
-  } else if (filter === 'monthly') {
-    // Last 30 days
-    startDate.value = new Date(today.setDate(today.getDate() - 30)).toISOString().split('T')[0];
-  } else if (filter === 'yearly') {
-    // Last 365 days
-    startDate.value = new Date(today.setDate(today.getDate() - 365)).toISOString().split('T')[0];
+  if (filter !== 'custom') {
+    const dateRange = reportsStore.getDefaultDateRange(filter);
+    startDate.value = dateRange.startDate;
+    endDate.value = dateRange.endDate;
   }
   
-  // For custom, we leave the dates as they are
-  endDate.value = new Date().toISOString().split('T')[0];
+  // Auto-refresh preview after filter change
+  loadReportPreview();
+};
+
+const handleTempleChange = () => {
+  loadReportPreview();
+};
+
+const handleDateChange = () => {
+  if (activeFilter.value === 'custom') {
+    loadReportPreview();
+  }
 };
 
 const getTempleName = (templeId) => {
@@ -296,18 +408,56 @@ const formatDate = (dateString) => {
   });
 };
 
-const downloadReport = () => {
-  // Simulate downloading a report
-  console.log('Downloading report with the following parameters:');
-  console.log('- Temple:', selectedTemple.value === 'all' ? 'All Temples' : getTempleName(selectedTemple.value));
-  console.log('- Activity Type:', getActivityTypeLabel(activityType.value));
-  console.log('- Time filter:', getTimeFilterLabel(activeFilter.value));
-  console.log('- Date range:', formatDate(startDate.value), 'to', formatDate(endDate.value));
-  console.log('- Format:', getFormatLabel(selectedFormat.value));
-  
-  // In a real implementation, you would make an API call here
-  showToast(`${getActivityTypeLabel(activityType.value)} downloaded in ${getFormatLabel(selectedFormat.value)} format`, 'success');
+const loadReportPreview = async () => {
+  try {
+    const params = reportsStore.buildReportParams({
+      selectedTemple: selectedTemple.value,
+      activityType: activityType.value,
+      activeFilter: activeFilter.value,
+      selectedFormat: '', // No format for preview
+      startDate: startDate.value,
+      endDate: endDate.value
+    });
+
+    await reportsStore.getReportPreview(params);
+  } catch (error) {
+    console.error('Error loading report preview:', error);
+    showToast('Failed to load report preview. Please try again.', 'error');
+  }
 };
+
+const downloadReport = async () => {
+  try {
+    const params = reportsStore.buildReportParams({
+      selectedTemple: selectedTemple.value,
+      activityType: activityType.value,
+      activeFilter: activeFilter.value,
+      selectedFormat: selectedFormat.value,
+      startDate: startDate.value,
+      endDate: endDate.value
+    });
+
+    const result = await reportsStore.downloadActivitiesReport(params);
+    
+    if (result.success) {
+      showToast(`${getActivityTypeLabel(activityType.value)} downloaded successfully as ${getFormatLabel(selectedFormat.value)}`, 'success');
+    }
+  } catch (error) {
+    console.error('Error downloading report:', error);
+    showToast('Failed to download report. Please try again.', 'error');
+  }
+};
+
+// Temporary debugging helper - add this to your TempleActivitiesReport.vue temporarily
+
+// Add this method to your TempleActivitiesReport.vue script setup:
+
+// Add this button temporarily to your template:
+/*
+<button @click="debugApiResponse" class="px-4 py-2 bg-red-500 text-white rounded">
+  Debug API Response
+</button>
+*/
 
 // Lifecycle hooks
 onMounted(async () => {
@@ -320,5 +470,15 @@ onMounted(async () => {
       showToast('Failed to load temple data. Please try again.', 'error');
     }
   }
+
+  // Load initial preview
+  await loadReportPreview();
+});
+
+// Cleanup on unmount
+onMounted(() => {
+  return () => {
+    reportsStore.clearReportData();
+  };
 });
 </script>

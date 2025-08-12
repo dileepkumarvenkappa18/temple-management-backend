@@ -73,10 +73,10 @@
 >
   <DashboardWidget 
     title="Seva Bookings"
-    :value="stats.totalSevaBookings || mySevaBookings.length || 0"
+    :value="sevaCount"
     icon="calendar"
     color="indigo"
-    :subtitle="`${stats.upcomingSevas || mySevaBookings.length || 0} upcoming`"
+    :subtitle="`${upcomingSevaCount} upcoming`"
   />
 </router-link>
 
@@ -87,10 +87,10 @@
 >
   <DashboardWidget 
     title="Total Events"
-    :value="activityStats.totalEvents || stats.eventsAttended || 0"
+    :value="eventCount"
     icon="calendar-days"
     color="emerald"
-    :subtitle="`${activityStats.upcomingEvents || stats.upcomingEvents || 0} upcoming`"
+    :subtitle="`${upcomingEventCount} upcoming`"
   />
 </router-link>
 
@@ -480,15 +480,15 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useDevoteeStore } from '@/stores/devotee'
 import { useTempleStore } from '@/stores/temple'
 import { useSevaStore } from '@/stores/seva'
-import { useDonationStore } from '@/stores/donation' // NEW: Import donation store
+import { useDonationStore } from '@/stores/donation'
 import { useTempleActivities } from '@/composables/useTempleActivities'
-import devoteeService from '@/services/devotee.service' // ADD THIS IMPORT
+import devoteeService from '@/services/devotee.service'
 
 import WelcomeBanner from '@/components/dashboard/WelcomeBanner.vue'
 import DashboardWidget from '@/components/dashboard/DashboardWidget.vue'
@@ -496,8 +496,6 @@ import ActivityFeed from '@/components/dashboard/ActivityFeed.vue'
 import BaseCard from '@/components/common/BaseCard.vue'
 import BaseButton from '@/components/common/BaseButton.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
-// Donation form is not needed until donation backend is completed
-// import DonationForm from '@/components/donation/DonationForm.vue'
 
 // Define props to handle the 'id' attribute that's being passed
 const props = defineProps({
@@ -513,7 +511,7 @@ const authStore = useAuthStore()
 const devoteeStore = useDevoteeStore()
 const templeStore = useTempleStore()
 const sevaStore = useSevaStore()
-const donationStore = useDonationStore() // NEW: Use donation store
+const donationStore = useDonationStore()
 const { 
   loading: activitiesLoading, 
   error: activitiesError, 
@@ -532,8 +530,160 @@ const mySevaBookings = ref([])
 const upcomingEvents = ref([])
 const entityDetails = ref(null)
 
-// UPDATED: Use donation store for recent donations instead of local ref
-// const recentDonations = ref([]) // Remove this line
+// FIX: Add data loading trackers
+const dataLoadingStatus = reactive({
+  profile: false,
+  entity: false,
+  sevas: false,
+  events: false,
+  donations: false
+})
+
+// FIX: Add a cache for seva names to ensure consistency
+const sevaNameCache = reactive({})
+
+// PERSISTENT COUNTER STATE
+const dashboardCounts = reactive({
+  sevaCount: 0,
+  upcomingSevaCount: 0,
+  eventCount: 0,
+  upcomingEventCount: 0,
+  countsInitialized: false
+})
+
+// Local persistent storage for dashboard data
+const localData = reactive({
+  recentSevas: [],
+  recentDonations: [],
+  upcomingEvents: []
+})
+
+// Compute the actual counts with locking mechanism
+const sevaCount = computed(() => {
+  // Return the locked value if set
+  if (dashboardCounts.countsInitialized && dashboardCounts.sevaCount > 0) {
+    return dashboardCounts.sevaCount
+  }
+  
+  // Calculate from available data
+  const count = localData.recentSevas.length || 
+                sevaStore.recentSevas?.length ||
+                mySevaBookings.value?.length || 
+                devoteeStore.dashboardData?.summary?.totalSevaBookings || 
+                0
+                
+  // Lock the value if it's greater than 0 and not already locked
+  if (count > 0 && !dashboardCounts.countsInitialized) {
+    dashboardCounts.sevaCount = count
+  }
+  
+  return count
+})
+
+const upcomingSevaCount = computed(() => {
+  // Return the locked value if set
+  if (dashboardCounts.countsInitialized && dashboardCounts.upcomingSevaCount > 0) {
+    return dashboardCounts.upcomingSevaCount
+  }
+  
+  // Calculate from available data
+  const sevasToCheck = localData.recentSevas.length > 0 ? 
+                       localData.recentSevas : 
+                       sevaStore.recentSevas || []
+                       
+  const pendingSevas = sevasToCheck.filter(
+    s => (s.status?.toLowerCase() === 'pending' || 
+         s.Status?.toLowerCase() === 'pending')
+  )?.length || 0
+  
+  const count = pendingSevas || 
+                devoteeStore.dashboardData?.summary?.upcomingSevas || 
+                0
+                
+  // Lock the value if it's greater than 0 and not already locked
+  if (count > 0 && !dashboardCounts.countsInitialized) {
+    dashboardCounts.upcomingSevaCount = count
+  }
+  
+  return count
+})
+
+const eventCount = computed(() => {
+  // Return the locked value if set
+  if (dashboardCounts.countsInitialized && dashboardCounts.eventCount > 0) {
+    return dashboardCounts.eventCount
+  }
+  
+  // Calculate from available data
+  const count = localData.upcomingEvents.length > 0 ? 
+                localData.upcomingEvents.length : 
+                upcomingEvents.value?.length || 
+                activityStats.totalEvents || 
+                devoteeStore.dashboardData?.summary?.eventsAttended || 
+                0
+                
+  // Lock the value if it's greater than 0 and not already locked
+  if (count > 0 && !dashboardCounts.countsInitialized) {
+    dashboardCounts.eventCount = count
+  }
+  
+  return count
+})
+
+const upcomingEventCount = computed(() => {
+  // Return the locked value if set
+  if (dashboardCounts.countsInitialized && dashboardCounts.upcomingEventCount > 0) {
+    return dashboardCounts.upcomingEventCount
+  }
+  
+  // Calculate from available data
+  const count = localData.upcomingEvents.length > 0 ? 
+                localData.upcomingEvents.length : 
+                upcomingEvents.value?.length || 
+                activityStats.upcomingEvents || 
+                devoteeStore.dashboardData?.summary?.upcomingEvents || 
+                0
+                
+  // Lock the value if it's greater than 0 and not already locked
+  if (count > 0 && !dashboardCounts.countsInitialized) {
+    dashboardCounts.upcomingEventCount = count
+  }
+  
+  return count
+})
+
+// Lock the counters once we have valid data to prevent flickering
+const lockCounters = () => {
+  if (dashboardCounts.countsInitialized) return
+  
+  // Only lock if we have at least some valid data
+  if (sevaCount.value > 0 || eventCount.value > 0) {
+    console.log('📊 Locking dashboard counters:')
+    console.log(`- Seva count: ${sevaCount.value}`)
+    console.log(`- Upcoming seva count: ${upcomingSevaCount.value}`)
+    console.log(`- Event count: ${eventCount.value}`)
+    console.log(`- Upcoming event count: ${upcomingEventCount.value}`)
+    
+    dashboardCounts.sevaCount = sevaCount.value 
+    dashboardCounts.upcomingSevaCount = upcomingSevaCount.value
+    dashboardCounts.eventCount = eventCount.value
+    dashboardCounts.upcomingEventCount = upcomingEventCount.value
+    dashboardCounts.countsInitialized = true
+    
+    // Save to localStorage for persistence
+    try {
+      localStorage.setItem('dashboard_counts', JSON.stringify({
+        sevaCount: dashboardCounts.sevaCount,
+        upcomingSevaCount: dashboardCounts.upcomingSevaCount,
+        eventCount: dashboardCounts.eventCount,
+        upcomingEventCount: dashboardCounts.upcomingEventCount,
+        timestamp: Date.now()
+      }))
+    } catch (e) {
+      console.warn('Could not save dashboard counts to localStorage', e)
+    }
+  }
+}
 
 // Computed properties
 const currentUser = computed(() => authStore.user)
@@ -548,19 +698,30 @@ const profileCompletionPercentage = computed(() => {
   return devoteeStore.completionPercentage || 0
 })
 
-// NEW: Add this computed property for devotee profile
+// Get devotee profile
 const devoteeProfile = computed(() => {
   return devoteeStore.profile || authStore.user || {}
 })
 
-// NEW: Get recent donations from donation store
+// Get recent donations
 const recentDonations = computed(() => {
-  return donationStore.recentDonations || []
+  // Check current donation store first
+  if (donationStore.recentDonations && donationStore.recentDonations.length > 0) {
+    return donationStore.recentDonations
+  }
+  
+  // Then check local data
+  if (localData.recentDonations && localData.recentDonations.length > 0) {
+    return localData.recentDonations
+  }
+  
+  // Return empty array if nothing is available
+  return []
 })
 
-// NEW: Get loading state for recent donations
+// Get loading state for recent donations
 const loadingRecentDonations = computed(() => {
-  return donationStore.loadingRecent
+  return donationStore.loadingRecent && !dataLoadingStatus.donations
 })
 
 // Use existing data from store if available
@@ -581,12 +742,97 @@ const notifications = computed(() => {
   return devoteeStore.notifications?.slice(0, 5) || []
 })
 
-// For seva store
+// Get recent seva bookings with name caching
 const recentSevaBookings = computed(() => {
-  return sevaStore.recentSevas
+  const sevas = localData.recentSevas.length > 0 ? 
+                localData.recentSevas : 
+                sevaStore.recentSevas || []
+  
+  // Ensure seva names are cached as we compute this
+  if (sevas.length > 0) {
+    sevas.forEach(seva => {
+      const sevaId = seva.seva_id || seva.SevaID || seva.id || seva.ID
+      if (sevaId) {
+        // Pre-cache name if it exists in the seva
+        if (seva.seva_name || seva.SevaName || seva.name || seva.Name) {
+          sevaNameCache[sevaId] = seva.seva_name || seva.SevaName || seva.name || seva.Name
+        }
+      }
+    })
+  }
+  
+  return sevas
 })
 
-const loadingRecentSevas = computed(() => sevaStore.loadingRecentSevas)
+const loadingRecentSevas = computed(() => sevaStore.loadingRecentSevas && !dataLoadingStatus.sevas)
+
+// Restore saved data from localStorage on mount
+const restoreSavedData = () => {
+  try {
+    // Try to restore saved dashboard counts
+    const savedCounts = localStorage.getItem('dashboard_counts')
+    if (savedCounts) {
+      const parsed = JSON.parse(savedCounts)
+      
+      // Only use if saved less than 1 hour ago
+      const oneHourAgo = Date.now() - (60 * 60 * 1000)
+      if (parsed.timestamp && parsed.timestamp > oneHourAgo) {
+        console.log('📊 Restoring saved dashboard counts:', parsed)
+        dashboardCounts.sevaCount = parsed.sevaCount || 0
+        dashboardCounts.upcomingSevaCount = parsed.upcomingSevaCount || 0
+        dashboardCounts.eventCount = parsed.eventCount || 0
+        dashboardCounts.upcomingEventCount = parsed.upcomingEventCount || 0
+        dashboardCounts.countsInitialized = true
+      }
+    }
+    
+    // Try to restore saved local data
+    const savedLocalData = localStorage.getItem('dashboard_local_data')
+    if (savedLocalData) {
+      const parsed = JSON.parse(savedLocalData)
+      
+      // Only use if saved less than 1 hour ago
+      const oneHourAgo = Date.now() - (60 * 60 * 1000)
+      if (parsed.timestamp && parsed.timestamp > oneHourAgo) {
+        console.log('🗃️ Restoring saved local data')
+        if (parsed.recentSevas && Array.isArray(parsed.recentSevas)) {
+          localData.recentSevas = parsed.recentSevas
+        }
+        if (parsed.recentDonations && Array.isArray(parsed.recentDonations)) {
+          localData.recentDonations = parsed.recentDonations
+        }
+        if (parsed.upcomingEvents && Array.isArray(parsed.upcomingEvents)) {
+          localData.upcomingEvents = parsed.upcomingEvents
+          upcomingEvents.value = parsed.upcomingEvents
+        }
+      }
+    }
+    
+    // Try to restore saved seva name cache
+    const savedSevaNames = localStorage.getItem('dashboard_seva_names')
+    if (savedSevaNames) {
+      try {
+        const parsed = JSON.parse(savedSevaNames)
+        Object.assign(sevaNameCache, parsed)
+        console.log('📋 Restored seva name cache with', Object.keys(parsed).length, 'entries')
+      } catch (e) {
+        console.warn('Error parsing saved seva names:', e)
+      }
+    }
+  } catch (e) {
+    console.warn('Error restoring saved data:', e)
+  }
+}
+
+// FIX: Enhanced name caching system
+// Helper function to save the seva name cache to localStorage
+const saveSevaNameCache = () => {
+  try {
+    localStorage.setItem('dashboard_seva_names', JSON.stringify(sevaNameCache))
+  } catch (e) {
+    console.warn('Could not save seva name cache to localStorage', e)
+  }
+}
 
 // Helper functions to handle database field names
 const getId = (booking) => booking?.ID || booking?.id || 0
@@ -594,40 +840,98 @@ const getSevaId = (booking) => booking?.SevaID || booking?.seva_id || 0
 const getStatus = (booking) => booking?.Status || booking?.status || 'pending'
 const getBookingTime = (booking) => booking?.BookingTime || booking?.booking_time || null
 
-// Helper function to get Seva name from a booking
+// FIX: Enhanced getSevaName with persistent caching 
 const getSevaName = (booking) => {
   if (!booking) return 'Unknown Seva'
   
+  // Extract the sevaId first
+  const sevaId = getSevaId(booking)
+  
+  // First check our local cache for a previously resolved name
+  if (sevaId && sevaNameCache[sevaId]) {
+    return sevaNameCache[sevaId]
+  }
+  
   // Check for direct seva_name property first (both cases)
   if (booking.SevaName || booking.seva_name) {
-    return booking.SevaName || booking.seva_name
+    const name = booking.SevaName || booking.seva_name
+    if (sevaId) {
+      sevaNameCache[sevaId] = name
+      saveSevaNameCache() // Save the cache after adding a new name
+    }
+    return name
+  }
+  
+  // Check if the booking has seva object with name
+  if (booking.seva && booking.seva.name) {
+    const name = booking.seva.name
+    if (sevaId) {
+      sevaNameCache[sevaId] = name
+      saveSevaNameCache()
+    }
+    return name
   }
   
   // Check for seva catalog data in sevaStore
-  const sevaId = getSevaId(booking)
-  if (sevaStore.sevaCatalog && Array.isArray(sevaStore.sevaCatalog)) {
-    const catalogItem = sevaStore.sevaCatalog.find(item => item.id === sevaId)
-    if (catalogItem && catalogItem.name) {
-      return catalogItem.name
+  if (sevaId && sevaStore.sevaCatalog && Array.isArray(sevaStore.sevaCatalog)) {
+    const catalogItem = sevaStore.sevaCatalog.find(item => 
+      item.id === sevaId || item.ID === sevaId
+    )
+    if (catalogItem && (catalogItem.name || catalogItem.Name)) {
+      const name = catalogItem.name || catalogItem.Name
+      sevaNameCache[sevaId] = name
+      saveSevaNameCache()
+      return name
     }
   }
   
   // Check for seva in seva list
-  if (sevaStore.sevaList && Array.isArray(sevaStore.sevaList)) {
-    const seva = sevaStore.sevaList.find(s => s.id === sevaId)
-    if (seva && seva.name) {
-      return seva.name
+  if (sevaId && sevaStore.sevaList && Array.isArray(sevaStore.sevaList)) {
+    const seva = sevaStore.sevaList.find(s => 
+      s.id === sevaId || s.ID === sevaId
+    )
+    if (seva && (seva.name || seva.Name)) {
+      const name = seva.name || seva.Name
+      sevaNameCache[sevaId] = name
+      saveSevaNameCache()
+      return name
     }
+  }
+  
+  // Check if there's a name field directly on the booking
+  if (booking.name || booking.Name) {
+    const name = booking.name || booking.Name
+    if (sevaId) {
+      sevaNameCache[sevaId] = name
+      saveSevaNameCache()
+    }
+    return name
   }
   
   // Try to lookup in global catalog or seva entries
   if (sevaStore.getSevaNameById && typeof sevaStore.getSevaNameById === 'function') {
-    const name = sevaStore.getSevaNameById(sevaId)
-    if (name) return name
+    try {
+      const name = sevaStore.getSevaNameById(sevaId)
+      if (name && sevaId) {
+        sevaNameCache[sevaId] = name
+        saveSevaNameCache()
+        return name
+      }
+    } catch (e) {
+      console.warn(`Error getting seva name for ID ${sevaId}:`, e)
+    }
   }
   
   // Return generic name with ID as a last resort
-  return `Seva ${sevaId}`
+  const genericName = `Seva ${sevaId || booking.id || 'Unknown'}`
+  
+  // Cache even the generic name to be consistent
+  if (sevaId) {
+    sevaNameCache[sevaId] = genericName
+    saveSevaNameCache()
+  }
+  
+  return genericName
 }
 
 // Format the booking date
@@ -660,10 +964,7 @@ const getStatusClass = (status) => {
   return classes[status.toLowerCase()] || 'bg-gray-100 text-gray-800'
 }
 
-// NEW: Birthday formatting methods
-// Method to format birthday from database format (2003-12-18 00:00:00+00)
-// FIXED: Method to format birthday - Updated to look in correct location
-// IMPROVED: Method to format birthday - Shows actual date
+// Method to format birthday - Shows actual date
 const formatBirthday = () => {
   const profile = devoteeProfile.value
   
@@ -672,13 +973,6 @@ const formatBirthday = () => {
              profile.dob || 
              profile.date_of_birth || 
              profile.birthday
-  
-  console.log('🎂 Checking birthday data:', {
-    'profile.personal?.dateOfBirth': profile.personal?.dateOfBirth,
-    'profile.dob': profile.dob,
-    'finalDob': dob,
-    'fullProfile': profile
-  })
   
   if (!dob) {
     return 'Not Set'
@@ -690,7 +984,6 @@ const formatBirthday = () => {
     
     // Check if date is valid
     if (isNaN(date.getTime())) {
-      console.error('❌ Invalid date:', dob)
       return 'Invalid Date'
     }
     
@@ -700,14 +993,11 @@ const formatBirthday = () => {
       month: 'short'
     })
   } catch (error) {
-    console.error('❌ Error formatting birthday:', error)
     return 'Invalid Date'
   }
 }
 
 // Method to get birthday subtitle with countdown
-// FIXED: Method to get birthday subtitle with countdown - Updated to look in correct location
-// IMPROVED: Method to get birthday subtitle with better countdown logic
 const getBirthdaySubtitle = () => {
   const profile = devoteeProfile.value
   
@@ -727,7 +1017,6 @@ const getBirthdaySubtitle = () => {
     
     // Check if date is valid
     if (isNaN(birthDate.getTime())) {
-      console.error('❌ Invalid date for subtitle:', dob)
       return 'Add your birthday in profile'
     }
     
@@ -779,7 +1068,6 @@ const getBirthdaySubtitle = () => {
       return `${birthDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}, ${nextYear} • Age ${age}`
     }
   } catch (error) {
-    console.error('❌ Error calculating birthday countdown:', error)
     return 'Add your birthday in profile'
   }
 }
@@ -833,7 +1121,7 @@ const getDonationStatusClass = (status) => {
     pending: 'bg-yellow-100 text-yellow-800',
     processing: 'bg-blue-100 text-blue-800',
     completed: 'bg-green-100 text-green-800',
-    success: 'bg-green-100 text-green-800', // NEW: Handle SUCCESS status from backend
+    success: 'bg-green-100 text-green-800',
     cancelled: 'bg-red-100 text-red-800',
     failed: 'bg-red-100 text-red-800'
   }
@@ -843,7 +1131,310 @@ const getDonationStatusClass = (status) => {
   return statusMap[normalizedStatus] || 'bg-gray-100 text-gray-800'
 }
 
-// UPDATED: Enhanced loadDashboardData to ensure profile is loaded
+// FIX: Enhanced data processing for sevas to extract and cache names
+const processSevaData = (sevas) => {
+  if (!sevas || !Array.isArray(sevas) || sevas.length === 0) return sevas
+  
+  return sevas.map(seva => {
+    const sevaId = seva.seva_id || seva.SevaID || seva.id || seva.ID
+    
+    // Extract seva name from any available property
+    let sevaName = null
+    
+    // Try to get name from seva object first
+    if (seva.seva && (seva.seva.name || seva.seva.Name)) {
+      sevaName = seva.seva.name || seva.seva.Name
+    } 
+    // Then direct properties
+    else if (seva.seva_name || seva.SevaName || seva.name || seva.Name) {
+      sevaName = seva.seva_name || seva.SevaName || seva.name || seva.Name
+    }
+    
+    // Cache the name if we found one and have an ID
+    if (sevaName && sevaId) {
+      sevaNameCache[sevaId] = sevaName
+    }
+    
+    // Return the original seva object
+    return seva
+  })
+}
+
+// FIX: Add a specialized function to enrich seva objects with their names
+const enrichSevaWithNames = async (sevas) => {
+  if (!sevas || !Array.isArray(sevas) || sevas.length === 0) return sevas
+
+  // Make a deep copy to avoid reactivity issues
+  const enrichedSevas = JSON.parse(JSON.stringify(sevas))
+  
+  console.log('🔄 Enriching', enrichedSevas.length, 'sevas with names')
+  
+  // First attempt: Try to map names from the seva catalog directly
+  if (sevaStore.sevaCatalog && Array.isArray(sevaStore.sevaCatalog)) {
+    const catalogMap = {}
+    sevaStore.sevaCatalog.forEach(catalogItem => {
+      const id = catalogItem.id || catalogItem.ID
+      if (id && (catalogItem.name || catalogItem.Name)) {
+        catalogMap[id] = catalogItem.name || catalogItem.Name
+      }
+    })
+    
+    // Apply catalog names to sevas
+    enrichedSevas.forEach(seva => {
+      const sevaId = seva.seva_id || seva.SevaID || seva.id || seva.ID
+      if (sevaId && catalogMap[sevaId]) {
+        // Store the name in multiple properties to ensure it's used
+        seva.seva_name = catalogMap[sevaId]
+        seva.SevaName = catalogMap[sevaId]
+        if (!seva.name) seva.name = catalogMap[sevaId]
+        if (!seva.Name) seva.Name = catalogMap[sevaId]
+        
+        // If seva has a seva object, ensure it has the name
+        if (seva.seva && typeof seva.seva === 'object') {
+          seva.seva.name = catalogMap[sevaId]
+        }
+        
+        // Cache the name
+        sevaNameCache[sevaId] = catalogMap[sevaId]
+      }
+    })
+  }
+  
+  // Second attempt: Try to use the cached seva names
+  enrichedSevas.forEach(seva => {
+    const sevaId = seva.seva_id || seva.SevaID || seva.id || seva.ID
+    if (sevaId && sevaNameCache[sevaId]) {
+      // Apply the cached name to all possible fields
+      seva.seva_name = sevaNameCache[sevaId]
+      seva.SevaName = sevaNameCache[sevaId]
+      if (!seva.name) seva.name = sevaNameCache[sevaId]
+      if (!seva.Name) seva.Name = sevaNameCache[sevaId]
+      
+      // If seva has a seva object, ensure it has the name
+      if (seva.seva && typeof seva.seva === 'object') {
+        seva.seva.name = sevaNameCache[sevaId]
+      }
+    }
+  })
+  
+  // Third attempt: If all else fails, try to look up names from the server
+  // This would be specific to your API structure, but here's a placeholder
+  if (sevaStore.getSevaDetails && typeof sevaStore.getSevaDetails === 'function') {
+    // Find sevas that still don't have names
+    const sevasNeedingNames = enrichedSevas.filter(seva => {
+      const sevaId = seva.seva_id || seva.SevaID || seva.id || seva.ID
+      return sevaId && 
+        !seva.seva_name && 
+        !seva.SevaName && 
+        !seva.name && 
+        !seva.Name && 
+        !sevaNameCache[sevaId]
+    })
+    
+    // If we have sevas needing names, fetch them one by one
+    if (sevasNeedingNames.length > 0) {
+      console.log('🔄 Fetching names for', sevasNeedingNames.length, 'sevas')
+      
+      for (const seva of sevasNeedingNames) {
+        const sevaId = seva.seva_id || seva.SevaID || seva.id || seva.ID
+        if (!sevaId) continue
+        
+        try {
+          // This would be your API call to get seva details by ID
+          const sevaDetails = await sevaStore.getSevaDetails(sevaId)
+          if (sevaDetails && (sevaDetails.name || sevaDetails.Name)) {
+            const name = sevaDetails.name || sevaDetails.Name
+            
+            // Find the original seva in our enriched array
+            const targetSeva = enrichedSevas.find(s => {
+              const id = s.seva_id || s.SevaID || s.id || s.ID
+              return id === sevaId
+            })
+            
+            if (targetSeva) {
+              // Apply the name to all possible fields
+              targetSeva.seva_name = name
+              targetSeva.SevaName = name
+              if (!targetSeva.name) targetSeva.name = name
+              if (!targetSeva.Name) targetSeva.Name = name
+              
+              // If seva has a seva object, ensure it has the name
+              if (targetSeva.seva && typeof targetSeva.seva === 'object') {
+                targetSeva.seva.name = name
+              }
+              
+              // Cache the name
+              sevaNameCache[sevaId] = name
+            }
+          }
+        } catch (err) {
+          console.warn(`⚠️ Error fetching details for seva ${sevaId}:`, err)
+        }
+      }
+      
+      // Save the updated cache
+      saveSevaNameCache()
+    }
+  }
+  
+  // Fourth attempt: Hardcode default names for common seva types
+  // This is a fallback if all else fails
+  const defaultSevaNames = {
+    '1': 'Archana Seva',
+    '2': 'Abhishekam',
+    '3': 'Puja Seva',
+    '4': 'Homam'
+  }
+  
+  enrichedSevas.forEach(seva => {
+    const sevaId = seva.seva_id || seva.SevaID || seva.id || seva.ID
+    
+    // Only apply default names if we still don't have a name
+    if (sevaId && 
+        !seva.seva_name && 
+        !seva.SevaName && 
+        !seva.name && 
+        !seva.Name && 
+        defaultSevaNames[sevaId]) {
+      
+      // Apply the default name
+      seva.seva_name = defaultSevaNames[sevaId]
+      seva.SevaName = defaultSevaNames[sevaId]
+      seva.name = defaultSevaNames[sevaId]
+      seva.Name = defaultSevaNames[sevaId]
+      
+      // If seva has a seva object, ensure it has the name
+      if (seva.seva && typeof seva.seva === 'object') {
+        seva.seva.name = defaultSevaNames[sevaId]
+      }
+      
+      // Cache the name
+      sevaNameCache[sevaId] = defaultSevaNames[sevaId]
+    }
+  })
+  
+  // Save the updated cache after all attempts
+  saveSevaNameCache()
+  
+  return enrichedSevas
+}
+
+// FIX: Improved watchers for store data
+// Store watcher to track changes to store data and extract names
+watch(() => sevaStore.recentSevas, (newVal) => {
+  if (newVal && Array.isArray(newVal) && newVal.length > 0) {
+    console.log('💾 Seva store updated with', newVal.length, 'sevas')
+    
+    // Process sevas to extract names
+    const processedSevas = processSevaData(newVal)
+    
+    // Make a deep copy to prevent reference issues
+    localData.recentSevas = JSON.parse(JSON.stringify(processedSevas))
+    
+    // Save to localStorage
+    try {
+      localStorage.setItem('dashboard_local_data', JSON.stringify({
+        ...JSON.parse(localStorage.getItem('dashboard_local_data') || '{}'),
+        recentSevas: localData.recentSevas,
+        timestamp: Date.now()
+      }))
+      
+      // Also save the updated name cache
+      saveSevaNameCache()
+    } catch (e) {
+      console.warn('Could not save sevas to localStorage', e)
+    }
+    
+    // Mark seva data as loaded
+    dataLoadingStatus.sevas = true
+    
+    // Lock counters after a short delay to ensure computed properties have updated
+    setTimeout(lockCounters, 500)
+  }
+}, { deep: true, immediate: true })
+
+// Watch catalog for name extraction
+watch(() => sevaStore.sevaCatalog, (newVal) => {
+  if (newVal && Array.isArray(newVal) && newVal.length > 0) {
+    console.log('💾 Seva catalog updated with', newVal.length, 'entries')
+    
+    // Extract names from catalog
+    newVal.forEach(seva => {
+      const sevaId = seva.id || seva.ID
+      const sevaName = seva.name || seva.Name
+      
+      if (sevaId && sevaName) {
+        sevaNameCache[sevaId] = sevaName
+      }
+    })
+    
+    // Save updated name cache
+    saveSevaNameCache()
+    
+    // Process any existing sevas with new catalog information
+    if (localData.recentSevas.length > 0) {
+      localData.recentSevas = processSevaData(localData.recentSevas)
+    }
+  }
+}, { deep: true, immediate: true })
+
+// FIX: Improved watcher for donations
+watch(() => donationStore.recentDonations, (newVal) => {
+  if (newVal && Array.isArray(newVal) && newVal.length > 0) {
+    console.log('💾 Donation store updated with', newVal.length, 'donations')
+    // Make a deep copy to prevent reference issues
+    localData.recentDonations = JSON.parse(JSON.stringify(newVal))
+    
+    // Log and debug output to track data flow
+    console.log('✅ Donations saved to localData:', localData.recentDonations.length)
+    
+    // Save to localStorage
+    try {
+      localStorage.setItem('dashboard_local_data', JSON.stringify({
+        ...JSON.parse(localStorage.getItem('dashboard_local_data') || '{}'),
+        recentDonations: localData.recentDonations,
+        timestamp: Date.now()
+      }))
+    } catch (e) {
+      console.warn('Could not save donations to localStorage', e)
+    }
+    
+    // Force a UI update by making Vue see the change
+    const tempDonations = [...localData.recentDonations]
+    localData.recentDonations = []
+    nextTick(() => {
+      localData.recentDonations = tempDonations
+    })
+    
+    // Mark donations as loaded
+    dataLoadingStatus.donations = true
+  }
+}, { deep: true, immediate: true })
+
+// FIX: Improved watcher for events that updates the local event data
+watch(() => upcomingEvents.value, (newVal) => {
+  if (newVal && Array.isArray(newVal) && newVal.length > 0) {
+    console.log('💾 Events updated with', newVal.length, 'events')
+    // Update local storage with events
+    localData.upcomingEvents = JSON.parse(JSON.stringify(newVal))
+    
+    // Save to localStorage
+    try {
+      localStorage.setItem('dashboard_local_data', JSON.stringify({
+        ...JSON.parse(localStorage.getItem('dashboard_local_data') || '{}'),
+        upcomingEvents: localData.upcomingEvents,
+        timestamp: Date.now()
+      }))
+    } catch (e) {
+      console.warn('Could not save events to localStorage', e)
+    }
+    
+    // Mark events as loaded
+    dataLoadingStatus.events = true
+  }
+}, { deep: true, immediate: true })
+
+// FIX: Enhanced and sequentially load data with seva catalog prioritization and proper Promise handling
 const loadDashboardData = async () => {
   const entityId = route.params.id
   if (!entityId) {
@@ -852,145 +1443,634 @@ const loadDashboardData = async () => {
     return
   }
 
-  loading.value = true
+  // First restore any saved data
+  restoreSavedData()
+
+  // If we already have saved counts, show them immediately
+  if (dashboardCounts.countsInitialized) {
+    loading.value = false
+  } else {
+    loading.value = true
+  }
+  
   error.value = null
 
   try {
     // Set the entity ID for API calls
     localStorage.setItem('current_entity_id', entityId)
-    localStorage.setItem('current_tenant_id', entityId) // ✅ Enables proper X-Tenant-ID header in axios
-
-    // Make parallel API requests
-    const promises = []
-
-    // IMPORTANT: Load profile data to get birthday info
-    if (devoteeStore.loadProfileData) {
-      promises.push(devoteeStore.loadProfileData())
-    } else {
-      // Fallback: directly call the service if store method doesn't exist
-      promises.push(
-        devoteeService.getProfile()
-          .then(response => {
-            if (response && response.data) {
-              devoteeStore.profile = response.data
-              console.log('Profile loaded with dob:', response.data.dob)
+    localStorage.setItem('current_tenant_id', entityId)
+    
+    // Array to hold all loading promises
+    const loadingPromises = []
+    
+    // FIX: Load seva catalog first as it's critical for name resolution
+    // We'll wait for this to complete before proceeding with other data
+    console.log('🔄 Loading seva catalog first...')
+    try {
+      if (sevaStore.fetchSevaCatalog) {
+        await sevaStore.fetchSevaCatalog()
+        console.log('✅ Seva catalog loaded with', sevaStore.sevaCatalog?.length || 0, 'items')
+        
+        // Extract names from catalog
+        if (sevaStore.sevaCatalog && Array.isArray(sevaStore.sevaCatalog)) {
+          sevaStore.sevaCatalog.forEach(seva => {
+            const sevaId = seva.id || seva.ID
+            const sevaName = seva.name || seva.Name
+            
+            if (sevaId && sevaName) {
+              sevaNameCache[sevaId] = sevaName
             }
           })
-          .catch(err => {
-            console.error('Error loading profile:', err)
+          
+          // Save the name cache
+          saveSevaNameCache()
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ Error loading seva catalog:', err)
+    }
+    
+    // Attempt to load any additional seva related data 
+    try {
+      // Try to load any backup or additional seva data from the store
+      if (sevaStore.fetchSevaList && typeof sevaStore.fetchSevaList === 'function') {
+        await sevaStore.fetchSevaList()
+        
+        // Extract names from seva list if available
+        if (sevaStore.sevaList && Array.isArray(sevaStore.sevaList)) {
+          sevaStore.sevaList.forEach(seva => {
+            const sevaId = seva.id || seva.ID
+            const sevaName = seva.name || seva.Name
+            
+            if (sevaId && sevaName) {
+              sevaNameCache[sevaId] = sevaName
+              console.log(`✓ Cached seva name: ID ${sevaId} = "${sevaName}"`)
+            }
           })
-      )
+          saveSevaNameCache()
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ Error loading seva list:', err)
+    }
+    
+    // Load profile data next (for birthday info)
+    console.log('🔄 Loading profile data...')
+    const profilePromise = (async () => {
+      try {
+        if (devoteeStore.loadProfileData) {
+          await devoteeStore.loadProfileData()
+        } else {
+          const profileResponse = await devoteeService.getProfile()
+          if (profileResponse && profileResponse.data) {
+            devoteeStore.profile = profileResponse.data
+          }
+        }
+        dataLoadingStatus.profile = true
+      } catch (err) {
+        console.warn('⚠️ Could not load profile:', err)
+        dataLoadingStatus.profile = true
+      }
+    })()
+    
+    loadingPromises.push(profilePromise)
+    
+    // Load entity details
+    console.log('🔄 Loading entity details...')
+    const entityPromise = (async () => {
+      try {
+        const entityData = await fetchEntityDetails(entityId)
+        if (entityData) {
+          entityDetails.value = entityData
+        }
+        dataLoadingStatus.entity = true
+      } catch (err) {
+        console.warn('⚠️ Could not load entity details:', err)
+        // Try loading from temple store as fallback
+        try {
+          if (templeStore.fetchTemples) {
+            await templeStore.fetchTemples()
+          }
+        } catch (e) {
+          console.warn('⚠️ Could not load temples as fallback:', e)
+        }
+        dataLoadingStatus.entity = true
+      }
+    })()
+    
+    loadingPromises.push(entityPromise)
+    
+    // If we already have counters, we can exit loading state
+    if (dashboardCounts.countsInitialized) {
+      loading.value = false
     }
 
-    // Load temple data
-    promises.push(fetchEntityDetails(entityId)
-      .then(data => {
-        entityDetails.value = data
-      })
-      .catch(err => {
-        console.error('Error loading entity details:', err)
-        // If we can't fetch entity details, try loading from store
-        if (templeStore.fetchTemples) {
-          return templeStore.fetchTemples()
-        } else if (templeStore.loadTemple) {
-          return templeStore.loadTemple(entityId)
-        }
-      })
-    )
-
-    // Load upcoming events
-    promises.push(fetchUpcomingEvents(entityId)
-      .then(data => {
-        if (Array.isArray(data)) {
-          upcomingEvents.value = data.slice(0, 3)
-        } else {
-          console.warn('Expected array but got:', data)
-          upcomingEvents.value = []
-        }
-      })
-    )
-
-    // Load seva bookings
-    promises.push(fetchMySevaBookings()
-      .then(data => {
-        if (Array.isArray(data)) {
-          mySevaBookings.value = data.slice(0, 3)
-        } else {
-          console.warn('Expected array but got:', data)
-          mySevaBookings.value = []
-        }
-      })
-    )
-
-    // UPDATED: Load recent donations using the new donation store method
-    promises.push(
-      donationStore.fetchRecentDonations()
-        .then(data => {
-          console.log('Dashboard: Recent donations loaded:', data)
-        })
-        .catch(err => {
-          console.error('Dashboard: Error loading recent donations:', err)
-          // Don't throw error to avoid breaking the entire dashboard
-        })
-    )
+    // FIX: Load critical data with proper Promise handling
     
-    // Load recent sevas
-    promises.push(
-      sevaStore.fetchRecentSevas()
-        .catch(err => {
-          console.error('Error loading recent sevas:', err)
-        })
-    )
+    // SEVA DATA
+    console.log('🔄 Loading seva bookings...')
+    const sevaPromise = (async () => {
+      try {
+        // Check if we already have data
+        if (localData.recentSevas.length === 0) {
+          if (sevaStore.fetchRecentSevas) {
+            await sevaStore.fetchRecentSevas()
+            
+            // Wait a bit for the data to propagate to the store
+            await new Promise(resolve => setTimeout(resolve, 100))
+          }
+          
+          // If store doesn't have data, try direct method
+          if (!sevaStore.recentSevas || sevaStore.recentSevas.length === 0) {
+            const sevaData = await fetchMySevaBookings()
+            if (Array.isArray(sevaData) && sevaData.length > 0) {
+              // IMPORTANT: Apply name resolution to sevas before setting to view
+              const enrichedSevas = await enrichSevaWithNames(sevaData)
+              mySevaBookings.value = enrichedSevas.slice(0, 3)
+              
+              // Store in local data
+              localData.recentSevas = JSON.parse(JSON.stringify(enrichedSevas.slice(0, 3)))
+              
+              // Save to localStorage
+              try {
+                localStorage.setItem('dashboard_local_data', JSON.stringify({
+                  ...JSON.parse(localStorage.getItem('dashboard_local_data') || '{}'),
+                  recentSevas: localData.recentSevas,
+                  timestamp: Date.now()
+                }))
+              } catch (e) {
+                console.warn('Could not save sevas to localStorage', e)
+              }
+            }
+          } else {
+            // IMPORTANT: Apply name resolution to store sevas
+            const enrichedSevas = await enrichSevaWithNames(sevaStore.recentSevas)
+            if (enrichedSevas && enrichedSevas.length > 0) {
+              // Update sevaStore data with enriched names if possible
+              if (Array.isArray(sevaStore.recentSevas)) {
+                // This may or may not work depending on reactivity
+                sevaStore.recentSevas = enrichedSevas
+              }
+              
+              // Store in local data
+              localData.recentSevas = JSON.parse(JSON.stringify(enrichedSevas))
+              
+              // Save to localStorage
+              try {
+                localStorage.setItem('dashboard_local_data', JSON.stringify({
+                  ...JSON.parse(localStorage.getItem('dashboard_local_data') || '{}'),
+                  recentSevas: localData.recentSevas,
+                  timestamp: Date.now()
+                }))
+              } catch (e) {
+                console.warn('Could not save sevas to localStorage', e)
+              }
+            }
+          }
+        } else {
+          // We have data in localData.recentSevas, let's make sure names are resolved
+          const enrichedSevas = await enrichSevaWithNames(localData.recentSevas)
+          localData.recentSevas = JSON.parse(JSON.stringify(enrichedSevas))
+        }
+        dataLoadingStatus.sevas = true
+      } catch (err) {
+        console.warn('⚠️ Error loading seva data:', err)
+        dataLoadingStatus.sevas = true
+      }
+    })()
     
-    // Load seva catalog to get actual seva names
-    if (sevaStore.fetchSevaCatalog) {
-      promises.push(
-        sevaStore.fetchSevaCatalog()
-          .then(() => {
-            console.log('Seva catalog loaded:', sevaStore.sevaCatalog)
-          })
-          .catch(err => {
-            console.error('Error loading seva catalog:', err)
-          })
-      )
+    loadingPromises.push(sevaPromise)
+    
+    // EVENTS DATA
+    console.log('🔄 Loading event data...')
+    const eventPromise = (async () => {
+      try {
+        // Check if we already have data
+        if (localData.upcomingEvents.length === 0) {
+          const eventData = await fetchUpcomingEvents(entityId)
+          if (Array.isArray(eventData) && eventData.length > 0) {
+            upcomingEvents.value = eventData.slice(0, 3)
+            localData.upcomingEvents = eventData.slice(0, 3)
+            
+            // Save to localStorage
+            try {
+              localStorage.setItem('dashboard_local_data', JSON.stringify({
+                ...JSON.parse(localStorage.getItem('dashboard_local_data') || '{}'),
+                upcomingEvents: localData.upcomingEvents,
+                timestamp: Date.now()
+              }))
+            } catch (e) {
+              console.warn('Could not save events to localStorage', e)
+            }
+          }
+        }
+        dataLoadingStatus.events = true
+      } catch (err) {
+        console.warn('⚠️ Error loading event data:', err)
+        dataLoadingStatus.events = true
+      }
+    })()
+    
+    loadingPromises.push(eventPromise)
+    
+    // DONATION DATA - Load donations first before other data
+    console.log('🔄 Loading donation data...')
+    const donationPromise = (async () => {
+      try {
+        // Check if we already have data
+        if (localData.recentDonations.length === 0) {
+          if (donationStore.fetchRecentDonations) {
+            // Use a more reliable approach with retry mechanism
+            try {
+              await donationStore.fetchRecentDonations()
+              
+              // Wait a bit for the data to propagate to the store
+              await new Promise(resolve => setTimeout(resolve, 200))
+              
+              // If no donations were loaded, try again
+              if (!donationStore.recentDonations || donationStore.recentDonations.length === 0) {
+                console.log('⚠️ No donations loaded on first attempt, retrying...')
+                await donationStore.fetchRecentDonations()
+                
+                // Wait again
+                await new Promise(resolve => setTimeout(resolve, 200))
+              }
+              
+              // After loading, immediately copy to local data
+              if (donationStore.recentDonations && donationStore.recentDonations.length > 0) {
+                localData.recentDonations = JSON.parse(JSON.stringify(donationStore.recentDonations))
+                console.log('✅ Successfully loaded', localData.recentDonations.length, 'donations')
+                
+                // Save to localStorage
+                try {
+                  localStorage.setItem('dashboard_local_data', JSON.stringify({
+                    ...JSON.parse(localStorage.getItem('dashboard_local_data') || '{}'),
+                    recentDonations: localData.recentDonations,
+                    timestamp: Date.now()
+                  }))
+                } catch (e) {
+                  console.warn('Could not save donations to localStorage', e)
+                }
+              } else {
+                console.warn('⚠️ No donations available after two attempts')
+              }
+            } catch (fetchErr) {
+              console.warn('⚠️ Error in fetchRecentDonations:', fetchErr)
+              
+              // Try alternative loading methods if available
+              if (donationStore.getDonations && typeof donationStore.getDonations === 'function') {
+                try {
+                  const donationsResult = await donationStore.getDonations()
+                  if (donationsResult && Array.isArray(donationsResult) && donationsResult.length > 0) {
+                    localData.recentDonations = JSON.parse(JSON.stringify(donationsResult))
+                    console.log('✅ Loaded donations via alternative method')
+                  }
+                } catch (altErr) {
+                  console.warn('⚠️ Alternative donation loading also failed:', altErr)
+                }
+              }
+            }
+          }
+        }
+        dataLoadingStatus.donations = true
+      } catch (err) {
+        console.warn('⚠️ Error loading donation data:', err)
+        dataLoadingStatus.donations = true
+      }
+    })()
+    
+    // Add this promise first to prioritize donations loading
+    loadingPromises.unshift(donationPromise)
+    
+    // Load dashboard data if available (for supplementary data)
+    if (devoteeStore.fetchDashboardData) {
+      const dashboardPromise = (async () => {
+        try {
+          await devoteeStore.fetchDashboardData(entityId)
+        } catch (err) {
+          console.warn('⚠️ Error loading dashboard data:', err)
+        }
+      })()
+      
+      loadingPromises.push(dashboardPromise)
     }
-
-    // Wait for all promises to resolve
-    await Promise.all(promises)
     
-    // Debug the loaded data
-    console.log('Recent sevas:', sevaStore.recentSevas)
-    console.log('Seva catalog:', sevaStore.sevaCatalog)
-    console.log('Recent donations:', donationStore.recentDonations)
-    console.log('Profile with birthday:', devoteeStore.profile)
-    console.log('DOB value:', devoteeStore.profile?.dob)
+    // Wait for all critical data to load
+    Promise.all(loadingPromises)
+      .then(() => {
+        console.log('✅ All data loaded successfully')
+        loading.value = false
+        lockCounters()
+      })
+      .catch((err) => {
+        console.error('❌ Error loading dashboard data:', err)
+        loading.value = false
+        lockCounters()
+      })
     
   } catch (err) {
-    console.error('Error loading dashboard data:', err)
+    console.error('❌ Error in dashboard data loading:', err)
     error.value = err.message || 'Failed to load dashboard data'
-  } finally {
     loading.value = false
   }
 }
 
-// Handle activity feed events
-const handleActivitiesLoaded = (activities) => {
-  // Update dashboard with loaded activities
-  console.log('Activities loaded:', activities.length)
-}
-
-const handleActivitiesError = (errorMessage) => {
-  console.error('Error loading activities:', errorMessage)
-  // Don't set global error to avoid hiding entire dashboard
-}
-
-const handleViewAllActivities = () => {
-  // Navigate to activities page or open modal
-  router.push(`/entity/${route.params.id}/devotee/activities`)
+// FIX: Check if donations and events failed to load and try again
+const checkAndReloadMissingData = () => {
+  const needsReload = {}
+  
+  if (!dataLoadingStatus.donations && localData.recentDonations.length === 0 && 
+      (!donationStore.recentDonations || donationStore.recentDonations.length === 0)) {
+    console.log('🔄 Donations data missing, scheduling reload')
+    needsReload.donations = true
+  }
+  
+  if (!dataLoadingStatus.events && localData.upcomingEvents.length === 0 && 
+      upcomingEvents.value.length === 0) {
+    console.log('🔄 Events data missing, scheduling reload')
+    needsReload.events = true
+  }
+  
+  if (!dataLoadingStatus.sevas || localData.recentSevas.length === 0 || 
+      mySevaBookings.value.length === 0 || 
+      (mySevaBookings.value.length > 0 && !getSevaName(mySevaBookings.value[0]).includes('Archana'))) {
+    console.log('🔄 Seva names missing or incorrect, scheduling reload')
+    needsReload.sevas = true
+  }
+  
+  if (Object.keys(needsReload).length > 0) {
+    console.log('🔄 Reloading missing data:', needsReload)
+    
+    if (needsReload.donations) {
+      setTimeout(async () => {
+        try {
+          if (donationStore.fetchRecentDonations) {
+            console.log('🔄 Reloading donations from checkAndReloadMissingData...')
+            await donationStore.fetchRecentDonations()
+            
+            // Wait a bit for the store to update
+            await new Promise(resolve => setTimeout(resolve, 200))
+            
+            // Copy data to local storage
+            if (donationStore.recentDonations && donationStore.recentDonations.length > 0) {
+              localData.recentDonations = JSON.parse(JSON.stringify(donationStore.recentDonations))
+              console.log('✅ Donations reloaded successfully:', localData.recentDonations.length)
+              
+              // Force reactive update
+              const tempDonations = [...localData.recentDonations]
+              localData.recentDonations = []
+              setTimeout(() => {
+                localData.recentDonations = tempDonations
+              }, 10)
+              
+              // Save to localStorage
+              try {
+                localStorage.setItem('dashboard_local_data', JSON.stringify({
+                  ...JSON.parse(localStorage.getItem('dashboard_local_data') || '{}'),
+                  recentDonations: localData.recentDonations,
+                  timestamp: Date.now()
+                }))
+              } catch (e) {
+                console.warn('Could not save donations to localStorage', e)
+              }
+            } else {
+              console.warn('⚠️ No donations found after reload attempt')
+              
+              // Try one more approach - direct API call if available
+              if (donationStore.getDonationsByApi && typeof donationStore.getDonationsByApi === 'function') {
+                try {
+                  const donationsApi = await donationStore.getDonationsByApi()
+                  if (donationsApi && Array.isArray(donationsApi) && donationsApi.length > 0) {
+                    localData.recentDonations = JSON.parse(JSON.stringify(donationsApi))
+                    console.log('✅ Retrieved donations via direct API')
+                  }
+                } catch (apiErr) {
+                  console.warn('⚠️ Direct API donation retrieval failed:', apiErr)
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ Failed to reload donations:', e)
+        }
+      }, 500)
+    }
+    
+    if (needsReload.events) {
+      setTimeout(async () => {
+        try {
+          const entityId = route.params.id
+          const eventData = await fetchUpcomingEvents(entityId)
+          if (Array.isArray(eventData) && eventData.length > 0) {
+            console.log('✅ Events reloaded successfully:', eventData.length)
+            upcomingEvents.value = eventData.slice(0, 3)
+            localData.upcomingEvents = eventData.slice(0, 3)
+            
+            // Save to localStorage
+            try {
+              localStorage.setItem('dashboard_local_data', JSON.stringify({
+                ...JSON.parse(localStorage.getItem('dashboard_local_data') || '{}'),
+                upcomingEvents: localData.upcomingEvents,
+                timestamp: Date.now()
+              }))
+            } catch (e) {
+              console.warn('Could not save events to localStorage', e)
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ Failed to reload events:', e)
+        }
+      }, 700)
+    }
+    
+    if (needsReload.sevas) {
+      setTimeout(async () => {
+        try {
+          // First try to reload seva catalog
+          if (sevaStore.fetchSevaCatalog) {
+            await sevaStore.fetchSevaCatalog()
+          }
+          
+          // Then reload the seva bookings
+          if (sevaStore.fetchRecentSevas) {
+            await sevaStore.fetchRecentSevas()
+            
+            // Wait a bit for the data to propagate
+            await new Promise(resolve => setTimeout(resolve, 100))
+            
+            if (sevaStore.recentSevas && sevaStore.recentSevas.length > 0) {
+              // Apply name resolution
+              const enrichedSevas = await enrichSevaWithNames(sevaStore.recentSevas)
+              
+              // Update the local data and view
+              mySevaBookings.value = enrichedSevas.slice(0, 3)
+              localData.recentSevas = JSON.parse(JSON.stringify(enrichedSevas))
+              
+              console.log('✅ Sevas reloaded and enriched successfully')
+              
+              // Force a UI update by clearing and resetting the data
+              const tempSevas = [...mySevaBookings.value]
+              mySevaBookings.value = []
+              setTimeout(() => {
+                mySevaBookings.value = tempSevas
+              }, 10)
+            }
+          } else {
+            // Direct method
+            const sevaData = await fetchMySevaBookings()
+            if (Array.isArray(sevaData) && sevaData.length > 0) {
+              // Apply name resolution
+              const enrichedSevas = await enrichSevaWithNames(sevaData)
+              
+              // Update the local data and view
+              mySevaBookings.value = enrichedSevas.slice(0, 3)
+              localData.recentSevas = JSON.parse(JSON.stringify(enrichedSevas))
+              
+              console.log('✅ Sevas reloaded directly and enriched successfully')
+            }
+          }
+          
+          // Save the updated data
+          try {
+            localStorage.setItem('dashboard_local_data', JSON.stringify({
+              ...JSON.parse(localStorage.getItem('dashboard_local_data') || '{}'),
+              recentSevas: localData.recentSevas,
+              timestamp: Date.now()
+            }))
+          } catch (e) {
+            console.warn('Could not save sevas to localStorage', e)
+          }
+        } catch (e) {
+          console.warn('⚠️ Failed to reload sevas:', e)
+        }
+      }, 1000)
+    }
+  }
 }
 
 // Lifecycle
 onMounted(async () => {
   await loadDashboardData()
+  
+  // FIX: Check specifically for donation data immediately
+  if (localData.recentDonations.length === 0 && 
+      (!donationStore.recentDonations || donationStore.recentDonations.length === 0)) {
+    console.log('🔍 Donation data not loaded after initial load, forcing reload...')
+    
+    try {
+      // Direct and forceful donation loading
+      if (donationStore.fetchRecentDonations) {
+        console.log('🔄 Forcing donation reload...')
+        await donationStore.fetchRecentDonations()
+        
+        // Wait a bit to ensure the store is updated
+        await new Promise(resolve => setTimeout(resolve, 300))
+        
+        // Check if we got data and copy it to local data
+        if (donationStore.recentDonations && donationStore.recentDonations.length > 0) {
+          localData.recentDonations = JSON.parse(JSON.stringify(donationStore.recentDonations))
+          console.log('✅ Successfully forced donation reload with', localData.recentDonations.length, 'items')
+          
+          // Force UI refresh by creating a temporary copy
+          const tempDonations = [...localData.recentDonations]
+          localData.recentDonations = []
+          setTimeout(() => {
+            localData.recentDonations = tempDonations
+          }, 10)
+          
+          // Save to localStorage
+          try {
+            localStorage.setItem('dashboard_local_data', JSON.stringify({
+              ...JSON.parse(localStorage.getItem('dashboard_local_data') || '{}'),
+              recentDonations: localData.recentDonations,
+              timestamp: Date.now()
+            }))
+          } catch (e) {
+            console.warn('Could not save donations to localStorage', e)
+          }
+        } else {
+          console.warn('⚠️ Still no donations after forced reload')
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ Error in forced donation reload:', err)
+    }
+  }
+  
+  // FIX: Set up a check for missing data and reload if needed
+  setTimeout(() => {
+    checkAndReloadMissingData()
+  }, 1500)
+  
+  // FIX: Add a second check for seva names specifically
+  setTimeout(async () => {
+    // Check if we have sevas but with generic names
+    if (mySevaBookings.value.length > 0) {
+      const firstSeva = mySevaBookings.value[0]
+      const sevaName = getSevaName(firstSeva)
+      
+      // If the name looks like a generic "Seva 1" instead of "Archana Seva"
+      if (sevaName.includes("Seva ") && !sevaName.includes("Archana")) {
+        console.log('⚠️ Found generic seva names, applying enrichment...')
+        
+        // Apply name enrichment
+        const enrichedSevas = await enrichSevaWithNames(mySevaBookings.value)
+        
+        // Update the display data
+        mySevaBookings.value = enrichedSevas
+        
+        // Also update local storage
+        localData.recentSevas = JSON.parse(JSON.stringify(enrichedSevas))
+        
+        // Save to localStorage
+        try {
+          localStorage.setItem('dashboard_local_data', JSON.stringify({
+            ...JSON.parse(localStorage.getItem('dashboard_local_data') || '{}'),
+            recentSevas: localData.recentSevas,
+            timestamp: Date.now()
+          }))
+        } catch (e) {
+          console.warn('Could not save enriched sevas to localStorage', e)
+        }
+        
+        console.log('✅ Applied seva name enrichment on second pass')
+      }
+    }
+  }, 2500)
+  
+  // Add a specific check for donations again after a delay
+  setTimeout(async () => {
+    if (localData.recentDonations.length === 0 && 
+        (!donationStore.recentDonations || donationStore.recentDonations.length === 0)) {
+      console.log('🔍 Donations still missing after delay, attempting final reload...')
+      
+      try {
+        // Try one last time with a different approach
+        if (donationStore.fetchRecentDonations) {
+          await donationStore.fetchRecentDonations()
+          
+          if (donationStore.recentDonations && donationStore.recentDonations.length > 0) {
+            // If successful, update local data
+            localData.recentDonations = JSON.parse(JSON.stringify(donationStore.recentDonations))
+            console.log('✅ Final donation reload successful')
+            
+            // Force reactive update
+            const tempDonations = [...localData.recentDonations]
+            localData.recentDonations = []
+            setTimeout(() => {
+              localData.recentDonations = tempDonations
+            }, 10)
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ Final donation reload failed:', err)
+      }
+    }
+  }, 3500)
+  
+  // Set up a delayed check to lock counters if they contain data
+  setTimeout(() => {
+    lockCounters()
+  }, 4000)
 })
 </script>

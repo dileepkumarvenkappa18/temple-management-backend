@@ -198,6 +198,108 @@ const communicationAPI = {
   sendDirectNotification: (payload) => api.post(`/v1/notifications/send`, payload)
 };
 
+// Reports endpoints - UPDATED WITH DEVOTEE BIRTHDAYS
+const reportsAPI = {
+  /**
+   * Get activities report data (JSON preview)
+   * @param {string} entityId - Entity ID ('all' or numeric ID)
+   * @param {Object} params - Query parameters
+   */
+  getActivities: (entityId, params = {}) => {
+    const queryString = new URLSearchParams(params).toString()
+    return api.get(`/v1/entities/${entityId}/reports/activities?${queryString}`)
+  },
+
+  /**
+   * Download activities report in specified format
+   * @param {string} entityId - Entity ID ('all' or numeric ID) 
+   * @param {Object} params - Query parameters including format
+   */
+  downloadActivities: (entityId, params = {}) => {
+    const queryString = new URLSearchParams(params).toString()
+    return api.get(`/v1/entities/${entityId}/reports/activities?${queryString}`, {
+      responseType: 'blob',
+      headers: {
+        'Accept': 'application/octet-stream'
+      }
+    })
+  },
+
+  /**
+   * Get activities report by type with common parameters
+   * @param {string} entityId - Entity ID ('all' or numeric ID)
+   * @param {string} type - Report type ('events', 'sevas', 'bookings')
+   * @param {Object} options - Additional options
+   */
+  getActivitiesByType: (entityId, type, options = {}) => {
+    const params = {
+      type,
+      date_range: options.dateRange || 'weekly',
+      ...options
+    }
+    return reportsAPI.getActivities(entityId, params)
+  },
+
+  /**
+   * Download activities report by type
+   * @param {string} entityId - Entity ID ('all' or numeric ID)
+   * @param {string} type - Report type ('events', 'sevas', 'bookings')
+   * @param {string} format - Export format ('pdf', 'csv', 'excel')
+   * @param {Object} options - Additional options
+   */
+  downloadActivitiesByType: (entityId, type, format, options = {}) => {
+    const params = {
+      type,
+      format,
+      date_range: options.dateRange || 'weekly',
+      ...options
+    }
+    return reportsAPI.downloadActivities(entityId, params)
+  },
+
+  // TEMPLE REGISTERED REPORTS
+  getTempleRegistered: (entityId, params = {}) => {
+    const queryString = new URLSearchParams(params).toString()
+    return api.get(`/v1/entities/${entityId}/reports/temple-registered?${queryString}`)
+  },
+
+  downloadTempleRegistered: (entityId, params = {}) => {
+    const queryString = new URLSearchParams(params).toString()
+    return api.get(`/v1/entities/${entityId}/reports/temple-registered?${queryString}`, {
+      responseType: 'blob',
+      headers: {
+        'Accept': 'application/octet-stream'
+      }
+    })
+  },
+
+  // DEVOTEE BIRTHDAYS REPORTS - NEW
+  /**
+   * Get devotee birthdays report data (JSON preview)
+   * @param {string} entityId - Entity ID ('all' or numeric ID)
+   * @param {Object} params - Query parameters
+   */
+  getDevoteeBirthdays: (entityId, params = {}) => {
+    const queryString = new URLSearchParams(params).toString()
+    return api.get(`/v1/entities/${entityId}/reports/devotee-birthdays?${queryString}`)
+  },
+
+  /**
+   * Download devotee birthdays report in specified format
+   * @param {string} entityId - Entity ID ('all' or numeric ID)
+   * @param {Object} params - Query parameters including format
+   */
+  downloadDevoteeBirthdays: (entityId, params = {}) => {
+    const queryString = new URLSearchParams(params).toString()
+    return api.get(`/v1/entities/${entityId}/reports/devotee-birthdays?${queryString}`, {
+      responseType: 'blob',
+      headers: {
+        'Accept': 'application/octet-stream'
+      }
+    })
+  }
+}
+
 // Export structured API client
 export const apiClient = {
   auth: authAPI,
@@ -206,7 +308,8 @@ export const apiClient = {
   admin: adminAPI,
   event: eventAPI,
   dashboard: dashboardAPI,
-  communication: communicationAPI 
+  communication: communicationAPI,
+  reports: reportsAPI
 }
 
 // Default export for backward compatibility
