@@ -248,6 +248,8 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 
 // ========== Reports ==========
 // routes.go - reports section only
+// ========== Reports ==========
+// routes.go - reports section only
 {
 	reportsRepo := reports.NewRepository(database.DB)
 	reportsExporter := reports.NewReportExporter()
@@ -259,11 +261,7 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	{
 		reportsRoutes.GET("/activities", reportsHandler.GetActivities)
 		reportsRoutes.GET("/temple-registered", reportsHandler.GetTempleRegisteredReport)
+		reportsRoutes.GET("/devotee-birthdays", reportsHandler.GetDevoteeBirthdaysReport) // NEW ENDPOINT
 	}
 }
-
-
-
-
-
 }

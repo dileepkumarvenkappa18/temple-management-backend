@@ -14,6 +14,7 @@ type ReportRepository interface {
 	GetSevas(entityIDs []uint, start, end time.Time) ([]SevaReportRow, error)
 	GetSevaBookings(entityIDs []uint, start, end time.Time) ([]SevaBookingReportRow, error)
 	GetTemplesRegistered(entityIDs []uint, start, end time.Time, status string) ([]TempleRegisteredReportRow, error)
+	GetDevoteeBirthdays(entityIDs []uint, start, end time.Time) ([]DevoteeBirthdayReportRow, error)
 }
 
 type repository struct {
@@ -95,4 +96,67 @@ func (r *repository) GetTemplesRegistered(entityIDs []uint, start, end time.Time
     }
     err := query.Order("created_at DESC").Scan(&rows).Error
     return rows, err
+}
+
+func (r *repository) GetDevoteeBirthdays(entityIDs []uint, start, end time.Time) ([]DevoteeBirthdayReportRow, error) {
+	var rows []DevoteeBirthdayReportRow
+	if len(entityIDs) == 0 {
+		return rows, nil
+	}
+
+	// Build the base query with all necessary joins
+	query := r.db.Table("users u").
+		Select(`
+			u.full_name,
+			dp.dob as date_of_birth,
+			dp.gender,
+			u.phone,
+			u.email,
+			e.name as temple_name,
+			uem.joined_at as member_since
+		`).
+		Joins("INNER JOIN user_entity_memberships uem ON u.id = uem.user_id").
+		Joins("INNER JOIN entities e ON uem.entity_id = e.id").
+		Joins("INNER JOIN devotee_profiles dp ON u.id = dp.user_id").
+		Where("u.role_id = ?", 3). // devotee role
+		Where("uem.status = ?", "active").
+		Where("uem.entity_id IN ?", entityIDs)
+
+	// Filter by birthday date range
+	// For birthdays, we need to check if the birthday (month-day) falls within the date range
+	// We'll extract month and day from both the DOB and the range dates
+	startMonth := int(start.Month())
+	startDay := start.Day()
+	endMonth := int(end.Month())
+	endDay := end.Day()
+
+	// Handle different scenarios for date range filtering
+	if startMonth == endMonth {
+		// Same month - simple day range
+		query = query.Where(
+			"EXTRACT(MONTH FROM dp.dob) = ? AND EXTRACT(DAY FROM dp.dob) BETWEEN ? AND ?",
+			startMonth, startDay, endDay,
+		)
+	} else if startMonth < endMonth {
+		// Range within same year (e.g., March to May)
+		query = query.Where(`
+			(EXTRACT(MONTH FROM dp.dob) = ? AND EXTRACT(DAY FROM dp.dob) >= ?) OR
+			(EXTRACT(MONTH FROM dp.dob) > ? AND EXTRACT(MONTH FROM dp.dob) < ?) OR
+			(EXTRACT(MONTH FROM dp.dob) = ? AND EXTRACT(DAY FROM dp.dob) <= ?)
+		`, startMonth, startDay, startMonth, endMonth, endMonth, endDay)
+	} else {
+		// Range crosses year boundary (e.g., December to February)
+		query = query.Where(`
+			(EXTRACT(MONTH FROM dp.dob) = ? AND EXTRACT(DAY FROM dp.dob) >= ?) OR
+			(EXTRACT(MONTH FROM dp.dob) > ?) OR
+			(EXTRACT(MONTH FROM dp.dob) < ?) OR
+			(EXTRACT(MONTH FROM dp.dob) = ? AND EXTRACT(DAY FROM dp.dob) <= ?)
+		`, startMonth, startDay, startMonth, endMonth, endMonth, endDay)
+	}
+
+	// Order by month and day for better readability
+	err := query.Order("EXTRACT(MONTH FROM dp.dob), EXTRACT(DAY FROM dp.dob)").
+		Scan(&rows).Error
+
+	return rows, err
 }

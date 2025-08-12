@@ -8,9 +8,12 @@ const (
 	ReportTypeSevas    = "sevas"
 	ReportTypeBookings = "bookings"
 	ReportTypeTempleRegistered = "temple_registered"
+	ReportTypeDevoteeBirthdays = "devotee_birthdays"
 	 // ... existing report types
     ReportTypeTempleRegisteredPDF   = "temples_registered_pdf"
     ReportTypeTempleRegisteredExcel = "temples_registered_excel"
+    ReportTypeDevoteeBirthdaysPDF   = "devotee_birthdays_pdf"
+    ReportTypeDevoteeBirthdaysExcel = "devotee_birthdays_excel"
 )
 
 // ===== Date Range Presets =====
@@ -84,14 +87,7 @@ type SevaBookingReportRow struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// ===== Generic Report Response =====
-type ReportData struct {
-	Events   []EventReportRow        `json:"events,omitempty"`
-	Sevas    []SevaReportRow         `json:"sevas,omitempty"`
-	Bookings []SevaBookingReportRow  `json:"bookings,omitempty"`
-	TemplesRegistered []TempleRegisteredReportRow
-}
-
+// ===== Temple Registered Report =====
 type TempleRegisteredReportRequest struct {
     DateRange  string    `form:"date_range" json:"date_range"`
     StartDate  time.Time `form:"start_date" json:"start_date"`
@@ -108,3 +104,30 @@ type TempleRegisteredReportRow struct {
     Status    string    `json:"status"`
 }
 
+// ===== Devotee Birthdays Report =====
+type DevoteeBirthdaysReportRequest struct {
+    DateRange  string    `form:"date_range" json:"date_range"`
+    StartDate  time.Time `form:"start_date" json:"start_date"`
+    EndDate    time.Time `form:"end_date" json:"end_date"`
+    Format     string    `form:"format" json:"format"`
+    EntityID   string    `form:"entity_id" json:"entity_id"`
+}
+
+type DevoteeBirthdayReportRow struct {
+    FullName    string    `json:"full_name"`
+    DateOfBirth time.Time `json:"date_of_birth"`
+    Gender      string    `json:"gender"`
+    Phone       string    `json:"phone"`
+    Email       string    `json:"email"`
+    TempleName  string    `json:"temple_name"`
+    MemberSince time.Time `json:"member_since"`
+}
+
+// ===== Generic Report Response =====
+type ReportData struct {
+	Events   []EventReportRow        `json:"events,omitempty"`
+	Sevas    []SevaReportRow         `json:"sevas,omitempty"`
+	Bookings []SevaBookingReportRow  `json:"bookings,omitempty"`
+	TemplesRegistered []TempleRegisteredReportRow `json:"temples_registered,omitempty"`
+	DevoteeBirthdays []DevoteeBirthdayReportRow `json:"devotee_birthdays,omitempty"`
+}

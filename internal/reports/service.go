@@ -10,6 +10,8 @@ type ReportService interface {
 	ExportActivities(req ActivitiesReportRequest) ([]byte, string, string, error)
 	GetTempleRegisteredReport(req TempleRegisteredReportRequest, entityIDs []string) ([]TempleRegisteredReportRow, error)
 	ExportTempleRegisteredReport(req TempleRegisteredReportRequest, entityIDs []string, reportType string) ([]byte, string, string, error)
+	GetDevoteeBirthdaysReport(req DevoteeBirthdaysReportRequest, entityIDs []string) ([]DevoteeBirthdayReportRow, error)
+	ExportDevoteeBirthdaysReport(req DevoteeBirthdaysReportRequest, entityIDs []string, reportType string) ([]byte, string, string, error)
 }
 
 type reportService struct {
@@ -53,8 +55,6 @@ func (s *reportService) ExportActivities(req ActivitiesReportRequest) ([]byte, s
 	return s.exporter.Export(req.Type, req.Format, data)
 }
 
-
-
 // convert slice of string ids to []uint
 func convertUintSlice(strs []string) []uint {
 	out := make([]uint, 0, len(strs))
@@ -85,6 +85,28 @@ func (s *reportService) ExportTempleRegisteredReport(req TempleRegisteredReportR
     // Pass rows to ReportData.TemplesRegistered
     data := ReportData{
         TemplesRegistered: rows,
+    }
+
+    // Pass the reportType parameter to the exporter
+    return s.exporter.Export(reportType, req.Format, data)
+}
+
+func (s *reportService) GetDevoteeBirthdaysReport(req DevoteeBirthdaysReportRequest, entityIDs []string) ([]DevoteeBirthdayReportRow, error) {
+	start := req.StartDate
+	end := req.EndDate
+	
+	return s.repo.GetDevoteeBirthdays(convertUintSlice(entityIDs), start, end)
+}
+
+func (s *reportService) ExportDevoteeBirthdaysReport(req DevoteeBirthdaysReportRequest, entityIDs []string, reportType string) ([]byte, string, string, error) {
+    rows, err := s.GetDevoteeBirthdaysReport(req, entityIDs)
+    if err != nil {
+        return nil, "", "", err
+    }
+
+    // Pass rows to ReportData.DevoteeBirthdays
+    data := ReportData{
+        DevoteeBirthdays: rows,
     }
 
     // Pass the reportType parameter to the exporter

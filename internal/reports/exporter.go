@@ -38,6 +38,12 @@ func (e *reportExporter) Export(reportType, format string, data ReportData) ([]b
         return e.exportTemplesRegisteredPDF(data.TemplesRegistered)
     case ReportTypeTempleRegisteredExcel: // Add this
         return e.exportTemplesRegisteredExcel(data.TemplesRegistered)
+    case ReportTypeDevoteeBirthdays:
+        return e.exportDevoteeBirthdays(data.DevoteeBirthdays)
+    case ReportTypeDevoteeBirthdaysPDF:
+        return e.exportDevoteeBirthdaysPDF(data.DevoteeBirthdays)
+    case ReportTypeDevoteeBirthdaysExcel:
+        return e.exportDevoteeBirthdaysExcel(data.DevoteeBirthdays)
 	default:
 		return nil, "", "", fmt.Errorf("unsupported report type: %s", reportType)
 	}
@@ -219,26 +225,27 @@ func (e *reportExporter) exportEventsPDF(events []EventReportRow) ([]byte, error
 	pdf.Ln(20)
 	
 	pdf.SetFont("Arial", "B", 10)
-	// Headers
-	pdf.Cell(40, 7, "Title")
-	pdf.Cell(30, 7, "Event Type")
-	pdf.Cell(25, 7, "Date")
-	pdf.Cell(20, 7, "Time")
-	pdf.Cell(30, 7, "Location")
-	pdf.Cell(25, 7, "Created At")
-	pdf.Cell(15, 7, "Active")
-	pdf.Ln(7)
+	// Define column widths
+	widths := []float64{40, 30, 25, 20, 30, 25, 15}
+	headers := []string{"Title", "Event Type", "Date", "Time", "Location", "Created At", "Active"}
 	
+	// Print headers with borders
+	for i, header := range headers {
+		pdf.CellFormat(widths[i], 7, header, "1", 0, "C", false, 0, "")
+	}
+	pdf.Ln(-1)
+	
+	// Print data rows with borders
 	pdf.SetFont("Arial", "", 8)
 	for _, event := range events {
-		pdf.Cell(40, 6, event.Title)
-		pdf.Cell(30, 6, event.EventType)
-		pdf.Cell(25, 6, event.EventDate.Format("2006-01-02"))
-		pdf.Cell(20, 6, event.EventTime)
-		pdf.Cell(30, 6, event.Location)
-		pdf.Cell(25, 6, event.CreatedAt.Format("01-02"))
-		pdf.Cell(15, 6, strconv.FormatBool(event.IsActive))
-		pdf.Ln(6)
+		pdf.CellFormat(widths[0], 6, event.Title, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[1], 6, event.EventType, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[2], 6, event.EventDate.Format("2006-01-02"), "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[3], 6, event.EventTime, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[4], 6, event.Location, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[5], 6, event.CreatedAt.Format("01-02"), "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[6], 6, strconv.FormatBool(event.IsActive), "1", 0, "C", false, 0, "")
+		pdf.Ln(-1)
 	}
 	
 	var buf bytes.Buffer
@@ -247,8 +254,6 @@ func (e *reportExporter) exportEventsPDF(events []EventReportRow) ([]byte, error
 	}
 	return buf.Bytes(), nil
 }
-
-
 
 func (e *reportExporter) exportSevasExcel(sevas []SevaReportRow) ([]byte, error) {
 	f := excelize.NewFile()
@@ -332,27 +337,28 @@ func (e *reportExporter) exportSevasPDF(sevas []SevaReportRow) ([]byte, error) {
 	pdf.Ln(20)
 	
 	pdf.SetFont("Arial", "B", 10)
-	pdf.Cell(40, 7, "Name")
-	pdf.Cell(20, 7, "Type")
-	pdf.Cell(20, 7, "Price")
-	pdf.Cell(25, 7, "Start Time")
-	pdf.Cell(25, 7, "End Time")
-	pdf.Cell(15, 7, "Duration")
-	pdf.Cell(20, 7, "Status")
-	pdf.Cell(15, 7, "Active")
-	pdf.Ln(7)
+	// Define column widths
+	widths := []float64{40, 20, 20, 25, 25, 15, 20, 15}
+	headers := []string{"Name", "Type", "Price", "Start Time", "End Time", "Duration", "Status", "Active"}
 	
+	// Print headers with borders
+	for i, header := range headers {
+		pdf.CellFormat(widths[i], 7, header, "1", 0, "C", false, 0, "")
+	}
+	pdf.Ln(-1)
+	
+	// Print data rows with borders
 	pdf.SetFont("Arial", "", 8)
 	for _, seva := range sevas {
-		pdf.Cell(40, 6, seva.Name)
-		pdf.Cell(20, 6, seva.SevaType)
-		pdf.Cell(20, 6, fmt.Sprintf("%.2f", seva.Price))
-		pdf.Cell(25, 6, seva.StartTime)
-		pdf.Cell(25, 6, seva.EndTime)
-		pdf.Cell(15, 6, seva.Duration)
-		pdf.Cell(20, 6, seva.Status)
-		pdf.Cell(15, 6, strconv.FormatBool(seva.IsActive))
-		pdf.Ln(6)
+		pdf.CellFormat(widths[0], 6, seva.Name, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[1], 6, seva.SevaType, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[2], 6, fmt.Sprintf("%.2f", seva.Price), "1", 0, "R", false, 0, "")
+		pdf.CellFormat(widths[3], 6, seva.StartTime, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[4], 6, seva.EndTime, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[5], 6, seva.Duration, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[6], 6, seva.Status, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[7], 6, strconv.FormatBool(seva.IsActive), "1", 0, "C", false, 0, "")
+		pdf.Ln(-1)
 	}
 	
 	var buf bytes.Buffer
@@ -361,8 +367,6 @@ func (e *reportExporter) exportSevasPDF(sevas []SevaReportRow) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
-
-
 
 func (e *reportExporter) exportBookingsExcel(bookings []SevaBookingReportRow) ([]byte, error) {
 	f := excelize.NewFile()
@@ -436,23 +440,26 @@ func (e *reportExporter) exportBookingsPDF(bookings []SevaBookingReportRow) ([]b
 	pdf.Ln(20)
 	
 	pdf.SetFont("Arial", "B", 10)
-	pdf.Cell(40, 7, "Seva Name")
-	pdf.Cell(25, 7, "Seva Type")
-	pdf.Cell(35, 7, "Devotee Name")
-	pdf.Cell(30, 7, "Phone")
-	pdf.Cell(35, 7, "Booking Time")
-	pdf.Cell(20, 7, "Status")
-	pdf.Ln(7)
+	// Define column widths
+	widths := []float64{40, 25, 35, 30, 35, 20}
+	headers := []string{"Seva Name", "Seva Type", "Devotee Name", "Phone", "Booking Time", "Status"}
 	
+	// Print headers with borders
+	for i, header := range headers {
+		pdf.CellFormat(widths[i], 7, header, "1", 0, "C", false, 0, "")
+	}
+	pdf.Ln(-1)
+	
+	// Print data rows with borders
 	pdf.SetFont("Arial", "", 8)
 	for _, booking := range bookings {
-		pdf.Cell(40, 6, booking.SevaName)
-		pdf.Cell(25, 6, booking.SevaType)
-		pdf.Cell(35, 6, booking.DevoteeName)
-		pdf.Cell(30, 6, booking.DevoteePhone)
-		pdf.Cell(35, 6, booking.BookingTime.Format("01-02 15:04"))
-		pdf.Cell(20, 6, booking.Status)
-		pdf.Ln(6)
+		pdf.CellFormat(widths[0], 6, booking.SevaName, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[1], 6, booking.SevaType, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[2], 6, booking.DevoteeName, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[3], 6, booking.DevoteePhone, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[4], 6, booking.BookingTime.Format("01-02 15:04"), "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[5], 6, booking.Status, "1", 0, "C", false, 0, "")
+		pdf.Ln(-1)
 	}
 	
 	var buf bytes.Buffer
@@ -491,6 +498,7 @@ func (e *reportExporter) exportTemplesRegistered(rows []TempleRegisteredReportRo
 
 	return buf.Bytes(), "temples_registered_report.csv", "text/csv", nil
 }
+
 // exportTemplesRegisteredExcel exports temples registered as Excel.
 func (e *reportExporter) exportTemplesRegisteredExcel(rows []TempleRegisteredReportRow) ([]byte, string, string, error) {
     f := excelize.NewFile()
@@ -526,6 +534,7 @@ func (e *reportExporter) exportTemplesRegisteredExcel(rows []TempleRegisteredRep
 
     return buf.Bytes(), "temples_registered_report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nil
 }
+
 // exportTemplesRegisteredPDF exports temples registered as PDF.
 func (e *reportExporter) exportTemplesRegisteredPDF(rows []TempleRegisteredReportRow) ([]byte, string, string, error) {
     pdf := gofpdf.New("P", "mm", "A4", "")
@@ -560,4 +569,115 @@ func (e *reportExporter) exportTemplesRegisteredPDF(rows []TempleRegisteredRepor
     }
 
     return buf.Bytes(), "temples_registered_report.pdf", "application/pdf", nil
+}
+
+// exportDevoteeBirthdays exports devotee birthdays as CSV.
+func (e *reportExporter) exportDevoteeBirthdays(rows []DevoteeBirthdayReportRow) ([]byte, string, string, error) {
+    buf := &bytes.Buffer{}
+    w := csv.NewWriter(buf)
+
+    headers := []string{"full_name", "date_of_birth", "gender", "phone", "email", "temple_name", "member_since"}
+    if err := w.Write(headers); err != nil {
+        return nil, "", "", err
+    }
+
+    for _, r := range rows {
+        record := []string{
+            r.FullName,
+            r.DateOfBirth.Format("2006-01-02"),
+            r.Gender,
+            r.Phone,
+            r.Email,
+            r.TempleName,
+            r.MemberSince.Format("2006-01-02 15:04:05"),
+        }
+        if err := w.Write(record); err != nil {
+            return nil, "", "", err
+        }
+    }
+
+    w.Flush()
+    if err := w.Error(); err != nil {
+        return nil, "", "", err
+    }
+
+    return buf.Bytes(), "devotee_birthdays_report.csv", "text/csv", nil
+}
+
+// exportDevoteeBirthdaysExcel exports devotee birthdays as Excel.
+func (e *reportExporter) exportDevoteeBirthdaysExcel(rows []DevoteeBirthdayReportRow) ([]byte, string, string, error) {
+    f := excelize.NewFile()
+    sheet := "Devotee Birthdays"
+    index, err := f.NewSheet(sheet)
+    if err != nil {
+        return nil, "", "", err
+    }
+    f.DeleteSheet("Sheet1")
+    f.SetActiveSheet(index)
+
+    headers := []string{"Full Name", "Date of Birth", "Gender", "Phone", "Email", "Temple Name", "Member Since"}
+    for i, h := range headers {
+        cell, err := excelize.CoordinatesToCellName(i+1, 1)
+        if err != nil {
+            return nil, "", "", err
+        }
+        f.SetCellValue(sheet, cell, h)
+    }
+
+    for rIdx, r := range rows {
+        row := rIdx + 2
+        f.SetCellValue(sheet, fmt.Sprintf("A%d", row), r.FullName)
+        f.SetCellValue(sheet, fmt.Sprintf("B%d", row), r.DateOfBirth.Format("2006-01-02"))
+        f.SetCellValue(sheet, fmt.Sprintf("C%d", row), r.Gender)
+        f.SetCellValue(sheet, fmt.Sprintf("D%d", row), r.Phone)
+        f.SetCellValue(sheet, fmt.Sprintf("E%d", row), r.Email)
+        f.SetCellValue(sheet, fmt.Sprintf("F%d", row), r.TempleName)
+        f.SetCellValue(sheet, fmt.Sprintf("G%d", row), r.MemberSince.Format("2006-01-02 15:04:05"))
+    }
+
+    var buf bytes.Buffer
+    if err := f.Write(&buf); err != nil {
+        return nil, "", "", err
+    }
+
+    return buf.Bytes(), "devotee_birthdays_report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nil
+}
+
+// exportDevoteeBirthdaysPDF exports devotee birthdays as PDF.
+func (e *reportExporter) exportDevoteeBirthdaysPDF(rows []DevoteeBirthdayReportRow) ([]byte, string, string, error) {
+    pdf := gofpdf.New("L", "mm", "A4", "")
+    pdf.AddPage()
+    pdf.SetFont("Arial", "B", 12)
+    pdf.Cell(40, 10, "Devotee Birthdays Report")
+    pdf.Ln(10)
+
+    pdf.SetFont("Arial", "B", 10)
+    headers := []string{"Full Name", "Date of Birth", "Gender", "Phone", "Email", "Temple", "Member Since"}
+    widths := []float64{35, 22, 12, 22, 40, 30, 22}
+
+    // Print headers
+    for i, h := range headers {
+        pdf.CellFormat(widths[i], 7, h, "1", 0, "C", false, 0, "")
+    }
+    pdf.Ln(-1)
+
+    // Print data rows
+    pdf.SetFont("Arial", "", 8)
+    for _, r := range rows {
+        pdf.CellFormat(widths[0], 6, r.FullName, "1", 0, "L", false, 0, "")
+        pdf.CellFormat(widths[1], 6, r.DateOfBirth.Format("2006-01-02"), "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[2], 6, r.Gender, "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[3], 6, r.Phone, "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[4], 6, r.Email, "1", 0, "L", false, 0, "")
+        pdf.CellFormat(widths[5], 6, r.TempleName, "1", 0, "L", false, 0, "")
+        pdf.CellFormat(widths[6], 6, r.MemberSince.Format("2006-01-02"), "1", 0, "C", false, 0, "")
+        pdf.Ln(-1)
+    }
+
+    var buf bytes.Buffer
+    if err := pdf.Output(&buf); err != nil {
+        return nil, "", "", err
+    }
+
+    return buf.Bytes(), "devotee_birthdays_report.pdf", "application/pdf", nil
 }
