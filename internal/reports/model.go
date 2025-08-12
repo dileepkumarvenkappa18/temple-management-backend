@@ -7,6 +7,10 @@ const (
 	ReportTypeEvents   = "events"
 	ReportTypeSevas    = "sevas"
 	ReportTypeBookings = "bookings"
+	ReportTypeTempleRegistered = "temple_registered"
+	 // ... existing report types
+    ReportTypeTempleRegisteredPDF   = "temples_registered_pdf"
+    ReportTypeTempleRegisteredExcel = "temples_registered_excel"
 )
 
 // ===== Date Range Presets =====
@@ -85,4 +89,22 @@ type ReportData struct {
 	Events   []EventReportRow        `json:"events,omitempty"`
 	Sevas    []SevaReportRow         `json:"sevas,omitempty"`
 	Bookings []SevaBookingReportRow  `json:"bookings,omitempty"`
+	TemplesRegistered []TempleRegisteredReportRow
 }
+
+type TempleRegisteredReportRequest struct {
+    DateRange  string    `form:"date_range" json:"date_range"`
+    StartDate  time.Time `form:"start_date" json:"start_date"`
+    EndDate    time.Time `form:"end_date" json:"end_date"`
+    Status     string    `form:"status" json:"status"`
+    Format     string    `form:"format" json:"format"`
+    EntityID   string    `form:"entity_id" json:"entity_id"` // use this for filtering temples
+}
+
+type TempleRegisteredReportRow struct {
+    ID        uint      `json:"id"`
+    Name      string    `json:"name"`
+    CreatedAt time.Time `json:"created_at"`
+    Status    string    `json:"status"`
+}
+

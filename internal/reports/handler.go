@@ -133,3 +133,116 @@ func (h *Handler) GetActivities(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
 	c.Data(http.StatusOK, mime, bytes)
 }
+
+func (h *Handler) GetTempleRegisteredReport(c *gin.Context) {
+    // get logged-in user (AuthMiddleware already ran)
+    userVal, ok := c.Get("user")
+    if !ok {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+        return
+    }
+    user, ok := userVal.(auth.User)
+    if !ok {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user object"})
+        return
+    }
+
+    entityParam := c.Param("id") // "all" or specific entity id
+
+    dateRange := c.Query("date_range")
+    if dateRange == "" {
+        dateRange = DateRangeWeekly
+    }
+    startDateStr := c.Query("start_date")
+    endDateStr := c.Query("end_date")
+    status := c.Query("status") // approve|rejected|pending
+    format := c.Query("format")
+
+    start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+
+    // Resolve entity IDs same way as in GetActivities
+    var entityIDs []string
+    if strings.ToLower(entityParam) == "all" {
+        ids, err := h.repo.GetEntitiesByTenant(user.ID)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
+            return
+        }
+        if len(ids) == 0 {
+            c.JSON(http.StatusOK, gin.H{"data": []TempleRegisteredReportRow{}})
+            return
+        }
+        for _, id := range ids {
+            entityIDs = append(entityIDs, fmt.Sprint(id))
+        }
+    } else {
+        eid, err := strconv.ParseUint(entityParam, 10, 64)
+        if err != nil {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entity_id path param"})
+            return
+        }
+        ids, err := h.repo.GetEntitiesByTenant(user.ID)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate entity"})
+            return
+        }
+        owned := false
+        for _, id := range ids {
+            if id == uint(eid) {
+                owned = true
+                break
+            }
+        }
+        if !owned {
+            c.JSON(http.StatusForbidden, gin.H{"error": "not authorized for this entity"})
+            return
+        }
+        entityIDs = append(entityIDs, fmt.Sprint(eid))
+    }
+
+    req := TempleRegisteredReportRequest{
+        DateRange: dateRange,
+        StartDate: start,
+        EndDate:   end,
+        Status:    status,
+        Format:    format,
+        EntityID:  entityParam,
+    }
+    
+    // --- START OF UPDATED LOGIC ---
+    // The 'format' query parameter determines the report type for the exporter.
+    var reportType string
+    switch format {
+    case "excel":
+        reportType = ReportTypeTempleRegisteredExcel
+    case "pdf":
+        reportType = ReportTypeTempleRegisteredPDF
+    case "csv": // Explicitly handle csv for clarity
+        reportType = ReportTypeTempleRegistered
+    default:
+        // If no format is specified, return JSON preview
+        data, err := h.service.GetTempleRegisteredReport(req, entityIDs)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+            return
+        }
+        c.JSON(http.StatusOK, data)
+        return
+    }
+
+    // Export file (format is present)
+    // The service method must be updated to accept the `reportType` parameter
+    bytes, fname, mime, err := h.service.ExportTempleRegisteredReport(req, entityIDs, reportType)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+    c.Data(http.StatusOK, mime, bytes)
+    // --- END OF UPDATED LOGIC ---
+}

@@ -32,6 +32,12 @@ func (e *reportExporter) Export(reportType, format string, data ReportData) ([]b
 		return e.exportSevasByFormat(format, timestamp, data.Sevas)
 	case ReportTypeBookings:
 		return e.exportBookingsByFormat(format, timestamp, data.Bookings)
+	case ReportTypeTempleRegistered:
+		return e.exportTemplesRegistered(data.TemplesRegistered)
+	case ReportTypeTempleRegisteredPDF: // Add this
+        return e.exportTemplesRegisteredPDF(data.TemplesRegistered)
+    case ReportTypeTempleRegisteredExcel: // Add this
+        return e.exportTemplesRegisteredExcel(data.TemplesRegistered)
 	default:
 		return nil, "", "", fmt.Errorf("unsupported report type: %s", reportType)
 	}
@@ -454,4 +460,104 @@ func (e *reportExporter) exportBookingsPDF(bookings []SevaBookingReportRow) ([]b
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// exportTemplesRegistered exports temples registered as CSV.
+func (e *reportExporter) exportTemplesRegistered(rows []TempleRegisteredReportRow) ([]byte, string, string, error) {
+	buf := &bytes.Buffer{}
+	w := csv.NewWriter(buf)
+
+	headers := []string{"id", "name", "created_at", "status"}
+	if err := w.Write(headers); err != nil {
+		return nil, "", "", err
+	}
+
+	for _, r := range rows {
+		record := []string{
+			fmt.Sprint(r.ID),
+			r.Name,
+			r.CreatedAt.Format("2006-01-02 15:04:05"),
+			r.Status,
+		}
+		if err := w.Write(record); err != nil {
+			return nil, "", "", err
+		}
+	}
+
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return nil, "", "", err
+	}
+
+	return buf.Bytes(), "temples_registered_report.csv", "text/csv", nil
+}
+// exportTemplesRegisteredExcel exports temples registered as Excel.
+func (e *reportExporter) exportTemplesRegisteredExcel(rows []TempleRegisteredReportRow) ([]byte, string, string, error) {
+    f := excelize.NewFile()
+    sheet := "Temples Registered"
+    index, err := f.NewSheet(sheet)
+    if err != nil {
+        return nil, "", "", err
+    }
+    f.DeleteSheet("Sheet1")
+    f.SetActiveSheet(index)
+
+    headers := []string{"id", "name", "created_at", "status"}
+    for i, h := range headers {
+        cell, err := excelize.CoordinatesToCellName(i+1, 1)
+        if err != nil {
+            return nil, "", "", err
+        }
+        f.SetCellValue(sheet, cell, h)
+    }
+
+    for rIdx, r := range rows {
+        row := rIdx + 2
+        f.SetCellValue(sheet, fmt.Sprintf("A%d", row), r.ID)
+        f.SetCellValue(sheet, fmt.Sprintf("B%d", row), r.Name)
+        f.SetCellValue(sheet, fmt.Sprintf("C%d", row), r.CreatedAt.Format("2006-01-02 15:04:05"))
+        f.SetCellValue(sheet, fmt.Sprintf("D%d", row), r.Status)
+    }
+
+    var buf bytes.Buffer
+    if err := f.Write(&buf); err != nil {
+        return nil, "", "", err
+    }
+
+    return buf.Bytes(), "temples_registered_report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nil
+}
+// exportTemplesRegisteredPDF exports temples registered as PDF.
+func (e *reportExporter) exportTemplesRegisteredPDF(rows []TempleRegisteredReportRow) ([]byte, string, string, error) {
+    pdf := gofpdf.New("P", "mm", "A4", "")
+    pdf.AddPage()
+    pdf.SetFont("Arial", "B", 12)
+    pdf.Cell(40, 10, "Temples Registered Report")
+    pdf.Ln(10)
+
+    pdf.SetFont("Arial", "B", 10)
+    headers := []string{"ID", "Name", "Created At", "Status"}
+    widths := []float64{20, 80, 50, 40}
+
+    // Print headers
+    for i, h := range headers {
+        pdf.CellFormat(widths[i], 7, h, "1", 0, "C", false, 0, "")
+    }
+    pdf.Ln(-1)
+
+    // Print data rows
+    pdf.SetFont("Arial", "", 10)
+    for _, r := range rows {
+        pdf.CellFormat(widths[0], 6, fmt.Sprint(r.ID), "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[1], 6, r.Name, "1", 0, "L", false, 0, "")
+        pdf.CellFormat(widths[2], 6, r.CreatedAt.Format("2006-01-02 15:04:05"), "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[3], 6, r.Status, "1", 0, "C", false, 0, "")
+        pdf.Ln(-1)
+    }
+
+    var buf bytes.Buffer
+    if err := pdf.Output(&buf); err != nil {
+        return nil, "", "", err
+    }
+
+    return buf.Bytes(), "temples_registered_report.pdf", "application/pdf", nil
 }

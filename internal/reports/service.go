@@ -8,6 +8,8 @@ import (
 type ReportService interface {
 	GetActivities(req ActivitiesReportRequest) (ReportData, error)
 	ExportActivities(req ActivitiesReportRequest) ([]byte, string, string, error)
+	GetTempleRegisteredReport(req TempleRegisteredReportRequest, entityIDs []string) ([]TempleRegisteredReportRow, error)
+	ExportTempleRegisteredReport(req TempleRegisteredReportRequest, entityIDs []string, reportType string) ([]byte, string, string, error)
 }
 
 type reportService struct {
@@ -64,4 +66,27 @@ func convertUintSlice(strs []string) []uint {
 		}
 	}
 	return out
+}
+
+func (s *reportService) GetTempleRegisteredReport(req TempleRegisteredReportRequest, entityIDs []string) ([]TempleRegisteredReportRow, error) {
+	status := req.Status
+	start := req.StartDate
+	end := req.EndDate
+	
+	return s.repo.GetTemplesRegistered(convertUintSlice(entityIDs), start, end, status)
+}
+
+func (s *reportService) ExportTempleRegisteredReport(req TempleRegisteredReportRequest, entityIDs []string, reportType string) ([]byte, string, string, error) {
+    rows, err := s.GetTempleRegisteredReport(req, entityIDs)
+    if err != nil {
+        return nil, "", "", err
+    }
+
+    // Pass rows to ReportData.TemplesRegistered
+    data := ReportData{
+        TemplesRegistered: rows,
+    }
+
+    // Pass the reportType parameter to the exporter
+    return s.exporter.Export(reportType, req.Format, data)
 }

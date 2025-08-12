@@ -258,6 +258,7 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	reportsRoutes.Use(middleware.RBACMiddleware("templeadmin"))
 	{
 		reportsRoutes.GET("/activities", reportsHandler.GetActivities)
+		reportsRoutes.GET("/temple-registered", reportsHandler.GetTempleRegisteredReport)
 	}
 }
 

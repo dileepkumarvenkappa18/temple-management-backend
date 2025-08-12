@@ -13,6 +13,7 @@ type ReportRepository interface {
 	GetEvents(entityIDs []uint, start, end time.Time) ([]EventReportRow, error)
 	GetSevas(entityIDs []uint, start, end time.Time) ([]SevaReportRow, error)
 	GetSevaBookings(entityIDs []uint, start, end time.Time) ([]SevaBookingReportRow, error)
+	GetTemplesRegistered(entityIDs []uint, start, end time.Time, status string) ([]TempleRegisteredReportRow, error)
 }
 
 type repository struct {
@@ -79,4 +80,19 @@ func (r *repository) GetSevaBookings(entityIDs []uint, start, end time.Time) ([]
 		Order("sb.created_at DESC").
 		Scan(&out).Error
 	return out, err
+}
+
+func (r *repository) GetTemplesRegistered(entityIDs []uint, start, end time.Time, status string) ([]TempleRegisteredReportRow, error) {
+    var rows []TempleRegisteredReportRow
+    if len(entityIDs) == 0 {
+        return rows, nil
+    }
+    query := r.db.Table("entities").Select("id, name, created_at, status").
+        Where("id IN ?", entityIDs).
+        Where("created_at BETWEEN ? AND ?", start, end)
+    if status != "" {
+        query = query.Where("status = ?", status)
+    }
+    err := query.Order("created_at DESC").Scan(&rows).Error
+    return rows, err
 }
