@@ -13,6 +13,7 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/seva"
 	"github.com/sharath018/temple-management-backend/internal/superadmin"
 	"github.com/sharath018/temple-management-backend/internal/userprofile"
+	"github.com/sharath018/temple-management-backend/internal/reports"
 	"github.com/sharath018/temple-management-backend/middleware"
 
 	_ "github.com/sharath018/temple-management-backend/docs"
@@ -245,17 +246,23 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		notificationRoutes.GET("/logs", notificationHandler.GetMyNotifications)
 	}
 
-	// ========== Devotee Portal ==========
-	// devoteeRepo := devotee.NewRepository(database.DB)
-	// devoteeService := devotee.NewService(devoteeRepo)
-	// devoteeHandler := devotee.NewHandler(devoteeService)
+// ========== Reports ==========
+// routes.go - reports section only
+{
+	reportsRepo := reports.NewRepository(database.DB)
+	reportsExporter := reports.NewReportExporter()
+	reportsService := reports.NewReportService(reportsRepo, reportsExporter)
+	reportsHandler := reports.NewHandler(reportsService, reportsRepo)
 
-	// devoteeRoutes := protected.Group("/devotee")
-	// devoteeRoutes.Use(middleware.RBACMiddleware("devotee"))
-	// {
-	// 	devoteeRoutes.POST("/select-temple", devoteeHandler.SelectTemple)
-	// 	devoteeRoutes.GET("/my-temple", devoteeHandler.GetMyTemple)
-	// 	devoteeRoutes.GET("/overview", devoteeHandler.GetDevoteeOverview) // ✅ Devotee overview
-	// }
+	reportsRoutes := protected.Group("/entities/:id/reports")
+	reportsRoutes.Use(middleware.RBACMiddleware("templeadmin"))
+	{
+		reportsRoutes.GET("/activities", reportsHandler.GetActivities)
+	}
+}
+
+
+
+
 
 }

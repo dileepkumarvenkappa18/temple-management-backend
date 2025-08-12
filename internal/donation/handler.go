@@ -22,14 +22,6 @@ func NewHandler(svc Service) *Handler {
 // ==============================
 // 🌟 1. Create Razorpay Order & Log Donation Intent
 // ==============================
-// @Summary Create a donation order
-// @Tags Donations
-// @Accept json
-// @Produce json
-// @Param body body CreateDonationRequest true "Donation request"
-// @Success 200 {object} CreateDonationResponse
-// @Failure 400 {object} gin.H
-// @Router /v1/donations [post]
 func (h *Handler) CreateDonation(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -69,16 +61,8 @@ func (h *Handler) CreateDonation(c *gin.Context) {
 }
 
 // ==============================
-// ✅ 2. Verify Razorpay Signature (Frontend calls this after payment success)
+// ✅ 2. Verify Razorpay Signature
 // ==============================
-// @Summary Verify Razorpay donation payment
-// @Tags Donations
-// @Accept json
-// @Produce json
-// @Param body body VerifyPaymentRequest true "Payment verification"
-// @Success 200 {object} gin.H
-// @Failure 400 {object} gin.H
-// @Router /v1/donations/verify [post]
 func (h *Handler) VerifyDonation(c *gin.Context) {
 	var req VerifyPaymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -98,13 +82,8 @@ func (h *Handler) VerifyDonation(c *gin.Context) {
 }
 
 // ==============================
-// 🔍 3. Get My Donations (Devotee View)
+// 🔍 3. Get My Donations (Devotee View) - FIXED
 // ==============================
-// @Summary Get logged-in user's donations
-// @Tags Donations
-// @Produce json
-// @Success 200 {object} gin.H
-// @Router /v1/donations/my [get]
 func (h *Handler) GetMyDonations(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -131,24 +110,8 @@ func (h *Handler) GetMyDonations(c *gin.Context) {
 }
 
 // ==============================
-// 🔍 4. Get All Donations for Temple (Temple Admin View) - Enhanced with Filters
+// 🔍 4. Get All Donations for Temple (Temple Admin View) - FIXED
 // ==============================
-// @Summary Get donations by temple entity ID with filters and pagination
-// @Tags Donations
-// @Produce json
-// @Param page query int false "Page number" default(1)
-// @Param limit query int false "Page size" default(20)
-// @Param status query string false "Payment status filter"
-// @Param from query string false "Start date filter (YYYY-MM-DD)"
-// @Param to query string false "End date filter (YYYY-MM-DD)"
-// @Param type query string false "Donation type filter"
-// @Param method query string false "Payment method filter"
-// @Param min query float64 false "Minimum amount filter"
-// @Param max query float64 false "Maximum amount filter"
-// @Param search query string false "Search by donor name, email, or transaction ID"
-// @Success 200 {object} DonationListResponse
-// @Failure 400 {object} gin.H
-// @Router /v1/donations [get]
 func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -237,11 +200,6 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 // ==============================
 // 📊 5. Get Donation Dashboard Stats
 // ==============================
-// @Summary Get donation dashboard statistics
-// @Tags Donations
-// @Produce json
-// @Success 200 {object} DashboardStats
-// @Router /v1/donations/dashboard [get]
 func (h *Handler) GetDashboard(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -273,12 +231,6 @@ func (h *Handler) GetDashboard(c *gin.Context) {
 // ==============================
 // 🏆 6. Get Top Donors
 // ==============================
-// @Summary Get top donors for entity
-// @Tags Donations
-// @Produce json
-// @Param limit query int false "Number of top donors" default(5)
-// @Success 200 {object} gin.H
-// @Router /v1/donations/top-donors [get]
 func (h *Handler) GetTopDonors(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -311,12 +263,6 @@ func (h *Handler) GetTopDonors(c *gin.Context) {
 // ==============================
 // 📄 7. Generate Receipt
 // ==============================
-// @Summary Generate donation receipt
-// @Tags Donations
-// @Produce json
-// @Param id path int true "Donation ID"
-// @Success 200 {object} gin.H
-// @Router /v1/donations/{id}/receipt [get]
 func (h *Handler) GenerateReceipt(c *gin.Context) {
 	donationIDStr := c.Param("id")
 	donationID, err := strconv.ParseUint(donationIDStr, 10, 32)
@@ -351,12 +297,6 @@ func (h *Handler) GenerateReceipt(c *gin.Context) {
 // ==============================
 // 📈 8. Get Donation Analytics
 // ==============================
-// @Summary Get donation analytics and trends
-// @Tags Donations
-// @Produce json
-// @Param days query int false "Number of days for trends" default(30)
-// @Success 200 {object} gin.H
-// @Router /v1/donations/analytics [get]
 func (h *Handler) GetAnalytics(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -389,12 +329,6 @@ func (h *Handler) GetAnalytics(c *gin.Context) {
 // ==============================
 // 📊 9. Export Donations
 // ==============================
-// @Summary Export donations as CSV
-// @Tags Donations
-// @Produce application/octet-stream
-// @Param format query string false "Export format" default(csv)
-// @Success 200 {file} file
-// @Router /v1/donations/export [get]
 func (h *Handler) ExportDonations(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -447,6 +381,39 @@ func (h *Handler) ExportDonations(c *gin.Context) {
 	c.Data(http.StatusOK, "application/octet-stream", fileContent)
 }
 
+// ==============================
+// 🕐 10. Get Recent Donations (FIXED - Only for logged in user)
+// ==============================
+func (h *Handler) GetRecentDonations(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	currentUser, ok := user.(auth.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user context"})
+		return
+	}
+
+	limitStr := c.DefaultQuery("limit", "10")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 10
+	}
+
+	recent, err := h.svc.GetRecentDonationsByUser(c.Request.Context(), currentUser.ID, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch recent donations"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"recent_donations": recent,
+		"success": true,
+	})
+}
+
 // Helper function to parse integer query parameters
 func parseIntQuery(c *gin.Context, key string, defaultValue int) int {
 	if str := c.Query(key); str != "" {
@@ -456,142 +423,3 @@ func parseIntQuery(c *gin.Context, key string, defaultValue int) int {
 	}
 	return defaultValue
 }
-
-
-func (h *Handler) GetRecentDonations(c *gin.Context) {
-	limitStr := c.DefaultQuery("limit", "10")
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
-		limit = 10
-	}
-
-	recent, err := h.svc.GetRecentDonations(c.Request.Context(), limit)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch recent donations"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"recent_donations": recent})
-}
-
-
-
-// package donation
-
-// import (
-// 	"net/http"
-
-// 	"github.com/gin-gonic/gin"
-// 	"github.com/sharath018/temple-management-backend/internal/auth"
-// )
-
-// // Handler represents the donation HTTP handler
-// type Handler struct {
-// 	svc Service
-// }
-
-// // NewHandler creates a new donation handler
-// func NewHandler(svc Service) *Handler {
-// 	return &Handler{svc: svc}
-// }
-
-// // ==============================
-// // 🌟 1. Create Razorpay Order & Log Donation
-// // ==============================
-// func (h *Handler) CreateDonation(c *gin.Context) {
-// 	user, exists := c.Get("user")
-// 	if !exists {
-// 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-// 		return
-// 	}
-// 	currentUser := user.(auth.User)
-
-// 	var req CreateDonationRequest
-// 	if err := c.ShouldBindJSON(&req); err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-// 		return
-// 	}
-
-// 	req.UserID = currentUser.ID
-
-// 	// ✅ REMOVE this in test mode. Let Razorpay choose method (card, netbanking, etc.)
-// 	// req.Method = "UPI"
-
-// 	if currentUser.EntityID == nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to any entity"})
-// 		return
-// 	}
-// 	req.EntityID = *currentUser.EntityID
-
-// 	order, err := h.svc.StartDonation(req)
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-// 		return
-// 	}
-
-// 	c.JSON(http.StatusOK, order)
-// }
-
-
-// // ==============================
-// // ✅ 2. Verify Payment Signature (Client-side call after success)
-// // ==============================
-// func (h *Handler) VerifyDonation(c *gin.Context) {
-// 	var req VerifyPaymentRequest
-// 	if err := c.ShouldBindJSON(&req); err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-// 		return
-// 	}
-
-// 	if err := h.svc.VerifyAndUpdateDonation(req); err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-// 		return
-// 	}
-
-// 	c.JSON(http.StatusOK, gin.H{"message": "Donation verified successfully"})
-// }
-
-// // ==============================
-// // 🔍 3. Get My Donations
-// // ==============================
-// func (h *Handler) GetMyDonations(c *gin.Context) {
-// 	user, exists := c.Get("user")
-// 	if !exists {
-// 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-// 		return
-// 	}
-// 	currentUser := user.(auth.User)
-
-// 	donations, err := h.svc.GetDonationsByUser(currentUser.ID)
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-// 		return
-// 	}
-
-// 	c.JSON(http.StatusOK, donations)
-// }
-
-// // ==============================
-// // 🔍 4. Get Donations for Temple Admin by entity_id
-// // ==============================
-// func (h *Handler) GetDonationsByEntity(c *gin.Context) {
-// 	user, exists := c.Get("user")
-// 	if !exists {
-// 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-// 		return
-// 	}
-// 	currentUser := user.(auth.User)
-
-// 	if currentUser.EntityID == nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to any entity"})
-// 		return
-// 	}
-
-// 	donations, err := h.svc.GetDonationsByEntity(*currentUser.EntityID)
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-// 		return
-// 	}
-
-// 	c.JSON(http.StatusOK, donations)
-// }

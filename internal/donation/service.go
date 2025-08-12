@@ -22,7 +22,7 @@ type Service interface {
 	StartDonation(req CreateDonationRequest) (*CreateDonationResponse, error)
 	VerifyAndUpdateDonation(req VerifyPaymentRequest) error
 	
-	// Data retrieval
+	// Data retrieval - FIXED
 	GetDonationsByUser(userID uint) ([]DonationWithUser, error)
 	GetDonationsWithFilters(filters DonationFilters) ([]DonationWithUser, int, error)
 	
@@ -35,7 +35,8 @@ type Service interface {
 	GenerateReceipt(donationID uint, userID uint) (*Receipt, error)
 	ExportDonations(filters DonationFilters, format string) ([]byte, string, error)
 
-	GetRecentDonations(ctx context.Context, limit int) ([]RecentDonation, error)
+	// FIXED: Recent donations for specific user only
+	GetRecentDonationsByUser(ctx context.Context, userID uint, limit int) ([]RecentDonation, error)
 }
 
 type service struct {
@@ -180,15 +181,55 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 }
 
 // ==============================
-// Data Retrieval
+// Data Retrieval - FIXED
 // ==============================
 
 func (s *service) GetDonationsByUser(userID uint) ([]DonationWithUser, error) {
-	return s.repo.ListByUserID(context.Background(), userID)
+	donations, err := s.repo.ListByUserID(context.Background(), userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// FIXED: Ensure proper field mapping for devotee view
+	for i := range donations {
+		// Ensure all required fields are properly mapped
+		donations[i].Date = donations[i].CreatedAt
+		donations[i].Type = donations[i].DonationType
+		donations[i].DonorName = donations[i].UserName
+		donations[i].DonorEmail = donations[i].UserEmail
+		donations[i].PaymentMethod = donations[i].Method
+		
+		// If donated_at is null, use created_at for display
+		if donations[i].DonatedAt == nil {
+			donations[i].DonatedAt = &donations[i].CreatedAt
+		}
+	}
+
+	return donations, nil
 }
 
 func (s *service) GetDonationsWithFilters(filters DonationFilters) ([]DonationWithUser, int, error) {
-	return s.repo.ListWithFilters(context.Background(), filters)
+	donations, total, err := s.repo.ListWithFilters(context.Background(), filters)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// FIXED: Ensure proper field mapping for entity admin view
+	for i := range donations {
+		// Ensure all required fields are properly mapped
+		donations[i].Date = donations[i].CreatedAt
+		donations[i].Type = donations[i].DonationType
+		donations[i].DonorName = donations[i].UserName
+		donations[i].DonorEmail = donations[i].UserEmail
+		donations[i].PaymentMethod = donations[i].Method
+		
+		// If donated_at is null, use created_at for display
+		if donations[i].DonatedAt == nil {
+			donations[i].DonatedAt = &donations[i].CreatedAt
+		}
+	}
+
+	return donations, total, nil
 }
 
 // ==============================
@@ -298,14 +339,24 @@ func (s *service) GenerateReceipt(donationID uint, userID uint) (*Receipt, error
 		return nil, errors.New("receipt can only be generated for successful donations")
 	}
 
+	transactionID := donation.OrderID
+	if donation.PaymentID != nil {
+		transactionID = *donation.PaymentID
+	}
+
+	donatedAt := donation.CreatedAt
+	if donation.DonatedAt != nil {
+		donatedAt = *donation.DonatedAt
+	}
+
 	return &Receipt{
 		ID:              donation.ID,
 		DonationAmount:  donation.Amount,
 		DonationType:    donation.DonationType,
 		DonorName:       donation.UserName,
 		DonorEmail:      donation.UserEmail,
-		TransactionID:   *donation.PaymentID,
-		DonatedAt:       *donation.DonatedAt,
+		TransactionID:   transactionID,
+		DonatedAt:       donatedAt,
 		Method:          donation.Method,
 		EntityName:      donation.EntityName,
 		ReceiptNumber:   fmt.Sprintf("RCP-%d-%d", donation.EntityID, donation.ID),
@@ -345,14 +396,14 @@ func (s *service) exportAsCSV(donations []DonationWithUser) ([]byte, string, err
 
 	// Write data
 	for _, donation := range donations {
+		donatedAt := donation.CreatedAt
+		if donation.DonatedAt != nil {
+			donatedAt = *donation.DonatedAt
+		}
+
 		record := []string{
 			strconv.FormatUint(uint64(donation.ID), 10),
-			func() string {
-				if donation.DonatedAt != nil {
-					return donation.DonatedAt.Format("2006-01-02 15:04:05")
-				}
-				return donation.CreatedAt.Format("2006-01-02 15:04:05")
-			}(),
+			donatedAt.Format("2006-01-02 15:04:05"),
 			donation.UserName,
 			donation.UserEmail,
 			fmt.Sprintf("%.2f", donation.Amount),
@@ -363,7 +414,7 @@ func (s *service) exportAsCSV(donations []DonationWithUser) ([]byte, string, err
 				if donation.PaymentID != nil {
 					return *donation.PaymentID
 				}
-				return ""
+				return donation.OrderID
 			}(),
 			func() string {
 				if donation.ReferenceID != nil {
@@ -391,187 +442,9 @@ func (s *service) exportAsCSV(donations []DonationWithUser) ([]byte, string, err
     return buf.Bytes(), filename, nil
 }
 
-
-type RecentDonation struct {
-	Amount       float64   `json:"amount"`
-	DonationType string    `json:"donation_type"`
-	Method       string    `json:"method"`
-	Status       string    `json:"status"`
-	DonatedAt    time.Time `json:"donated_at"`
+// ==============================
+// FIXED: Recent Donations by User Only
+// ==============================
+func (s *service) GetRecentDonationsByUser(ctx context.Context, userID uint, limit int) ([]RecentDonation, error) {
+	return s.repo.GetRecentDonationsByUser(ctx, userID, limit)
 }
-
-// New method to fetch recent donations
-func (s *service) GetRecentDonations(ctx context.Context, limit int) ([]RecentDonation, error) {
-	return s.repo.GetRecentDonations(ctx, limit)
-}
-
-
-
-
-// package donation
-
-// import (
-// 	"context"
-// 	"encoding/json"
-// 	"errors"
-// 	"fmt"
-// 	"time"
-
-// 	razorpay "github.com/razorpay/razorpay-go"
-// 	"github.com/sharath018/temple-management-backend/config"
-// )
-
-// type Service interface {
-// 	CreateDonation(userID uint, entityID uint, amount float64, donationType, referenceID, note string) (*Donation, string, error)
-// 	VerifyDonation(paymentID string, orderID string) (*Donation, error)
-// 	StartDonation(req CreateDonationRequest) (*CreateDonationResponse, error)
-// 	VerifyAndUpdateDonation(req VerifyPaymentRequest) error
-// 	GetDonationsByUser(userID uint) ([]Donation, error)
-// 	GetDonationsByEntity(entityID uint) ([]Donation, error)
-// }
-
-// type service struct {
-// 	repo   Repository
-// 	client *razorpay.Client
-// 	cfg    *config.Config
-// }
-
-// func NewService(repo Repository, cfg *config.Config) Service {
-// 	client := razorpay.NewClient(cfg.RazorpayKey, cfg.RazorpaySecret)
-// 	return &service{
-// 		repo:   repo,
-// 		client: client,
-// 		cfg:    cfg,
-// 	}
-// }
-
-// // Start donation with Razorpay and log pending entry
-// func (s *service) StartDonation(req CreateDonationRequest) (*CreateDonationResponse, error) {
-// 	donation, orderID, err := s.CreateDonation(
-// 		req.UserID,
-// 		req.EntityID,
-// 		req.Amount,
-// 		req.DonationType,
-// 		func() string {
-// 			if req.ReferenceID != nil {
-// 				return fmt.Sprintf("%d", *req.ReferenceID)
-// 			}
-// 			return ""
-// 		}(),
-// 		func() string {
-// 			if req.Note != nil {
-// 				return *req.Note
-// 			}
-// 			return ""
-// 		}(),
-// 	)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	return &CreateDonationResponse{
-// 		OrderID:     orderID,
-// 		Amount:      donation.Amount,
-// 		Currency:    "INR",
-// 		RazorpayKey: s.cfg.RazorpayKey,
-// 	}, nil
-// }
-
-// func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
-// 	_, err := s.VerifyDonation(req.PaymentID, req.OrderID)
-// 	return err
-// }
-
-// func (s *service) GetDonationsByUser(userID uint) ([]Donation, error) {
-// 	return s.repo.ListByUserID(context.Background(), userID)
-// }
-
-// func (s *service) GetDonationsByEntity(entityID uint) ([]Donation, error) {
-// 	return s.repo.ListByEntityID(context.Background(), entityID)
-// }
-
-// // CreateDonation creates a Razorpay order and logs a pending donation
-// func (s *service) CreateDonation(userID uint, entityID uint, amount float64, donationType, referenceID, note string) (*Donation, string, error) {
-// 	amountInPaise := int(amount * 100)
-
-// 	// 🔧 No need to specify "method" here — Razorpay lets user choose at checkout (test mode too)
-// 	data := map[string]interface{}{
-// 		"amount":          amountInPaise,
-// 		"currency":        "INR",
-// 		"payment_capture": 1,
-// 		"notes": map[string]interface{}{
-// 			"user_id":       userID,
-// 			"entity_id":     entityID,
-// 			"donation_type": donationType,
-// 			"reference_id":  referenceID,
-// 		},
-// 	}
-
-// 	order, err := s.client.Order.Create(data, nil)
-// 	if err != nil {
-// 		return nil, "", fmt.Errorf("razorpay order creation failed: %w", err)
-// 	}
-// 	orderID := order["id"].(string)
-
-// 	// Set method to "CARD" or "NETBANKING" for test logs
-// 	method := "CARD" // default for test logs
-
-// 	donation := &Donation{
-// 		UserID:   userID,
-// 		EntityID: entityID,
-// 		Amount:   amount,
-// 		Method:   method,
-// 		Status:   "PENDING",
-// 		OrderID:  orderID,
-// 		Note:     &note,
-// 	}
-
-// 	if err := s.repo.Create(context.Background(), donation); err != nil {
-// 		return nil, "", err
-// 	}
-
-// 	return donation, orderID, nil
-// }
-
-
-// // VerifyDonation confirms the payment and updates donation record
-// func (s *service) VerifyDonation(paymentID string, orderID string) (*Donation, error) {
-// 	payment, err := s.client.Payment.Fetch(paymentID, nil, nil)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("payment fetch failed: %w", err)
-// 	}
-
-// 	status := payment["status"].(string)
-// 	var amount float64
-// switch val := payment["amount"].(type) {
-// case float64:
-// 	amount = val / 100
-// case json.Number:
-// 	amountPaise, _ := val.Float64()
-// 	amount = amountPaise / 100
-// default:
-// 	return nil, fmt.Errorf("unsupported amount type: %T", payment["amount"])
-// }
-
-
-// 	donation, err := s.repo.GetByOrderID(context.Background(), orderID)
-// 	if err != nil {
-// 		return nil, errors.New("donation record not found")
-// 	}
-
-// 	newStatus := "FAILED"
-// 	if status == "captured" {
-// 		newStatus = "SUCCESS"
-// 		donation.DonatedAt = time.Now()
-// 	}
-
-// 	paymentIDStr := payment["id"].(string)
-// 	donation.Amount = amount
-
-// 	err = s.repo.UpdatePaymentStatus(context.Background(), orderID, newStatus, &paymentIDStr)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	return donation, nil
-// }

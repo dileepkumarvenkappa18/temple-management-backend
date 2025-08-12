@@ -248,20 +248,22 @@ func (h *Handler) GetBookingByID(c *gin.Context) {
 }
 
 func (h *Handler) GetBookingCounts(c *gin.Context) {
-	user := c.MustGet("user").(auth.User)
-	if user.Role.RoleName != "templeadmin" || user.EntityID == nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
-		return
-	}
+    user := c.MustGet("user").(auth.User)
+    
+    if (user.Role.RoleName != "templeadmin" && user.Role.RoleName != "devotee") || user.EntityID == nil {
+        c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+        return
+    }
 
-	counts, err := h.service.GetBookingStatusCounts(c, *user.EntityID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch counts: " + err.Error()})
-		return
-	}
+    counts, err := h.service.GetBookingStatusCounts(c, *user.EntityID)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch counts: " + err.Error()})
+        return
+    }
 
-	c.JSON(http.StatusOK, gin.H{"counts": counts})
+    c.JSON(http.StatusOK, gin.H{"counts": counts})
 }
+
 
 func (h *Handler) UpdateBookingStatus(c *gin.Context) {
 	user := c.MustGet("user").(auth.User)

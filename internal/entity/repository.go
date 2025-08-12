@@ -52,7 +52,31 @@ func (r *Repository) GetEntityByID(id int) (Entity, error) {
 // Update an existing temple entity
 func (r *Repository) UpdateEntity(e Entity) error {
 	e.UpdatedAt = time.Now()
-	return r.DB.Model(&Entity{}).Where("id = ?", e.ID).Updates(e).Error
+	
+	// Create a map of all fields to update, even if they're zero values
+	updates := map[string]interface{}{
+		"name":                 e.Name,
+		"main_deity":           e.MainDeity,
+		"temple_type":          e.TempleType,
+		"established_year":     e.EstablishedYear,
+		"email":                e.Email,
+		"phone":                e.Phone,
+		"description":          e.Description,
+		"street_address":       e.StreetAddress,
+		"landmark":             e.Landmark,
+		"city":                 e.City,
+		"district":             e.District,
+		"state":                e.State,
+		"pincode":              e.Pincode,
+		"map_link":             e.MapLink,
+		"registration_cert_url": e.RegistrationCertURL,
+		"trust_deed_url":       e.TrustDeedURL,
+		"property_docs_url":    e.PropertyDocsURL,
+		"additional_docs_urls": e.AdditionalDocsURLs,
+		"updated_at":           e.UpdatedAt,
+	}
+	
+	return r.DB.Model(&Entity{}).Where("id = ?", e.ID).Updates(updates).Error
 }
 
 // Delete a temple entity by ID

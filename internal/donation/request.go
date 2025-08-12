@@ -3,7 +3,7 @@ package donation
 import "time"
 
 // ==============================
-// DTOs and Request/Response Models
+// DTOs and Request/Response Models - FIXED
 // ==============================
 
 // CreateDonationRequest is sent by frontend to initiate a donation
@@ -31,29 +31,36 @@ type VerifyPaymentRequest struct {
 	RazorpaySig  string `json:"razorpaySig" binding:"required"`        // Signature to verify payment
 }
 
-// DonationWithUser includes user and entity information
+// DonationWithUser includes user and entity information - FIXED FIELD MAPPING
 type DonationWithUser struct {
-	ID           uint      `json:"id"`
-	UserID       uint      `json:"user_id"`
-	EntityID     uint      `json:"entity_id"`
-	Amount       float64   `json:"amount"`
-	DonationType string    `json:"donationType"`
-	ReferenceID  *uint     `json:"referenceID,omitempty"`
-	Method       string    `json:"paymentMethod"`
-	Status       string    `json:"status"`
-	OrderID      string    `json:"transactionId"`
-	PaymentID    *string   `json:"paymentId,omitempty"`
-	Note         *string   `json:"note,omitempty"`
-	DonatedAt    *time.Time `json:"donatedAt,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           uint      `json:"id" db:"id"`
+	UserID       uint      `json:"user_id" db:"user_id"`
+	EntityID     uint      `json:"entity_id" db:"entity_id"`
+	Amount       float64   `json:"amount" db:"amount"`
+	DonationType string    `json:"donationType" db:"donation_type"`      // FIXED: proper mapping
+	ReferenceID  *uint     `json:"referenceID,omitempty" db:"reference_id"`
+	Method       string    `json:"paymentMethod" db:"method"`            // FIXED: proper mapping
+	Status       string    `json:"status" db:"status"`
+	OrderID      string    `json:"transactionId" db:"order_id"`          // FIXED: proper mapping
+	PaymentID    *string   `json:"paymentId,omitempty" db:"payment_id"`
+	Note         *string   `json:"note,omitempty" db:"note"`
+	DonatedAt    *time.Time `json:"donatedAt,omitempty" db:"donated_at"`  // FIXED: proper field
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`           // FIXED: show date properly
+	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 	
-	// User information
-	UserName  string `json:"userName"`
-	UserEmail string `json:"userEmail"`
+	// User information - FIXED FIELD NAMES
+	UserName  string `json:"userName" db:"user_name"`                   // FIXED: proper mapping
+	UserEmail string `json:"userEmail" db:"user_email"`                 // FIXED: proper mapping
 	
-	// Entity information
-	EntityName string `json:"entityName"`
+	// Entity information - FIXED FIELD NAME
+	EntityName string `json:"entityName" db:"entity_name"`              // FIXED: proper mapping
+	
+	// Additional computed fields for consistency
+	Date           time.Time `json:"date" db:"created_at"`               // FIXED: show donation date
+	Type           string    `json:"type" db:"donation_type"`           // FIXED: show donation type
+	DonorName      string    `json:"donorName" db:"user_name"`          // FIXED: donor info
+	DonorEmail     string    `json:"donorEmail" db:"user_email"`        // FIXED: donor info
+	PaymentMethod  string    `json:"method" db:"method"`                // FIXED: payment method
 }
 
 // DonationFilters for filtering and pagination
@@ -166,30 +173,14 @@ type DonationListResponse struct {
 	TotalPages int                `json:"total_pages"`
 	Success    bool               `json:"success"`
 }
-// package donation
 
-// // CreateDonationRequest represents the payload to start a donation
-// type CreateDonationRequest struct {
-// 	UserID       uint    `json:"-"`                     // Set from middleware
-//     EntityID uint `json:"-"`
-// 	Amount       float64 `json:"amount" binding:"required,gt=0"`
-// 	DonationType string  `json:"donation_type"`         // general | seva | event | festival
-// 	ReferenceID  *uint   `json:"reference_id"`          // SevaID or EventID
-// 	Method       string  `json:"-"`                     // Default: UPI
-// 	Note         *string `json:"note"`
-// }
-
-// // CreateDonationResponse holds Razorpay Order and donation info
-// type CreateDonationResponse struct {
-// 	OrderID     string  `json:"order_id"`
-// 	Amount      float64 `json:"amount"`
-// 	Currency    string  `json:"currency"`
-// 	RazorpayKey string  `json:"razorpay_key"`
-// }
-
-// // VerifyPaymentRequest is called after successful Razorpay payment
-// type VerifyPaymentRequest struct {
-// 	OrderID        string `json:"order_id" binding:"required"`
-// 	PaymentID      string `json:"payment_id" binding:"required"`
-// 	RazorpaySig    string `json:"razorpay_signature" binding:"required"`
-// }
+// RecentDonation represents recent donation info - FIXED FOR USER-SPECIFIC DATA
+type RecentDonation struct {
+	Amount       float64   `json:"amount" db:"amount"`
+	DonationType string    `json:"donation_type" db:"donation_type"`
+	Method       string    `json:"method" db:"method"`
+	Status       string    `json:"status" db:"status"`
+	DonatedAt    time.Time `json:"donated_at" db:"donated_at"`
+	UserName     string    `json:"user_name" db:"user_name"`      // FIXED: Include user info
+	EntityName   string    `json:"entity_name" db:"entity_name"`  // FIXED: Include entity info
+}
