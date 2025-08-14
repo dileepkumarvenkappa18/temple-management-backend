@@ -305,3 +305,270 @@ func (r *Repository) CountUsersByRole(ctx context.Context, roleName string) (int
 		Count(&count).Error
 	return count, err
 }
+
+// =========================== USER MANAGEMENT ===========================
+
+// Create user (admin-created users bypass email validation and approval process)
+func (r *Repository) CreateUser(ctx context.Context, user *auth.User) error {
+	return r.db.WithContext(ctx).Create(user).Error
+}
+
+// Create tenant details for templeadmin users
+func (r *Repository) CreateTenantDetails(ctx context.Context, details *auth.TenantDetails) error {
+	return r.db.WithContext(ctx).Create(details).Error
+}
+
+// Get users with pagination and filters (excluding devotee and volunteer roles)
+func (r *Repository) GetUsers(ctx context.Context, limit, page int, search, roleFilter, statusFilter string) ([]UserResponse, int64, error) {
+	var users []UserResponse
+	var total int64
+
+	offset := (page - 1) * limit
+
+	// Build base query excluding devotee and volunteer roles
+	baseQuery := r.db.WithContext(ctx).
+		Table("users").
+		Joins("JOIN user_roles ON users.role_id = user_roles.id").
+		Where("user_roles.role_name NOT IN (?)", []string{"devotee", "volunteer"})
+
+	// Apply search filter
+	if search != "" {
+		searchPattern := "%" + search + "%"
+		baseQuery = baseQuery.Where(
+			"users.full_name ILIKE ? OR users.email ILIKE ? OR users.phone ILIKE ?",
+			searchPattern, searchPattern, searchPattern,
+		)
+	}
+
+	// Apply role filter
+	if roleFilter != "" {
+		baseQuery = baseQuery.Where("LOWER(user_roles.role_name) = LOWER(?)", roleFilter)
+	}
+
+	// Apply status filter
+	if statusFilter != "" {
+		baseQuery = baseQuery.Where("LOWER(users.status) = LOWER(?)", statusFilter)
+	}
+
+	// Get total count
+	if err := baseQuery.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Build main query with temple details for templeadmin users
+	query := r.db.WithContext(ctx).
+		Table("users").
+		Select(`
+			users.id,
+			users.full_name,
+			users.email,
+			users.phone,
+			users.status,
+			users.created_at,
+			users.updated_at,
+			user_roles.id as role_id,
+			user_roles.role_name,
+			td.id as temple_id,
+			td.temple_name,
+			td.temple_place,
+			td.temple_address,
+			td.temple_phone_no,
+			td.temple_description,
+			td.created_at as temple_created_at,
+			td.updated_at as temple_updated_at
+		`).
+		Joins("JOIN user_roles ON users.role_id = user_roles.id").
+		Joins("LEFT JOIN tenant_details td ON users.id = td.user_id AND user_roles.role_name = 'templeadmin'").
+		Where("user_roles.role_name NOT IN (?)", []string{"devotee", "volunteer"})
+
+	// Apply same filters to main query
+	if search != "" {
+		searchPattern := "%" + search + "%"
+		query = query.Where(
+			"users.full_name ILIKE ? OR users.email ILIKE ? OR users.phone ILIKE ?",
+			searchPattern, searchPattern, searchPattern,
+		)
+	}
+
+	if roleFilter != "" {
+		query = query.Where("LOWER(user_roles.role_name) = LOWER(?)", roleFilter)
+	}
+
+	if statusFilter != "" {
+		query = query.Where("LOWER(users.status) = LOWER(?)", statusFilter)
+	}
+
+	// Execute query with pagination
+	rows, err := query.Limit(limit).Offset(offset).Order("users.created_at DESC").Rows()
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	// Scan results
+	for rows.Next() {
+		var user UserResponse
+		var templeID *uint
+		var templeName, templePlace, templeAddress, templePhoneNo, templeDescription *string
+		var templeCreatedAt, templeUpdatedAt *time.Time
+
+		err := rows.Scan(
+			&user.ID,
+			&user.FullName,
+			&user.Email,
+			&user.Phone,
+			&user.Status,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+			&user.Role.ID,
+			&user.Role.RoleName,
+			&templeID,
+			&templeName,
+			&templePlace,
+			&templeAddress,
+			&templePhoneNo,
+			&templeDescription,
+			&templeCreatedAt,
+			&templeUpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		// If temple details exist, populate them
+		if templeID != nil && templeName != nil {
+			user.TempleDetails = &TenantTempleDetails{
+				ID:                *templeID,
+				TempleName:        *templeName,
+				TemplePlace:       *templePlace,
+				TempleAddress:     *templeAddress,
+				TemplePhoneNo:     *templePhoneNo,
+				TempleDescription: *templeDescription,
+				CreatedAt:         *templeCreatedAt,
+				UpdatedAt:         *templeUpdatedAt,
+			}
+		}
+
+		users = append(users, user)
+	}
+
+	return users, total, nil
+}
+
+// Get user by ID with temple details
+func (r *Repository) GetUserWithDetails(ctx context.Context, userID uint) (*UserResponse, error) {
+	var user UserResponse
+	var templeID *uint
+	var templeName, templePlace, templeAddress, templePhoneNo, templeDescription *string
+	var templeCreatedAt, templeUpdatedAt *time.Time
+
+	query := r.db.WithContext(ctx).
+		Table("users").
+		Select(`
+			users.id,
+			users.full_name,
+			users.email,
+			users.phone,
+			users.status,
+			users.created_at,
+			users.updated_at,
+			user_roles.id as role_id,
+			user_roles.role_name,
+			td.id as temple_id,
+			td.temple_name,
+			td.temple_place,
+			td.temple_address,
+			td.temple_phone_no,
+			td.temple_description,
+			td.created_at as temple_created_at,
+			td.updated_at as temple_updated_at
+		`).
+		Joins("JOIN user_roles ON users.role_id = user_roles.id").
+		Joins("LEFT JOIN tenant_details td ON users.id = td.user_id AND user_roles.role_name = 'templeadmin'").
+		Where("users.id = ?", userID)
+
+	row := query.Row()
+	err := row.Scan(
+		&user.ID,
+		&user.FullName,
+		&user.Email,
+		&user.Phone,
+		&user.Status,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+		&user.Role.ID,
+		&user.Role.RoleName,
+		&templeID,
+		&templeName,
+		&templePlace,
+		&templeAddress,
+		&templePhoneNo,
+		&templeDescription,
+		&templeCreatedAt,
+		&templeUpdatedAt,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// If temple details exist, populate them
+	if templeID != nil && templeName != nil {
+		user.TempleDetails = &TenantTempleDetails{
+			ID:                *templeID,
+			TempleName:        *templeName,
+			TemplePlace:       *templePlace,
+			TempleAddress:     *templeAddress,
+			TemplePhoneNo:     *templePhoneNo,
+			TempleDescription: *templeDescription,
+			CreatedAt:         *templeCreatedAt,
+			UpdatedAt:         *templeUpdatedAt,
+		}
+	}
+
+	return &user, nil
+}
+
+// Update user
+func (r *Repository) UpdateUser(ctx context.Context, userID uint, user *auth.User) error {
+	return r.db.WithContext(ctx).Model(&auth.User{}).Where("id = ?", userID).Updates(user).Error
+}
+
+// Update tenant details
+func (r *Repository) UpdateTenantDetails(ctx context.Context, userID uint, details *auth.TenantDetails) error {
+	return r.db.WithContext(ctx).Model(&auth.TenantDetails{}).Where("user_id = ?", userID).Updates(details).Error
+}
+
+// Delete user (soft delete)
+func (r *Repository) DeleteUser(ctx context.Context, userID uint) error {
+	return r.db.WithContext(ctx).Delete(&auth.User{}, userID).Error
+}
+
+// Update user status
+func (r *Repository) UpdateUserStatus(ctx context.Context, userID uint, status string) error {
+	return r.db.WithContext(ctx).Model(&auth.User{}).Where("id = ?", userID).Update("status", status).Error
+}
+
+// Get all user roles with complete information
+func (r *Repository) GetUserRoles(ctx context.Context) ([]UserRole, error) {
+	var roles []UserRole
+	err := r.db.WithContext(ctx).
+		Model(&auth.UserRole{}).
+		Select("id, role_name, description, can_register_publicly").
+		Find(&roles).Error
+	return roles, err
+}
+
+// Find role by name
+func (r *Repository) FindRoleByName(ctx context.Context, roleName string) (*auth.UserRole, error) {
+	var role auth.UserRole
+	err := r.db.WithContext(ctx).Where("role_name = ?", roleName).First(&role).Error
+	return &role, err
+}
+
+// Check if user exists by email
+func (r *Repository) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&auth.User{}).Where("email = ?", email).Count(&count).Error
+	return count > 0, err
+}

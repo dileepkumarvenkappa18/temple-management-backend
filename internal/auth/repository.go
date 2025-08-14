@@ -17,12 +17,15 @@ type Repository interface {
 	UpdateEntityID(userID uint, entityID uint) error
 	GetUserEmailsByRole(roleName string, entityID uint) ([]string, error)
 
-	// ✅ NEW for Forgot Password
+	// Password reset methods
 	SetForgotPasswordToken(userID uint, token string, expiry time.Time) error
 	GetByResetToken(token string) (*User, error)
 	ClearResetToken(userID uint) error
 	Update(user *User) error
 	CreateTenantDetails(t *TenantDetails) error
+	
+	// NEW: Public roles method
+	GetPublicRoles() ([]UserRole, error)
 }
 
 type repository struct{ db *gorm.DB }
@@ -165,4 +168,10 @@ func (r *repository) CreateTenantDetails(t *TenantDetails) error {
 
 func (r *repository) Update(user *User) error {
 	return r.db.Save(user).Error
+}
+
+func (r *repository) GetPublicRoles() ([]UserRole, error) {
+	var roles []UserRole
+	err := r.db.Where("can_register_publicly = ?", true).Find(&roles).Error
+	return roles, err
 }

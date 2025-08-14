@@ -46,3 +46,54 @@ type TenantTempleDetails struct {
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 }
+
+// ================ USER MANAGEMENT ================
+
+type CreateUserRequest struct {
+	FullName          string `json:"fullName" binding:"required"`
+	Email             string `json:"email" binding:"required,email"`
+	Password          string `json:"password" binding:"required,min=6"`
+	Phone             string `json:"phone" binding:"required"`
+	Role              string `json:"role" binding:"required"`
+	
+	// Temple admin specific fields (required only for templeadmin role)
+	TempleName        string `json:"templeName"`
+	TemplePlace       string `json:"templePlace"`
+	TempleAddress     string `json:"templeAddress"`
+	TemplePhoneNo     string `json:"templePhoneNo"`
+	TempleDescription string `json:"templeDescription"`
+}
+
+type UpdateUserRequest struct {
+	FullName          string `json:"fullName"`
+	Email             string `json:"email" binding:"email"`
+	Phone             string `json:"phone"`
+	
+	// Temple admin specific fields (only for templeadmin role)
+	TempleName        string `json:"templeName"`
+	TemplePlace       string `json:"templePlace"`
+	TempleAddress     string `json:"templeAddress"`
+	TemplePhoneNo     string `json:"templePhoneNo"`
+	TempleDescription string `json:"templeDescription"`
+}
+
+type UserResponse struct {
+	ID        uint      `json:"id"`
+	FullName  string    `json:"full_name"`
+	Email     string    `json:"email"`
+	Phone     string    `json:"phone"`
+	Role      UserRole  `json:"role"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	
+	// Temple details for templeadmin users
+	TempleDetails *TenantTempleDetails `json:"temple_details,omitempty"`
+}
+
+type UserRole struct {
+	ID                  uint   `json:"id"`
+	RoleName            string `json:"role_name"`
+	Description         string `json:"description"`
+	CanRegisterPublicly bool   `json:"can_register_publicly"`
+}

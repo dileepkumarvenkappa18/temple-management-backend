@@ -26,10 +26,13 @@ type Service interface {
 	Refresh(refreshToken string) (string, error)
 	GetUserByID(userID uint) (User, error)
 
-	// ✅ NEW
+	// Password reset methods
 	RequestPasswordReset(email string) error
 	ResetPassword(token string, newPassword string) error
-	Logout() error // (for stateless JWT, we simply return nil)
+	Logout() error
+	
+	// NEW: Public roles method
+	GetPublicRoles() ([]PublicRoleResponse, error)
 }
 
 type service struct {
@@ -339,4 +342,22 @@ func cleanPhone(raw string) (string, error) {
 	}
 
 	return cleaned, nil
+}
+
+func (s *service) GetPublicRoles() ([]PublicRoleResponse, error) {
+	roles, err := s.repo.GetPublicRoles()
+	if err != nil {
+		return nil, err
+	}
+
+	var publicRoles []PublicRoleResponse
+	for _, role := range roles {
+		publicRoles = append(publicRoles, PublicRoleResponse{
+			ID:          role.ID,
+			RoleName:    role.RoleName,
+			Description: role.Description,
+		})
+	}
+
+	return publicRoles, nil
 }

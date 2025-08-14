@@ -85,3 +85,9 @@ type TenantDetails struct {
 func (TenantDetails) TableName() string {
 	return "tenant_details"
 }
+
+type PublicRoleResponse struct {
+	ID          uint   `json:"id"`
+	RoleName    string `json:"role_name"`
+	Description string `json:"description"`
+}

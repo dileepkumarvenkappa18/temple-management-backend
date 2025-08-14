@@ -189,3 +189,14 @@ func (h *Handler) Logout(c *gin.Context) {
 	_ = h.service.Logout() // stateless
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
 }
+
+// GET /auth/public-roles - Get roles available for public registration
+func (h *Handler) GetPublicRoles(c *gin.Context) {
+	roles, err := h.service.GetPublicRoles()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch available roles"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": roles})
+}

@@ -30,24 +30,27 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	api := r.Group("/api/v1")
 	api.Use(middleware.RateLimiterMiddleware()) // 🛡 Global rate limit: 5 req/sec per IP
 
-	// ========== Auth ==========
-	authRepo := auth.NewRepository(database.DB)
-	authSvc := auth.NewService(authRepo, cfg)
-	authHandler := auth.NewHandler(authSvc)
+// ========== Auth ==========
+authRepo := auth.NewRepository(database.DB)
+authSvc := auth.NewService(authRepo, cfg)
+authHandler := auth.NewHandler(authSvc)
 
-	authGroup := api.Group("/auth")
-	{
-		authGroup.POST("/register", authHandler.Register)
-		authGroup.POST("/login", authHandler.Login)
-		authGroup.POST("/refresh", authHandler.Refresh)
+authGroup := api.Group("/auth")
+{
+	authGroup.POST("/register", authHandler.Register)
+	authGroup.POST("/login", authHandler.Login)
+	authGroup.POST("/refresh", authHandler.Refresh)
 
-		// ✅ NEW: Forgot/Reset/Logout
-		authGroup.POST("/forgot-password", authHandler.ForgotPassword)
-		authGroup.POST("/reset-password", authHandler.ResetPassword)
+	// ✅ NEW: Forgot/Reset/Logout
+	authGroup.POST("/forgot-password", authHandler.ForgotPassword)
+	authGroup.POST("/reset-password", authHandler.ResetPassword)
 
-		// Logout requires Auth Middleware to clear token from Redis
-		authGroup.POST("/logout", middleware.AuthMiddleware(cfg, authSvc), authHandler.Logout)
-	}
+	// ✅ NEW: Public roles endpoint for registration (no auth required)
+	authGroup.GET("/public-roles", authHandler.GetPublicRoles)
+
+	// Logout requires Auth Middleware to clear token from Redis
+	authGroup.POST("/logout", middleware.AuthMiddleware(cfg, authSvc), authHandler.Logout)
+}
 
 	protected := api.Group("/")
 	protected.Use(middleware.AuthMiddleware(cfg, authSvc))
@@ -74,16 +77,42 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	superadminRoutes := protected.Group("/superadmin")
 	superadminRoutes.Use(middleware.RBACMiddleware("superadmin"))
 	{
+		// ================ TENANT APPROVAL MANAGEMENT ================
 		// 🔁 Paginated list of all tenants with optional ?status=pending&limit=10&page=1
 		superadminRoutes.GET("/tenants", superadminHandler.GetTenantsWithFilters)
 		superadminRoutes.PATCH("/tenants/:id/approval", superadminHandler.UpdateTenantApprovalStatus)
 
+		// ================ ENTITY APPROVAL MANAGEMENT ================
 		// 🔁 Paginated list of entities with optional ?status=pending&limit=10&page=1
 		superadminRoutes.GET("/entities", superadminHandler.GetEntitiesWithFilters)
 		superadminRoutes.PATCH("/entities/:id/approval", superadminHandler.UpdateEntityApprovalStatus)
 
+		// ================ DASHBOARD METRICS ================
 		superadminRoutes.GET("/tenant-approval-count", superadminHandler.GetTenantApprovalCounts)
 		superadminRoutes.GET("/temple-approval-count", superadminHandler.GetTempleApprovalCounts)
+
+		// ================ USER MANAGEMENT ================
+		// Create new user (admin-created users)
+		superadminRoutes.POST("/users", superadminHandler.CreateUser)
+		
+		// Get all users with pagination and filters (excluding devotee and volunteer)
+		// Query params: ?limit=10&page=1&search=john&role=templeadmin&status=active
+		superadminRoutes.GET("/users", superadminHandler.GetUsers)
+		
+		// Get user by ID
+		superadminRoutes.GET("/users/:id", superadminHandler.GetUserByID)
+		
+		// Update user
+		superadminRoutes.PUT("/users/:id", superadminHandler.UpdateUser)
+		
+		// Delete user (soft delete)
+		superadminRoutes.DELETE("/users/:id", superadminHandler.DeleteUser)
+		
+		// Activate/Deactivate user
+		superadminRoutes.PATCH("/users/:id/status", superadminHandler.UpdateUserStatus)
+		
+		// Get all available user roles
+		superadminRoutes.GET("/user-roles", superadminHandler.GetUserRoles)
 	}
 
 	// ========== Seva ==========
