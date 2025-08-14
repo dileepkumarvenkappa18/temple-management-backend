@@ -1,17 +1,17 @@
 package auth
 
 import (
-	"errors"
-	"strings"
-	"time"
-	"fmt"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"regexp"
+	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/sharath018/temple-management-backend/utils"
 	"github.com/sharath018/temple-management-backend/config"
+	"github.com/sharath018/temple-management-backend/utils"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -33,11 +33,11 @@ type Service interface {
 }
 
 type service struct {
-	repo           Repository
-	accessSecret   string
-	refreshSecret  string
-	accessTTL      time.Duration
-	refreshTTL     time.Duration
+	repo          Repository
+	accessSecret  string
+	refreshSecret string
+	accessTTL     time.Duration
+	refreshTTL    time.Duration
 }
 
 func NewService(r Repository, cfg *config.Config) Service {
@@ -55,11 +55,16 @@ func NewService(r Repository, cfg *config.Config) Service {
 // =============================
 
 type RegisterInput struct {
-	FullName string
-	Email    string
-	Password string
-	Role     string
-	Phone    string
+	FullName          string
+	Email             string
+	Password          string
+	Role              string
+	Phone             string
+	TempleName        string
+	TemplePlace       string
+	TempleAddress     string
+	TemplePhoneNo     string
+	TempleDescription string
 }
 
 func (s *service) Register(in RegisterInput) error {
@@ -69,42 +74,58 @@ func (s *service) Register(in RegisterInput) error {
 		return errors.New("invalid role")
 	}
 
-	// ✅ Enforce Gmail-only email validation (redundant safety layer)
+	// ✅ Enforce Gmail-only email validation
 	if !strings.HasSuffix(strings.ToLower(in.Email), "@gmail.com") {
 		return errors.New("only @gmail.com emails are allowed")
 	}
 
+	// ✅ Hash password
 	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 
+	// ✅ Status logic
 	status := "active"
 	if roleName == "templeadmin" {
 		status = "pending"
 	}
 
-	// ✅ Clean phone number (strip +91, non-digits, validate)
+	// ✅ Clean phone number
 	phone, err := cleanPhone(in.Phone)
 	if err != nil {
 		return err
 	}
 
+	// ✅ Create the user
 	user := &User{
 		FullName:     in.FullName,
 		Email:        in.Email,
 		PasswordHash: string(hash),
 		RoleID:       role.ID,
 		Status:       status,
-		Phone:  phone,
-
+		Phone:        phone,
 	}
 
 	if err := s.repo.Create(user); err != nil {
 		return err
 	}
 
+	// ✅ Extra step for templeadmin: Save tenant details + approval request
 	if roleName == "templeadmin" {
+		tenant := &TenantDetails{
+			UserID:            user.ID,
+			TempleName:        in.TempleName,
+			TemplePlace:       in.TemplePlace,
+			TempleAddress:     in.TempleAddress,
+			TemplePhoneNo:     in.TemplePhoneNo,
+			TempleDescription: in.TempleDescription,
+		}
+
+		if err := s.repo.CreateTenantDetails(tenant); err != nil {
+			return errors.New("failed to save tenant details")
+		}
+
 		if err := s.repo.CreateApprovalRequest(user.ID, "tenant_approval"); err != nil {
 			return errors.New("failed to create approval request")
 		}
@@ -112,8 +133,6 @@ func (s *service) Register(in RegisterInput) error {
 
 	return nil
 }
-
-
 
 // =============================
 // Login
@@ -238,9 +257,8 @@ func (s *service) RequestPasswordReset(email string) error {
 	// TODO: utils.SendResetLink(user.Email, resetToken)
 	// For now, just print the token
 	if err := utils.SendResetLink(user.Email, resetToken); err != nil {
-	return errors.New("failed to send email")
-}
-
+		return errors.New("failed to send email")
+	}
 
 	return nil
 }
@@ -271,10 +289,9 @@ func (s *service) ResetPassword(token string, newPassword string) error {
 
 	user.PasswordHash = string(hash)
 	err = s.repo.Update(&user)
-if err != nil {
-	return errors.New("failed to update password")
-}
-
+	if err != nil {
+		return errors.New("failed to update password")
+	}
 
 	_ = utils.DeleteToken(key) // Cleanup token
 

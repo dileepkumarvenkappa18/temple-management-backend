@@ -46,6 +46,7 @@ if err := DB.AutoMigrate(
 	&auth.UserRole{},
 	&auth.User{},
 	&auth.ApprovalRequest{},
+	&auth.TenantDetails{},
 	&seva.Seva{},
 	&seva.SevaBooking{},
 	&entity.Entity{},

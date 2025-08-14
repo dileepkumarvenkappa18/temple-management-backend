@@ -1,8 +1,8 @@
 package auth
 
 import (
-	"time"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -17,12 +17,12 @@ type Repository interface {
 	UpdateEntityID(userID uint, entityID uint) error
 	GetUserEmailsByRole(roleName string, entityID uint) ([]string, error)
 
-
 	// ✅ NEW for Forgot Password
 	SetForgotPasswordToken(userID uint, token string, expiry time.Time) error
 	GetByResetToken(token string) (*User, error)
 	ClearResetToken(userID uint) error
 	Update(user *User) error
+	CreateTenantDetails(t *TenantDetails) error
 }
 
 type repository struct{ db *gorm.DB }
@@ -62,7 +62,6 @@ func (r *repository) FindByID(userID uint) (User, error) {
 
 	return user, nil
 }
-
 
 // Find user role by name
 func (r *repository) FindRoleByName(name string) (*UserRole, error) {
@@ -119,7 +118,6 @@ func (r *repository) UpdateEntityID(userID uint, entityID uint) error {
 	return r.db.Model(&User{}).Where("id = ?", userID).Update("entity_id", entityID).Error
 }
 
-
 // ✅ GetUserEmailsByRole fetches all user emails by role and entity
 func (r *repository) GetUserEmailsByRole(roleName string, entityID uint) ([]string, error) {
 	var emails []string
@@ -130,13 +128,12 @@ func (r *repository) GetUserEmailsByRole(roleName string, entityID uint) ([]stri
 		Select("users.email").
 		Joins("JOIN user_roles ON users.role_id = user_roles.id").
 		Joins("JOIN user_entity_memberships ON users.id = user_entity_memberships.user_id").
-		Where("user_roles.role_name = ? AND user_entity_memberships.entity_id = ? AND users.status = ? AND user_entity_memberships.status = ?", 
+		Where("user_roles.role_name = ? AND user_entity_memberships.entity_id = ? AND users.status = ? AND user_entity_memberships.status = ?",
 			roleName, entityID, "active", "active").
 		Scan(&emails).Error
 
 	return emails, err
 }
-
 
 // ✅ Set Forgot Password Token and expiry
 func (r *repository) SetForgotPasswordToken(userID uint, token string, expiry time.Time) error {
@@ -161,6 +158,9 @@ func (r *repository) ClearResetToken(userID uint) error {
 		"forgot_password_token":  nil,
 		"forgot_password_expiry": nil,
 	}).Error
+}
+func (r *repository) CreateTenantDetails(t *TenantDetails) error {
+	return r.db.Create(t).Error
 }
 
 func (r *repository) Update(user *User) error {

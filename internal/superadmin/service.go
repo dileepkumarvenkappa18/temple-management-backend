@@ -63,7 +63,7 @@ func (s *Service) GetPendingTenants(ctx context.Context) ([]auth.User, error) {
 	return s.repo.GetPendingTenants(ctx)
 }
 
-func (s *Service) GetTenantsWithFilters(ctx context.Context, status string, limit, page int) ([]auth.User, int64, error) {
+func (s *Service) GetTenantsWithFilters(ctx context.Context, status string, limit, page int) ([]TenantWithDetails, int64, error) {
 	return s.repo.GetTenantsWithFilters(ctx, status, limit, page)
 }
 
@@ -195,6 +195,3 @@ func (s *Service) GetTempleApprovalCounts(ctx context.Context) (*TempleApprovalC
 		TotalDevotees:   totalDevotees,
 	}, nil
 }
-
-
-

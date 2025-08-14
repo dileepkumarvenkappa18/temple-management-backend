@@ -21,6 +21,12 @@ type RegisterRequest struct {
 	Password string `json:"password" binding:"required,min=6" example:"secret123"`
 	Role     string `json:"role" binding:"required" example:"templeadmin"`
 	Phone    string `json:"phone" binding:"required" example:"+919876543210"`
+	// ✅ Temple admin specific fields
+	TempleName        string `json:"templeName" example:"Sri Venkateswara Temple"`
+	TemplePlace       string `json:"templePlace" example:"Tirupati"`
+	TempleAddress     string `json:"templeAddress" example:"Main Road, Tirupati, Andhra Pradesh"`
+	TemplePhoneNo     string `json:"templePhoneNo" example:"+918765432100"`
+	TempleDescription string `json:"templeDescription" example:"Historic temple dedicated to Lord Venkateswara."`
 }
 
 func (h *Handler) Register(c *gin.Context) {
@@ -31,7 +37,7 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 
 	// ❌ Block superadmin registration
-	if req.Role == "superadmin" {
+	if strings.ToLower(req.Role) == "superadmin" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Super Admin registration is not allowed"})
 		return
 	}
@@ -42,12 +48,24 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.Register(RegisterInput(req)); err != nil {
+	// ✅ Validate templeadmin details early
+	if strings.ToLower(req.Role) == "templeadmin" {
+		if req.TempleName == "" || req.TemplePlace == "" || req.TempleAddress == "" ||
+			req.TemplePhoneNo == "" || req.TempleDescription == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "All temple details are required for Temple Admin registration"})
+			return
+		}
+	}
+
+	// ✅ Map to input and pass to service
+	input := RegisterInput(req)
+
+	if err := h.service.Register(input); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	if req.Role == "templeadmin" {
+	if strings.ToLower(req.Role) == "templeadmin" {
 		c.JSON(http.StatusCreated, gin.H{"message": "Temple Admin registered. Awaiting approval."})
 		return
 	}

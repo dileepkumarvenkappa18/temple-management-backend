@@ -38,27 +38,107 @@ func (r *Repository) GetPendingTenants(ctx context.Context) ([]auth.User, error)
 	return tenants, err
 }
 
-func (r *Repository) GetTenantsWithFilters(ctx context.Context, status string, limit, page int) ([]auth.User, int64, error) {
-	var tenants []auth.User
+func (r *Repository) GetTenantsWithFilters(ctx context.Context, status string, limit, page int) ([]TenantWithDetails, int64, error) {
+	var tenants []TenantWithDetails
 	var total int64
 
 	offset := (page - 1) * limit
 
-	query := r.db.WithContext(ctx).
+	// Build the base query for counting
+	countQuery := r.db.WithContext(ctx).
 		Table("users").
 		Joins("JOIN user_roles ON users.role_id = user_roles.id").
+		Where("user_roles.role_name = ?", "templeadmin")
+
+	if status != "" {
+		countQuery = countQuery.Where("LOWER(users.status) = LOWER(?)", status)
+	}
+
+	// Get total count
+	if err := countQuery.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Build the main query with LEFT JOIN to include temple details
+	query := r.db.WithContext(ctx).
+		Table("users").
+		Select(`
+			users.id,
+			users.full_name,
+			users.email,
+			users.phone,
+			users.role_id,
+			users.status,
+			users.created_at,
+			users.updated_at,
+			td.id as temple_id,
+			td.temple_name,
+			td.temple_place,
+			td.temple_address,
+			td.temple_phone_no,
+			td.temple_description,
+			td.created_at as temple_created_at,
+			td.updated_at as temple_updated_at
+		`).
+		Joins("JOIN user_roles ON users.role_id = user_roles.id").
+		Joins("LEFT JOIN tenant_details td ON users.id = td.user_id").
 		Where("user_roles.role_name = ?", "templeadmin")
 
 	if status != "" {
 		query = query.Where("LOWER(users.status) = LOWER(?)", status)
 	}
 
-	if err := query.Count(&total).Error; err != nil {
+	// Execute query with pagination
+	rows, err := query.Limit(limit).Offset(offset).Rows()
+	if err != nil {
 		return nil, 0, err
 	}
+	defer rows.Close()
 
-	if err := query.Limit(limit).Offset(offset).Find(&tenants).Error; err != nil {
-		return nil, 0, err
+	// Scan results into our custom struct
+	for rows.Next() {
+		var tenant TenantWithDetails
+		var templeID *uint
+		var templeName, templePlace, templeAddress, templePhoneNo, templeDescription *string
+		var templeCreatedAt, templeUpdatedAt *time.Time
+
+		err := rows.Scan(
+			&tenant.ID,
+			&tenant.FullName,
+			&tenant.Email,
+			&tenant.Phone,
+			&tenant.RoleID,
+			&tenant.Status,
+			&tenant.CreatedAt,
+			&tenant.UpdatedAt,
+			&templeID,
+			&templeName,
+			&templePlace,
+			&templeAddress,
+			&templePhoneNo,
+			&templeDescription,
+			&templeCreatedAt,
+			&templeUpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		// If temple details exist, populate them
+		if templeID != nil && templeName != nil {
+			tenant.TempleDetails = &TenantTempleDetails{
+				ID:                *templeID,
+				TempleName:        *templeName,
+				TemplePlace:       *templePlace,
+				TempleAddress:     *templeAddress,
+				TemplePhoneNo:     *templePhoneNo,
+				TempleDescription: *templeDescription,
+				CreatedAt:         *templeCreatedAt,
+				UpdatedAt:         *templeUpdatedAt,
+			}
+		}
+
+		tenants = append(tenants, tenant)
 	}
 
 	return tenants, total, nil

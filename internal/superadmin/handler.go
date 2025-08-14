@@ -166,7 +166,6 @@ func (h *Handler) UpdateEntityApprovalStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Entity status updated successfully"})
 }
 
-
 // GET /superadmin/tenant-approval-counts
 func (h *Handler) GetTenantApprovalCounts(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -179,7 +178,6 @@ func (h *Handler) GetTenantApprovalCounts(c *gin.Context) {
 
 	c.JSON(http.StatusOK, counts)
 }
-
 
 // GET /superadmin/temple-approval-counts
 func (h *Handler) GetTempleApprovalCounts(c *gin.Context) {
