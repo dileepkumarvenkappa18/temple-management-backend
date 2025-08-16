@@ -273,19 +273,16 @@ func (s *Service) GetUserByID(ctx context.Context, userID uint) (*UserResponse, 
 	return s.repo.GetUserWithDetails(ctx, userID)
 }
 
-// Update user
+// Update user - UPDATED: SuperAdmin restrictions removed
 func (s *Service) UpdateUser(ctx context.Context, userID uint, req UpdateUserRequest, adminID uint) error {
-	// Get existing user to check role
+	// Get existing user to check if it exists
 	existingUser, err := s.repo.GetUserWithDetails(ctx, userID)
 	if err != nil {
 		return errors.New("user not found")
 	}
 
-	// Prevent updating superadmin users (except by other superadmins)
-	if existingUser.Role.RoleName == "superadmin" {
-		// You might want to add additional validation here for admin permissions
-		return errors.New("cannot update superadmin user")
-	}
+	// ✅ REMOVED: SuperAdmin restriction
+	// Now SuperAdmin users can be updated
 
 	// Check if email is being changed and if new email already exists
 	if req.Email != "" && req.Email != existingUser.Email {
@@ -349,7 +346,7 @@ func (s *Service) UpdateUser(ctx context.Context, userID uint, req UpdateUserReq
 	return nil
 }
 
-// Delete user
+// Delete user - KEPT: Still prevent SuperAdmin deletion for safety
 func (s *Service) DeleteUser(ctx context.Context, userID uint, adminID uint) error {
 	// Get existing user to check role
 	existingUser, err := s.repo.GetUserWithDetails(ctx, userID)
@@ -357,7 +354,7 @@ func (s *Service) DeleteUser(ctx context.Context, userID uint, adminID uint) err
 		return errors.New("user not found")
 	}
 
-	// Prevent deleting superadmin users
+	// Keep this restriction for safety - prevent deleting superadmin users
 	if existingUser.Role.RoleName == "superadmin" {
 		return errors.New("cannot delete superadmin user")
 	}
@@ -370,20 +367,10 @@ func (s *Service) DeleteUser(ctx context.Context, userID uint, adminID uint) err
 	return s.repo.DeleteUser(ctx, userID)
 }
 
-// Update user status
+// Update user status - UPDATED: SuperAdmin restriction removed
+// Update user status - UPDATED: Simplified after removing SuperAdmin restrictions
 func (s *Service) UpdateUserStatus(ctx context.Context, userID uint, status string, adminID uint) error {
-	// Get existing user to check role
-	existingUser, err := s.repo.GetUserWithDetails(ctx, userID)
-	if err != nil {
-		return errors.New("user not found")
-	}
-
-	// Prevent updating superadmin status
-	if existingUser.Role.RoleName == "superadmin" {
-		return errors.New("cannot update superadmin status")
-	}
-
-	// Prevent self-deactivation
+	// Only keep the self-deactivation check - no need to fetch user details
 	if userID == adminID && status == "inactive" {
 		return errors.New("cannot deactivate your own account")
 	}
