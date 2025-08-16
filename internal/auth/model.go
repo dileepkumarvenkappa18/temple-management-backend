@@ -14,6 +14,7 @@ type UserRole struct {
 	CanRegisterPublicly bool      `gorm:"default:true" json:"can_register_publicly"`
 	CreatedAt           time.Time `json:"created_at"`
 	UpdatedAt           time.Time `json:"updated_at"`
+	Status              string                 `gorm:"type:varchar(20);default:'active'" json:"status"`
 }
 
 // TableName overrides table name for UserRole
@@ -90,4 +91,34 @@ type PublicRoleResponse struct {
 	ID          uint   `json:"id"`
 	RoleName    string `json:"role_name"`
 	Description string `json:"description"`
+}
+
+// 🆕 Add these structs to your internal/auth/model.go file
+// CreateRoleRequest is the DTO for creating a new role.
+// It matches the data sent by the UI form.
+type CreateRoleRequest struct {
+	RoleName    string `json:"role_name" binding:"required"`
+	Description string `json:"description" binding:"required"`
+	CanRegisterPublicly bool   `json:"can_register_publicly"`
+}
+
+// RoleResponse is the DTO for retrieving a list of roles.
+// It matches the data needed by the "Available Roles" table.
+type RoleResponse struct {
+	ID                  uint   `json:"id"`
+	RoleName            string `json:"role_name"`
+	Description         string `json:"description"`
+	Status              string `json:"status"`
+	CanRegisterPublicly bool   `json:"can_register_publicly"`
+}
+// UpdateRoleRequest is the DTO for updating an existing role.
+type UpdateRoleRequest struct {
+    RoleName            string `json:"role_name"`
+    Description         string `json:"description"`
+    Status              string `json:"status"` // 👈 This is what you need
+    CanRegisterPublicly *bool  `json:"can_register_publicly"`
+}
+
+type UpdateRoleStatusRequest struct {
+	Status string `json:"status" binding:"required"`
 }

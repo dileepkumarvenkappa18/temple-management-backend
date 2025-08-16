@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sharath018/temple-management-backend/internal/auth"
 )
 
 type Handler struct {
@@ -362,4 +363,99 @@ func (h *Handler) GetUserRoles(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": roles})
+}
+
+// =========================== USER ROLES ===========================
+
+// CreateRole handles the creation of a new user role.
+func (h *Handler) CreateRole(c *gin.Context) {
+    var req auth.CreateRoleRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload. Role name and description are required."})
+        return
+    }
+
+    err := h.service.CreateRole(c.Request.Context(), &req)
+    if err != nil {
+        if strings.Contains(err.Error(), "already exists") {
+            c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+            return
+        }
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create role."})
+        return
+    }
+
+    c.JSON(http.StatusCreated, gin.H{"message": "Role created successfully"})
+}
+
+// GetRoles retrieves a list of all active user roles.
+func (h *Handler) GetRoles(c *gin.Context) {
+    roles, err := h.service.GetRoles(c.Request.Context())
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve roles."})
+        return
+    }
+
+    c.JSON(http.StatusOK, roles)
+}
+
+// UpdateRole handles updating a user role.
+// UpdateRole handles updating a user role.
+func (h *Handler) UpdateRole(c *gin.Context) {
+	idStr := c.Param("id")
+	roleID, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid role ID"})
+		return
+	}
+
+	var req auth.UpdateRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload."})
+		return
+	}
+
+	err = h.service.UpdateRole(c.Request.Context(), uint(roleID), &req)
+	if err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update role."})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Role updated successfully"})
+}
+
+// 🎯 NEW: ToggleRoleStatus handles activating/inactivating a user role (PATCH request).
+func (h *Handler) ToggleRoleStatus(c *gin.Context) {
+	idStr := c.Param("id")
+	roleID, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid role ID"})
+		return
+	}
+
+	var req auth.UpdateRoleStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Status is required."})
+		return
+	}
+
+	err = h.service.ToggleRoleStatus(c.Request.Context(), uint(roleID), req.Status)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update role status."})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Role status updated successfully"})
 }

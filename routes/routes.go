@@ -113,6 +113,14 @@ authGroup := api.Group("/auth")
 		
 		// Get all available user roles
 		superadminRoutes.GET("/user-roles", superadminHandler.GetUserRoles)
+
+		// 🆕 Add this route to the superadminRoutes group in routes/routes.go
+        superadminRoutes.GET("/roles", superadminHandler.GetRoles)
+		// 🆕 Add this route to the superadminRoutes group in routes/routes.go
+        superadminRoutes.POST("/roles", superadminHandler.CreateRole)
+		// 🚨 ADD THESE TWO NEW ROUTES
+        superadminRoutes.PUT("/roles/:id", superadminHandler.UpdateRole)
+        superadminRoutes.PATCH("/roles/:id/status", superadminHandler.ToggleRoleStatus)
 	}
 
 	// ========== Seva ==========

@@ -400,3 +400,111 @@ func cleanPhone(raw string) (string, error) {
 
 	return cleaned, nil
 }
+
+// ================== USER ROLES ==================
+
+// CreateRole handles the creation of a new user role.
+func (s *Service) CreateRole(ctx context.Context, req *auth.CreateRoleRequest) error {
+	// 1. Basic validation from the DTO
+	if req.RoleName == "" || req.Description == "" {
+		return errors.New("role name and description are required")
+	}
+
+	// 2. Check for uniqueness using the new repository method
+	exists, err := s.repo.CheckIfRoleNameExists(ctx, req.RoleName)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return errors.New("role name already exists")
+	}
+
+	// 3. Create the UserRole model instance
+	newRole := &auth.UserRole{
+		RoleName:            req.RoleName,
+		Description:         req.Description,
+		CanRegisterPublicly: false, // Defaulting to false as per UI analysis
+		Status:              "active",
+	}
+
+	// 4. Save to the database via the repository
+	return s.repo.CreateUserRole(ctx, newRole)
+}
+
+// GetRoles fetches all active roles for the UI.
+func (s *Service) GetRoles(ctx context.Context) ([]auth.RoleResponse, error) {
+	// 1. Fetch all active roles from the repository
+	roles, err := s.repo.GetAllUserRoles(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Convert the database models to the response DTOs
+	var roleResponses []auth.RoleResponse
+	for _, role := range roles {
+		roleResponses = append(roleResponses, auth.RoleResponse{
+			ID:                  role.ID,
+			RoleName:            role.RoleName,
+			Description:         role.Description,
+			Status:              role.Status,
+			CanRegisterPublicly: role.CanRegisterPublicly,
+		})
+	}
+
+	return roleResponses, nil
+}
+
+// UpdateRole updates an existing user role's details.
+// 🎯 FIX: Changed 'req' type from *auth.CreateRoleRequest to *auth.UpdateRoleRequest
+func (s *Service) UpdateRole(ctx context.Context, roleID uint, req *auth.UpdateRoleRequest) error {
+	role, err := s.repo.GetUserRoleByID(ctx, roleID)
+	if err != nil {
+		return err
+	}
+	if role == nil {
+		return errors.New("role not found")
+	}
+
+	// Update only if provided
+	if req.RoleName != "" && req.RoleName != role.RoleName {
+		exists, err := s.repo.CheckIfRoleNameExists(ctx, req.RoleName)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return errors.New("role name already exists")
+		}
+		role.RoleName = req.RoleName
+	}
+	if req.Description != "" {
+		role.Description = req.Description
+	}
+	if req.CanRegisterPublicly != nil {
+		role.CanRegisterPublicly = *req.CanRegisterPublicly
+	}
+
+	role.UpdatedAt = time.Now()
+
+	return s.repo.UpdateUserRole(ctx, role)
+}
+
+// 🎯 NEW: ToggleRoleStatus specifically handles updating only the status.
+func (s *Service) ToggleRoleStatus(ctx context.Context, roleID uint, status string) error {
+	role, err := s.repo.GetUserRoleByID(ctx, roleID)
+	if err != nil {
+		return err
+	}
+	if role == nil {
+		return errors.New("role not found")
+	}
+
+	// Check if the status is a valid value
+	if status != "active" && status != "inactive" {
+		return errors.New("invalid status provided")
+	}
+
+	role.Status = status
+	role.UpdatedAt = time.Now()
+
+	return s.repo.UpdateUserRole(ctx, role)
+}

@@ -3,6 +3,7 @@ package superadmin
 import (
 	"context"
 	"time"
+	"errors"
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/entity"
@@ -571,4 +572,60 @@ func (r *Repository) UserExistsByEmail(ctx context.Context, email string) (bool,
 	var count int64
 	err := r.db.WithContext(ctx).Model(&auth.User{}).Where("email = ?", email).Count(&count).Error
 	return count > 0, err
+}
+
+
+// =========================== USER ROLES ===========================
+
+// Get all user roles (filtered by active status)
+func (r *Repository) GetAllUserRoles(ctx context.Context) ([]auth.UserRole, error) {
+    var roles []auth.UserRole
+    err := r.db.WithContext(ctx).
+        Where("status = ?", "active").
+        Find(&roles).Error
+    return roles, err
+}
+
+// GetUserRoleByID fetches a single role by its ID
+func (r *Repository) GetUserRoleByID(ctx context.Context, roleID uint) (*auth.UserRole, error) {
+    var role auth.UserRole
+    err := r.db.WithContext(ctx).Where("id = ?", roleID).First(&role).Error
+    if err != nil {
+        if errors.Is(err, gorm.ErrRecordNotFound) {
+            return nil, nil // Return nil if not found, not an error
+        }
+        return nil, err
+    }
+    return &role, nil
+}
+
+// Create a new user role
+func (r *Repository) CreateUserRole(ctx context.Context, role *auth.UserRole) error {
+    return r.db.WithContext(ctx).Create(role).Error
+}
+
+// CheckIfRoleNameExists checks if a role with the given name already exists
+func (r *Repository) CheckIfRoleNameExists(ctx context.Context, roleName string) (bool, error) {
+    var count int64
+    err := r.db.WithContext(ctx).
+        Model(&auth.UserRole{}).
+        Where("role_name = ?", roleName).
+        Count(&count).Error
+    if err != nil {
+        return false, err
+    }
+    return count > 0, nil
+}
+
+// UpdateUserRole saves the provided role object to the database
+func (r *Repository) UpdateUserRole(ctx context.Context, role *auth.UserRole) error {
+    return r.db.WithContext(ctx).Save(role).Error
+}
+
+// DeactivateUserRole updates the status of a role to 'inactive'
+func (r *Repository) DeactivateUserRole(ctx context.Context, roleID uint) error {
+    return r.db.WithContext(ctx).
+        Model(&auth.UserRole{}).
+        Where("id = ?", roleID).
+        Update("status", "inactive").Error
 }
