@@ -43,38 +43,48 @@ class AuthService {
    * Super Admin is not registerable via public flow
    */
   async register(userData) {
-    try {
-      const response = await axios.post(`${API_BASE_URL}/auth/register`, {
-        fullName: userData.fullName,
-        email: userData.email,
-        password: userData.password,
-        phone: userData.phone,
-        role: userData.role // tenant, devotee, volunteer
-      })
-
-      // Handle different registration flows based on role
-      if (userData.role === 'tenant') {
-        // Tenant needs approval - show pending message
-        return {
-          success: true,
-          message: 'Registration received. You\'ll be notified after approval.',
-          needsApproval: true,
-          user: response.data.user
-        }
-      } else {
-        // End users can immediately proceed
-        return {
-          success: true,
-          message: 'Welcome! You can now join a temple and complete your profile.',
-          needsApproval: false,
-          user: response.data.user,
-          token: response.data.token
-        }
-      }
-    } catch (error) {
-      throw this.handleError(error)
+  try {
+    // Build base payload
+    const payload = {
+      fullName: userData.fullName,
+      email: userData.email,
+      password: userData.password,
+      phone: userData.phone,
+      role: userData.role // tenant, devotee, volunteer
     }
+
+    // If the user is a tenant, add temple details
+    if (userData.role === 'tenant') {
+      payload.templeName = userData.templeName || ''
+      payload.templePlace = userData.templePlace || ''
+      payload.templeAddress = userData.templeAddress || ''
+      payload.templePhoneNo = userData.templePhoneNo || ''
+      payload.templeDescription = userData.templeDescription || ''
+    }
+
+    const response = await axios.post(`${API_BASE_URL}/auth/register`, payload)
+
+    // Handle different registration flows based on role
+    if (userData.role === 'tenant') {
+      return {
+        success: true,
+        message: "Registration received. You'll be notified after approval.",
+        needsApproval: true,
+        user: response.data.user
+      }
+    } else {
+      return {
+        success: true,
+        message: 'Welcome! You can now join a temple and complete your profile.',
+        needsApproval: false,
+        user: response.data.user,
+        token: response.data.token
+      }
+    }
+  } catch (error) {
+    throw this.handleError(error)
   }
+}
 
   /**
    * Login user - handles all roles including Super Admin

@@ -116,7 +116,8 @@ const authAPI = {
   register: (userData) => api.post('/v1/auth/register', userData),
   logout: () => api.post('/v1/auth/logout'),
   refreshToken: () => api.post('/v1/auth/refresh'),
-  getProfile: () => api.get('/v1/auth/me')
+  getProfile: () => api.get('/v1/auth/me'),
+  getPublicRoles: () => api.get('/v1/auth/public-roles') // New method
 }
 
 // Temple/Entity endpoints

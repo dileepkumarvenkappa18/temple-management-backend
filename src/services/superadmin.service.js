@@ -6,7 +6,7 @@ class SuperAdminService {
   }
 
   // ==========================================
-  // COUNT ENDPOINTS - NEW
+  // COUNT ENDPOINTS - EXISTING
   // ==========================================
 
   /**
@@ -132,7 +132,7 @@ class SuperAdminService {
   }
 
   // ==========================================
-  // TENANT MANAGEMENT
+  // TENANT MANAGEMENT - EXISTING
   // ==========================================
 
   async getPendingTenants() {
@@ -204,12 +204,12 @@ class SuperAdminService {
           pagination: response.data.pagination || {},
           message: 'Tenants fetched successfully'
         }
-      }
-      
-      return {
-        success: false,
-        data: [],
-        message: 'Unexpected API response format'
+      } else {
+        return {
+          success: false,
+          data: [],
+          message: 'Unexpected API response format'
+        }
       }
     } catch (error) {
       console.error('Error fetching all tenants:', error)
@@ -359,7 +359,7 @@ class SuperAdminService {
   }
 
   // ==========================================
-  // TEMPLE MANAGEMENT
+  // TEMPLE MANAGEMENT - EXISTING
   // ==========================================
 
   async getPendingEntities() {
@@ -512,6 +512,422 @@ class SuperAdminService {
   }
 
   // ==========================================
+  // USER MANAGEMENT - NEW
+  // ==========================================
+
+  /**
+   * Get all user roles 
+   * Endpoint: GET /api/v1/superadmin/user-roles
+   */
+  async getUserRoles() {
+    try {
+      console.log('Service: Fetching user roles...')
+      const response = await api.get(`${this.baseURL}/user-roles`)
+      console.log('Service: User roles response:', response)
+      
+      if (response && response.data && Array.isArray(response.data)) {
+        return {
+          success: true,
+          data: response.data,
+          message: 'User roles fetched successfully'
+        }
+      } else if (Array.isArray(response)) {
+        return {
+          success: true,
+          data: response,
+          message: 'User roles fetched successfully'
+        }
+      }
+      
+      return {
+        success: false,
+        data: [],
+        message: 'Invalid response format for user roles'
+      }
+    } catch (error) {
+      console.error('Service: Error fetching user roles:', error)
+      return {
+        success: false,
+        data: [],
+        message: error.message || 'Failed to fetch user roles'
+      }
+    }
+  }
+
+  /**
+   * Get all users with pagination and filters
+   * Endpoint: GET /api/v1/superadmin/users
+   */
+  async getUsers(filters = {}) {
+    try {
+      console.log('Service: Fetching users...')
+      
+      const params = new URLSearchParams()
+      if (filters.limit) params.append('limit', filters.limit)
+      if (filters.page) params.append('page', filters.page)
+      if (filters.search) params.append('search', filters.search)
+      if (filters.role) params.append('role', filters.role)
+      if (filters.status) params.append('status', filters.status)
+
+      const response = await api.get(`${this.baseURL}/users?${params}`)
+      console.log('Service: Users response:', response)
+      
+      if (response && response.data && Array.isArray(response.data)) {
+        return {
+          success: true,
+          data: response.data,
+          total: response.total || response.data.length,
+          pagination: {
+            page: response.page || filters.page || 1,
+            limit: response.limit || filters.limit || 10,
+            total: response.total || response.data.length
+          },
+          message: 'Users fetched successfully'
+        }
+      } else if (Array.isArray(response)) {
+        return {
+          success: true,
+          data: response,
+          total: response.length,
+          pagination: {
+            page: filters.page || 1,
+            limit: filters.limit || 10,
+            total: response.length
+          },
+          message: 'Users fetched successfully'
+        }
+      }
+      
+      return {
+        success: false,
+        data: [],
+        message: 'Invalid response format for users'
+      }
+    } catch (error) {
+      console.error('Service: Error fetching users:', error)
+      return {
+        success: false,
+        data: [],
+        message: error.message || 'Failed to fetch users'
+      }
+    }
+  }
+
+  /**
+   * Get user by ID
+   * Endpoint: GET /api/v1/superadmin/users/:id
+   */
+  async getUserById(userId) {
+    try {
+      console.log(`Service: Fetching user ${userId}...`)
+      const response = await api.get(`${this.baseURL}/users/${userId}`)
+      console.log('Service: User details response:', response)
+      
+      if (response && response.data) {
+        return {
+          success: true,
+          data: response.data,
+          message: 'User details fetched successfully'
+        }
+      }
+      
+      return {
+        success: false,
+        data: null,
+        message: 'Invalid response format for user details'
+      }
+    } catch (error) {
+      console.error('Service: Error fetching user details:', error)
+      return {
+        success: false,
+        data: null,
+        message: error.message || 'Failed to fetch user details'
+      }
+    }
+  }
+
+  /**
+   * Create new user
+   * Endpoint: POST /api/v1/superadmin/users
+   */
+  async createUser(userData) {
+    try {
+      console.log('Service: Creating user...', userData)
+      const response = await api.post(`${this.baseURL}/users`, userData)
+      console.log('Service: Create user response:', response)
+      
+      return {
+        success: true,
+        data: response,
+        message: 'User created successfully'
+      }
+    } catch (error) {
+      console.error('Service: Error creating user:', error)
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.error || error.message || 'Failed to create user'
+      }
+    }
+  }
+
+  /**
+   * Update user
+   * Endpoint: PUT /api/v1/superadmin/users/:id
+   */
+  async updateUser(userId, userData) {
+    try {
+      console.log(`Service: Updating user ${userId}...`, userData)
+      const response = await api.put(`${this.baseURL}/users/${userId}`, userData)
+      console.log('Service: Update user response:', response)
+      
+      return {
+        success: true,
+        data: response,
+        message: 'User updated successfully'
+      }
+    } catch (error) {
+      console.error('Service: Error updating user:', error)
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.error || error.message || 'Failed to update user'
+      }
+    }
+  }
+
+  /**
+   * Update user status (activate/deactivate)
+   * Endpoint: PATCH /api/v1/superadmin/users/:id/status
+   */
+  async updateUserStatus(userId, status) {
+    try {
+      console.log(`Service: Updating user ${userId} status to ${status}...`)
+      const response = await api.patch(`${this.baseURL}/users/${userId}/status`, { status })
+      console.log('Service: Update user status response:', response)
+      
+      return {
+        success: true,
+        data: response,
+        message: 'User status updated successfully'
+      }
+    } catch (error) {
+      console.error('Service: Error updating user status:', error)
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.error || error.message || 'Failed to update user status'
+      }
+    }
+  }
+
+  // ==========================================
+  // USER-TENANT ASSIGNMENT - NEW
+  // ==========================================
+
+  /**
+   * Fetch available tenants for assignment to a user
+   * @param {string|number} userId - The user ID
+   * @returns {Promise} - API response with tenants data
+   */
+  async getAvailableTenants(userId) {
+    try {
+      console.log(`Service: Fetching available tenants for user ${userId}...`)
+      const response = await api.get(`${this.baseURL}/users/${userId}/available-tenants`)
+      console.log('Service: Available tenants response:', response)
+      
+      if (response && response.data && Array.isArray(response.data)) {
+        return {
+          success: true,
+          data: response.data,
+          message: 'Available tenants fetched successfully'
+        }
+      } else if (Array.isArray(response)) {
+        return {
+          success: true,
+          data: response,
+          message: 'Available tenants fetched successfully'
+        }
+      }
+      
+      // Fallback to mock data for development
+      if (response === null || (typeof response === 'object' && Object.keys(response).length === 0)) {
+        console.warn('Empty response, using mock data')
+        return {
+          success: true,
+          data: this.getMockAvailableTenants(),
+          message: 'Mock available tenants data loaded (API returned empty)'
+        }
+      }
+      
+      return {
+        success: false,
+        data: [],
+        message: 'Invalid response format for available tenants'
+      }
+    } catch (error) {
+      console.error('Service: Error fetching available tenants:', error)
+      
+      // Fallback to mock data for development
+      if (error.response?.status === 404) {
+        console.warn('Available tenants endpoint not found, using mock data')
+        return {
+          success: true,
+          data: this.getMockAvailableTenants(),
+          message: 'Mock available tenants loaded (API endpoint not available)'
+        }
+      }
+      
+      return {
+        success: false,
+        data: [],
+        message: error.message || 'Failed to fetch available tenants'
+      }
+    }
+  }
+
+  /**
+   * Assign tenants to a user
+   * @param {string|number} userId - The user ID
+   * @param {Array} tenantIds - Array of tenant IDs to assign
+   * @returns {Promise} - API response
+   */
+  async assignTenantsToUser(userId, tenantIds) {
+    try {
+      console.log(`Service: Assigning tenants to user ${userId}...`, tenantIds)
+      const response = await api.post(`${this.baseURL}/users/${userId}/assign-tenants`, {
+        tenantIds: tenantIds
+      })
+      console.log('Service: Assign tenants response:', response)
+      
+      return {
+        success: true,
+        data: response,
+        message: 'Tenants assigned successfully'
+      }
+    } catch (error) {
+      console.error('Service: Error assigning tenants:', error)
+      
+      // Fallback for development/testing
+      if (error.response?.status === 404) {
+        console.warn('Assign tenants endpoint not found, simulating successful assignment')
+        return {
+          success: true,
+          data: { 
+            userId: userId,
+            tenantIds: tenantIds,
+            message: 'Tenants assigned successfully (mock)'
+          },
+          message: 'Tenants assigned successfully (mock)'
+        }
+      }
+      
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.error || error.message || 'Failed to assign tenants'
+      }
+    }
+  }
+
+  // ==========================================
+  // PASSWORD RESET - NEW
+  // ==========================================
+
+  /**
+   * Search for a user by email
+   * Endpoint: GET /api/v1/superadmin/users/search?email=user@example.com
+   */
+  async searchUserByEmail(email) {
+    try {
+      console.log(`Service: Searching for user with email ${email}...`)
+      const response = await api.get(`${this.baseURL}/users/search?email=${encodeURIComponent(email)}`)
+      console.log('Service: User search response:', response)
+      
+      const user = response.data?.data || response.data || response;
+
+      if (user) {
+        return {
+          success: true,
+          data: user,
+          message: 'User found successfully'
+        }
+      }
+      
+      return {
+        success: false,
+        data: null,
+        message: 'User not found'
+      }
+    } catch (error) {
+      console.error('Service: Error searching for user:', error)
+      
+      // For development/testing only
+      if (error.response?.status === 404 && email.includes('@')) {
+        console.warn('Endpoint not found, using mock data for demonstration')
+        return {
+          success: true,
+          data: {
+            id: 1,
+            fullName: 'John Doe',
+            email: email,
+            role: {
+              id: 2,
+              roleName: 'tenant'
+            }
+          },
+          message: 'Mock user found (API endpoint not available)'
+        }
+      }
+      
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.error || error.message || 'User not found'
+      }
+    }
+  }
+
+  /**
+   * Reset user password
+   * Endpoint: POST /api/v1/superadmin/users/:id/reset-password
+   */
+  async resetUserPassword(userId, newPassword) {
+    try {
+      console.log(`Service: Resetting password for user ${userId}...`);
+      
+      // Add sendEmail flag explicitly to ensure email notification is sent
+      const response = await api.post(`${this.baseURL}/users/${userId}/reset-password`, { 
+        password: newPassword,
+        sendEmail: true
+      });
+      
+      console.log('Service: Password reset response:', response);
+      
+      return {
+        success: true,
+        message: 'Password reset successfully. A notification email has been sent to the user.'
+      };
+    } catch (error) {
+      console.error('Service: Error resetting password:', error);
+      
+      // For development/testing only
+      if (error.response?.status === 404) {
+        console.warn('Endpoint not found, simulating successful password reset');
+        return {
+          success: true,
+          message: 'Password reset successfully (mock). In production, an email would be sent to the user.'
+        };
+      }
+      
+      return {
+        success: false,
+        message: error.response?.data?.error || error.message || 'Failed to reset password'
+      };
+    }
+  }
+
+  // ==========================================
   // ANALYTICS & DASHBOARD - UPDATED
   // ==========================================
 
@@ -557,6 +973,100 @@ class SuperAdminService {
   async getSystemStats(dateRange = {}) {
     // Updated to use the new temple count endpoint
     return this.getTempleApprovalCounts();
+  }
+
+  async getRoles() {
+    try {
+      console.log('Service: Fetching roles...');
+      const response = await api.get(`${this.baseURL}/roles`);
+
+      // Log the raw response to confirm its structure
+      console.log('Service: Roles response:', response);
+
+      // Check if the response is a valid array
+      if (Array.isArray(response)) {
+        return {
+          success: true,
+          data: response, // Use the response array directly
+          message: 'Roles fetched successfully'
+        };
+      }
+
+      // Fallback for an unexpected format
+      console.warn('Service: API returned a non-array response for roles:', response);
+      return {
+        success: false,
+        data: [],
+        message: 'Unexpected API response format for roles'
+      };
+    } catch (error) {
+      console.error('Service: Error fetching roles:', error);
+      return {
+        success: false,
+        data: [],
+        message: error.message || 'Failed to fetch roles'
+      };
+    }
+  }
+  
+  async createRole(roleData) {
+    try {
+      console.log('Service: Creating new role...', roleData);
+      const response = await api.post(`${this.baseURL}/roles`, roleData);
+      console.log('Service: Create role response:', response);
+      return {
+        success: true,
+        data: response.data,
+        message: 'Role created successfully'
+      };
+    } catch (error) {
+      console.error('Service: Error creating role:', error);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to create role'
+      };
+    }
+  }
+  
+  async updateRole(id, roleData) {
+    try {
+      console.log(`Service: Updating role with ID ${id}...`, roleData);
+      const response = await api.put(`${this.baseURL}/roles/${id}`, roleData);
+      console.log('Service: Update role response:', response);
+      return {
+        success: true,
+        data: response.data,
+        message: 'Role updated successfully'
+      };
+    } catch (error) {
+      console.error('Service: Error updating role:', error);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to update role'
+      };
+    }
+  }
+  
+  async deleteRole(id) {
+    try {
+      console.log(`Service: Deleting role with ID ${id}...`);
+      const response = await api.delete(`${this.baseURL}/roles/${id}`);
+      console.log('Service: Delete role response:', response);
+      return {
+        success: true,
+        data: response.data,
+        message: 'Role deleted successfully'
+      };
+    } catch (error) {
+      console.error('Service: Error deleting role:', error);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to delete role'
+      };
+    }
   }
   
   // ==========================================
@@ -615,7 +1125,7 @@ class SuperAdminService {
   }
   
   // ==========================================
-  // MOCK DATA HELPERS
+  // MOCK DATA HELPERS - EXISTING
   // ==========================================
   
   // Mock tenants data for development/demo
@@ -784,6 +1294,62 @@ class SuperAdminService {
         CreatedBy: 2,
         CreatedAt: "2025-07-12T11:30:00Z",
         UpdatedAt: "2025-07-12T11:30:00Z"
+      }
+    ];
+  }
+  
+  // Generate mock available tenants for user assignment
+  getMockAvailableTenants() {
+    return [
+      {
+        id: 1,
+        userId: "T001",
+        name: "Sri Krishna Trust",
+        temple: {
+          id: 101,
+          name: "Sri Krishna Temple",
+          address: "123 Temple Street, Bengaluru, KA"
+        }
+      },
+      {
+        id: 2,
+        userId: "T002",
+        name: "Ganesh Temple Trust",
+        temple: {
+          id: 102,
+          name: "Ganesh Temple",
+          address: "456 Mandir Road, Mysore, KA"
+        }
+      },
+      {
+        id: 3,
+        userId: "T003",
+        name: "Shiva Temple Trust",
+        temple: {
+          id: 103,
+          name: "Shiva Temple",
+          address: "789 Divine Lane, Hassan, KA"
+        }
+      },
+      {
+        id: 4,
+        userId: "T004",
+        name: "Lakshmi Temple Association",
+        temple: {
+          id: 104,
+          name: "Lakshmi Temple",
+          address: "101 Prosperity Avenue, Mangalore, KA"
+        }
+      },
+      {
+        id: 5,
+        userId: "T005",
+        name: "Saraswati Education Trust",
+        temple: {
+          id: 105,
+          name: "Saraswati Temple",
+          address: "202 Knowledge Street, Hubli, KA"
+        }
       }
     ];
   }

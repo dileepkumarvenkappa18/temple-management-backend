@@ -7,6 +7,10 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
   const tenants = ref([])
   const pendingEntities = ref([])
   
+  // NEW: User Management State
+  const users = ref([])
+  const userRoles = ref([])
+  
   // NEW: Separate count states for better tracking
   const tenantCounts = ref({
     pending: 0,
@@ -34,15 +38,25 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
   const loadingTenants = ref(false)
   const loadingEntities = ref(false)
   const loadingStats = ref(false)
-  const loadingTenantCounts = ref(false) // NEW
-  const loadingTempleCounts = ref(false) // NEW
+  const loadingTenantCounts = ref(false)
+  const loadingTempleCounts = ref(false)
+  
+  // NEW: User Management Loading States
+  const loadingUsers = ref(false)
+  const loadingUserRoles = ref(false)
+  const loadingUserAction = ref(false) // For create/update/delete operations
   
   // Error states
   const tenantError = ref(null)
   const entityError = ref(null)
   const statsError = ref(null)
-  const tenantCountsError = ref(null) // NEW
-  const templeCountsError = ref(null) // NEW
+  const tenantCountsError = ref(null)
+  const templeCountsError = ref(null)
+  
+  // NEW: User Management Error States
+  const userError = ref(null)
+  const userRolesError = ref(null)
+  const userActionError = ref(null)
   
   // Getters
   const pendingTenants = computed(() => 
@@ -76,6 +90,27 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
   const templeActiveCount = computed(() => templeCounts.value.activeTemples)
   const templeRejectedCount = computed(() => templeCounts.value.rejectedTemples)
   const totalUsersCount = computed(() => templeCounts.value.totalUsers)
+  
+  // NEW: User Management Getters
+  const activeUsers = computed(() => 
+    users.value.filter(u => u.status === 'active')
+  )
+  
+  const inactiveUsers = computed(() => 
+    users.value.filter(u => u.status === 'inactive')
+  )
+  
+  const usersByRole = computed(() => {
+    const roleGroups = {}
+    users.value.forEach(user => {
+      const roleName = user.role?.role_name || 'unknown'
+      if (!roleGroups[roleName]) {
+        roleGroups[roleName] = []
+      }
+      roleGroups[roleName].push(user)
+    })
+    return roleGroups
+  })
   
   // Actions
 
@@ -331,6 +366,210 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
     }
   }
 
+  // ==========================================
+  // NEW: USER MANAGEMENT ACTIONS
+  // ==========================================
+
+  // Fetch user roles
+  async function fetchUserRoles() {
+    loadingUserRoles.value = true
+    userRolesError.value = null
+    
+    try {
+      console.log('Store: Fetching user roles...')
+      const response = await superAdminService.getUserRoles()
+      
+      if (response.success && Array.isArray(response.data)) {
+        userRoles.value = response.data
+        console.log('Store: User roles loaded:', userRoles.value)
+      } else {
+        userRoles.value = []
+        userRolesError.value = response.message || 'No user roles available'
+      }
+    } catch (error) {
+      console.error('Store: Error fetching user roles:', error)
+      userRolesError.value = error.message
+      userRoles.value = []
+    } finally {
+      loadingUserRoles.value = false
+    }
+  }
+
+  // Fetch users with optional filters
+  async function fetchUsers(filters = {}) {
+    loadingUsers.value = true
+    userError.value = null
+    
+    try {
+      console.log('Store: Fetching users with filters:', filters)
+      const response = await superAdminService.getUsers(filters)
+      
+      if (response.success && Array.isArray(response.data)) {
+        users.value = response.data
+        console.log('Store: Users loaded:', users.value.length, 'users')
+      } else {
+        users.value = []
+        userError.value = response.message || 'No users available'
+      }
+    } catch (error) {
+      console.error('Store: Error fetching users:', error)
+      userError.value = error.message
+      users.value = []
+    } finally {
+      loadingUsers.value = false
+    }
+  }
+
+  // Get user by ID
+  async function fetchUserById(userId) {
+    loadingUserAction.value = true
+    userActionError.value = null
+    
+    try {
+      console.log('Store: Fetching user by ID:', userId)
+      const response = await superAdminService.getUserById(userId)
+      
+      if (response.success && response.data) {
+        return {
+          success: true,
+          data: response.data
+        }
+      } else {
+        return {
+          success: false,
+          error: response.message || 'User not found'
+        }
+      }
+    } catch (error) {
+      console.error('Store: Error fetching user by ID:', error)
+      userActionError.value = error.message
+      return {
+        success: false,
+        error: error.message
+      }
+    } finally {
+      loadingUserAction.value = false
+    }
+  }
+
+  // Create new user
+  async function createUser(userData) {
+    loadingUserAction.value = true
+    userActionError.value = null
+    
+    try {
+      console.log('Store: Creating user:', userData)
+      const response = await superAdminService.createUser(userData)
+      
+      if (response.success) {
+        // Refresh user list after successful creation
+        await fetchUsers()
+        
+        return {
+          success: true,
+          message: 'User created successfully'
+        }
+      } else {
+        userActionError.value = response.message
+        return {
+          success: false,
+          error: response.message
+        }
+      }
+    } catch (error) {
+      console.error('Store: Error creating user:', error)
+      userActionError.value = error.message
+      return {
+        success: false,
+        error: error.message
+      }
+    } finally {
+      loadingUserAction.value = false
+    }
+  }
+
+  // Update user
+  async function updateUser(userId, userData) {
+    loadingUserAction.value = true
+    userActionError.value = null
+    
+    try {
+      console.log('Store: Updating user:', userId, userData)
+      const response = await superAdminService.updateUser(userId, userData)
+      
+      if (response.success) {
+        // Update local state
+        const userIndex = users.value.findIndex(u => u.id === userId)
+        if (userIndex !== -1) {
+          // Refetch user data to ensure we have latest data
+          const userResponse = await superAdminService.getUserById(userId)
+          if (userResponse.success) {
+            users.value[userIndex] = userResponse.data
+          }
+        }
+        
+        return {
+          success: true,
+          message: 'User updated successfully'
+        }
+      } else {
+        userActionError.value = response.message
+        return {
+          success: false,
+          error: response.message
+        }
+      }
+    } catch (error) {
+      console.error('Store: Error updating user:', error)
+      userActionError.value = error.message
+      return {
+        success: false,
+        error: error.message
+      }
+    } finally {
+      loadingUserAction.value = false
+    }
+  }
+
+  // Update user status
+  async function updateUserStatus(userId, status) {
+    loadingUserAction.value = true
+    userActionError.value = null
+    
+    try {
+      console.log('Store: Updating user status:', userId, status)
+      const response = await superAdminService.updateUserStatus(userId, status)
+      
+      if (response.success) {
+        // Update local state
+        const userIndex = users.value.findIndex(u => u.id === userId)
+        if (userIndex !== -1) {
+          users.value[userIndex].status = status
+        }
+        
+        return {
+          success: true,
+          message: `User status updated to ${status}`
+        }
+      } else {
+        userActionError.value = response.message
+        return {
+          success: false,
+          error: response.message
+        }
+      }
+    } catch (error) {
+      console.error('Store: Error updating user status:', error)
+      userActionError.value = error.message
+      return {
+        success: false,
+        error: error.message
+      }
+    } finally {
+      loadingUserAction.value = false
+    }
+  }
+
   // UPDATED: Initialize with new count fetching
   function initialize() {
     // Fetch counts first (most important for dashboard)
@@ -339,6 +578,10 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
     // Then fetch detailed data
     fetchTenants()
     fetchPendingEntities()
+    
+    // NEW: Initialize user management data
+    fetchUserRoles()
+    fetchUsers()
   }
 
   // NEW: Refresh all counts
@@ -349,27 +592,49 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
     ])
   }
 
+  // NEW: Refresh all user data
+  async function refreshUserData() {
+    await Promise.all([
+      fetchUserRoles(),
+      fetchUsers()
+    ])
+  }
+
   return {
     // State
     tenants,
     pendingEntities,
     stats, // Legacy compatibility
-    tenantCounts, // NEW
-    templeCounts, // NEW
+    tenantCounts,
+    templeCounts,
+    
+    // NEW: User Management State
+    users,
+    userRoles,
     
     // Loading states
     loadingTenants,
     loadingEntities,
     loadingStats,
-    loadingTenantCounts, // NEW
-    loadingTempleCounts, // NEW
+    loadingTenantCounts,
+    loadingTempleCounts,
+    
+    // NEW: User Management Loading States
+    loadingUsers,
+    loadingUserRoles,
+    loadingUserAction,
     
     // Error states
     tenantError,
     entityError,
     statsError,
-    tenantCountsError, // NEW
-    templeCountsError, // NEW
+    tenantCountsError,
+    templeCountsError,
+    
+    // NEW: User Management Error States
+    userError,
+    userRolesError,
+    userActionError,
     
     // Getters
     pendingTenants,
@@ -378,22 +643,38 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
     pendingCount,
     activeCount,
     rejectedCount,
-    templePendingCount, // NEW
-    templeActiveCount, // NEW
-    templeRejectedCount, // NEW
-    totalUsersCount, // NEW
+    templePendingCount,
+    templeActiveCount,
+    templeRejectedCount,
+    totalUsersCount,
+    
+    // NEW: User Management Getters
+    activeUsers,
+    inactiveUsers,
+    usersByRole,
     
     // Actions
     fetchTenants,
     fetchPendingEntities,
-    fetchStats, // UPDATED to use new endpoints
-    fetchTenantCounts, // NEW
-    fetchTempleCounts, // NEW
-    refreshCounts, // NEW
-    approveTenant, // UPDATED to refresh counts
-    rejectTenant, // UPDATED to refresh counts
-    approveEntity, // NEW
-    rejectEntity, // NEW
-    initialize // UPDATED
+    fetchStats,
+    fetchTenantCounts,
+    fetchTempleCounts,
+    refreshCounts,
+    approveTenant,
+    rejectTenant,
+    approveEntity,
+    rejectEntity,
+    
+    // NEW: User Management Actions
+    fetchUserRoles,
+    fetchUsers,
+    fetchUserById,
+    createUser,
+    updateUser,
+    updateUserStatus,
+    refreshUserData,
+    
+    initialize // UPDATED to include user management
   }
 })
+

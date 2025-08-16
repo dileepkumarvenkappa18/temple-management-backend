@@ -9,9 +9,9 @@
       <!-- User Avatar -->
       <div class="relative">
         <img
-          v-if="user?.avatar"
-          :src="user.avatar"
-          :alt="user.name"
+          v-if="currentUser?.avatar"
+          :src="currentUser.avatar"
+          :alt="currentUser.name || currentUser.fullName"
           class="w-8 h-8 rounded-full object-cover ring-2 ring-white shadow-sm"
         >
         <div
@@ -19,7 +19,7 @@
           class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center shadow-sm"
         >
           <span class="text-white text-sm font-semibold">
-            {{ getInitials(user?.name) }}
+            {{ getInitials(currentUser?.name || currentUser?.fullName) }}
           </span>
         </div>
         
@@ -29,8 +29,8 @@
 
       <!-- User Info (Hidden on mobile) -->
       <div class="hidden sm:block text-left">
-        <p class="text-gray-900 font-medium">{{ user?.name || 'User' }}</p>
-        <p class="text-gray-500 text-xs capitalize">{{ getRoleDisplayName(role) }}</p>
+        <p class="text-gray-900 font-medium">{{ currentUser?.name || currentUser?.fullName || 'User' }}</p>
+        <p class="text-gray-500 text-xs capitalize">{{ getCurrentRoleDisplayName() }}</p>
       </div>
 
       <!-- Dropdown Arrow -->
@@ -56,9 +56,9 @@
           <!-- Larger Avatar -->
           <div class="relative">
             <img
-              v-if="user?.avatar"
-              :src="user.avatar"
-              :alt="user.name"
+              v-if="currentUser?.avatar"
+              :src="currentUser.avatar"
+              :alt="currentUser.name || currentUser.fullName"
               class="w-12 h-12 rounded-full object-cover ring-3 ring-white shadow-lg"
             >
             <div
@@ -66,18 +66,18 @@
               class="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center shadow-lg"
             >
               <span class="text-white text-lg font-semibold">
-                {{ getInitials(user?.name) }}
+                {{ getInitials(currentUser?.name || currentUser?.fullName) }}
               </span>
             </div>
             <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full ring-2 ring-white"></div>
           </div>
           
           <div class="flex-1 min-w-0">
-            <h3 class="text-lg font-semibold text-gray-900 truncate">{{ user?.name || 'User' }}</h3>
-            <p class="text-sm text-gray-600">{{ user?.email || 'user@example.com' }}</p>
+            <h3 class="text-lg font-semibold text-gray-900 truncate">{{ currentUser?.name || currentUser?.fullName || 'User' }}</h3>
+            <p class="text-sm text-gray-600">{{ currentUser?.email || 'user@example.com' }}</p>
             <div class="flex items-center mt-1">
               <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 capitalize">
-                {{ getRoleDisplayName(role) }}
+                {{ getCurrentRoleDisplayName() }}
               </span>
             </div>
           </div>
@@ -157,18 +157,6 @@
           Help & Support
         </router-link>
 
-        <!-- Keyboard Shortcuts -->
-        <!-- <button
-          @click="showKeyboardShortcuts = true; closeDropdown()"
-          class="w-full flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 hover:text-indigo-600 transition-colors duration-200"
-        >
-          <svg class="mr-3 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-          </svg>
-          Keyboard Shortcuts
-          <span class="ml-auto text-xs text-gray-400">⌘K</span>
-        </button> -->
-
         <div class="border-t border-gray-200 my-2"></div>
 
         <!-- Logout -->
@@ -194,10 +182,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
-// Props
+// Props (keeping for backward compatibility, but auth store takes precedence)
 const props = defineProps({
   user: {
     type: Object,
@@ -214,6 +203,11 @@ const emit = defineEmits(['logout'])
 
 // Composables
 const route = useRoute()
+const authStore = useAuthStore()
+
+// Use auth store data with props as fallback
+const currentUser = computed(() => authStore.user || props.user)
+const currentRole = computed(() => authStore.userRole || props.role)
 
 // Reactive data
 const isOpen = ref(false)
@@ -239,21 +233,42 @@ const getInitials = (name) => {
     .slice(0, 2)
 }
 
-const getRoleDisplayName = (role) => {
+// Updated role display function to handle all possible role values
+const getCurrentRoleDisplayName = () => {
+  const role = currentRole.value
+  
   const roleNames = {
+    // Backend role names
+    'superadmin': 'Super Admin',
+    'super_admin': 'Super Admin',
+    'templeadmin': 'Temple Admin',
     'tenant': 'Temple Admin',
-    'entity_admin': 'Temple Manager',
     'devotee': 'Devotee',
     'volunteer': 'Volunteer',
-    'super_admin': 'Super Admin'
+    
+    // Legacy role names (for backward compatibility)
+    'entity_admin': 'Temple Manager',
+    
+    // Numeric role IDs (if needed)
+    '1': 'Super Admin',
+    '2': 'Temple Admin', 
+    '3': 'Devotee',
+    '4': 'Volunteer'
   }
+  
   return roleNames[role] || 'User'
 }
 
 const getProfileLink = () => {
   const entityId = route.params.entityId
-  switch (props.role) {
+  const role = currentRole.value
+  
+  switch (role) {
+    case 'superadmin':
+    case 'super_admin':
+      return '/superadmin/profile'
     case 'tenant':
+    case 'templeadmin':
       return '/tenant/profile'
     case 'entity_admin':
       return `/entity/${entityId}/profile`
@@ -268,8 +283,14 @@ const getProfileLink = () => {
 
 const getSettingsLink = () => {
   const entityId = route.params.entityId
-  switch (props.role) {
+  const role = currentRole.value
+  
+  switch (role) {
+    case 'superadmin':
+    case 'super_admin':
+      return '/superadmin/settings'
     case 'tenant':
+    case 'templeadmin':
       return '/tenant/settings'
     case 'entity_admin':
       return `/entity/${entityId}/settings`
@@ -288,7 +309,13 @@ const toggleNotifications = () => {
 
 const handleLogout = () => {
   closeDropdown()
-  emit('logout')
+  
+  // Use auth store logout if available, otherwise emit
+  if (authStore.logout) {
+    authStore.logout()
+  } else {
+    emit('logout')
+  }
 }
 
 // Click outside handler

@@ -10,7 +10,7 @@
     <div class="bg-gray-100 p-4 rounded-lg mb-4 text-xs font-mono overflow-auto max-h-40" v-if="debugMode">
       <div class="mb-2 font-bold">Debug Information:</div>
       <div v-if="selectedTenant">Selected Tenant: ID={{ selectedTenant.id || selectedTenant.ID }}, Name={{ getTenantName(selectedTenant) }}</div>
-      <div>Tenant Count: {{ allTenants.length }}</div>
+      <div>Tenant Count: {{ Array.isArray(allTenants) ? allTenants.length : 0 }}</div>
       <div class="mt-2 flex gap-2">
         <button @click="debugTenantData" class="px-3 py-1 bg-gray-200 rounded text-xs">Run API Debug</button>
       </div>
@@ -71,7 +71,7 @@
     </div>
 
     <!-- Tenant Applications List -->
-    <div v-if="!loading && filteredTenants.length > 0" class="space-y-4">
+    <div v-if="!loading && Array.isArray(filteredTenants) && filteredTenants.length > 0" class="space-y-4">
       <div
         v-for="(tenant, idx) in paginatedTenants"
         :key="tenant.id || tenant.ID || idx"
@@ -118,37 +118,52 @@
           </div>
 
           <!-- Action Buttons -->
-          <div v-if="isStatusPending(tenant)" class="flex flex-col sm:flex-row gap-3">
+          <div class="flex flex-col sm:flex-row gap-3">
+            <!-- View Details Button (Always visible) -->
             <button
-              @click="handleApprove(tenant)"
-              class="flex-1 sm:flex-none px-6 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-              :disabled="isProcessing"
+              @click="handleViewDetails(tenant)"
+              class="flex-1 sm:flex-none px-6 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
             >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
               </svg>
-              {{ isProcessing ? 'Processing...' : 'Approve' }}
+              View Details
             </button>
             
-            <button
-              @click="handleRejectClick(tenant)"
-              class="flex-1 sm:flex-none px-6 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-              :disabled="isProcessing"
-            >
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-              </svg>
-              {{ isProcessing ? 'Processing...' : 'Reject' }}
-            </button>
-            
-            <!-- Direct API call debug button (remove in production) -->
-            <button 
-              v-if="debugMode"
-              @click="testApprovalApi(tenant)"
-              class="flex-1 sm:flex-none px-6 py-2 bg-gray-600 text-white text-sm font-medium rounded-xl flex items-center justify-center gap-2"
-            >
-              Test API Call
-            </button>
+            <!-- Approval/Rejection Buttons (Only for pending tenants) -->
+            <div v-if="isStatusPending(tenant)" class="flex flex-col sm:flex-row gap-3 flex-1">
+              <button
+                @click="handleApprove(tenant)"
+                class="flex-1 sm:flex-none px-6 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+                :disabled="isProcessing"
+              >
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+                {{ isProcessing ? 'Processing...' : 'Approve' }}
+              </button>
+              
+              <button
+                @click="handleRejectClick(tenant)"
+                class="flex-1 sm:flex-none px-6 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+                :disabled="isProcessing"
+              >
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+                {{ isProcessing ? 'Processing...' : 'Reject' }}
+              </button>
+              
+              <!-- Direct API call debug button (remove in production) -->
+              <button 
+                v-if="debugMode"
+                @click="testApprovalApi(tenant)"
+                class="flex-1 sm:flex-none px-6 py-2 bg-gray-600 text-white text-sm font-medium rounded-xl flex items-center justify-center gap-2"
+              >
+                Test API Call
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -158,7 +173,7 @@
         <div class="text-sm text-gray-700 mb-3 sm:mb-0">
           Showing <span class="font-medium">{{ paginationStart }}</span> to 
           <span class="font-medium">{{ paginationEnd }}</span> of 
-          <span class="font-medium">{{ filteredTenants.length }}</span> results
+          <span class="font-medium">{{ Array.isArray(filteredTenants) ? filteredTenants.length : 0 }}</span> results
         </div>
         
         <div class="flex space-x-2">
@@ -244,6 +259,146 @@
       </div>
     </div>
 
+    <!-- Tenant Details Modal -->
+    <div v-if="showDetailsModal" class="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center">
+      <div class="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-auto">
+        <div class="flex justify-between items-center border-b border-gray-200 pb-4 mb-5">
+          <h3 class="text-xl font-bold text-gray-900">Tenant Details</h3>
+          <button 
+            @click="showDetailsModal = false"
+            class="text-gray-400 hover:text-gray-600"
+          >
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <div v-if="selectedTenant" class="space-y-5">
+          <!-- Basic Info -->
+          <div>
+            <div class="flex items-center gap-4 mb-4">
+              <div class="h-16 w-16 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                <span class="text-indigo-600 font-semibold text-2xl">
+                  {{ getTenantInitial(selectedTenant) }}
+                </span>
+              </div>
+              <div>
+                <h4 class="text-xl font-semibold text-gray-900">
+                  {{ getTenantName(selectedTenant) }}
+                </h4>
+                <p class="text-gray-600">{{ getTenantEmail(selectedTenant) }}</p>
+              </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- First Column -->
+              <div class="space-y-4">
+                <div class="border-b border-gray-100 pb-3">
+                  <div class="text-sm font-medium text-gray-500">Status</div>
+                  <div class="text-base text-gray-900 mt-1">
+                    <span :class="getStatusBadgeClass(selectedTenant.status || selectedTenant.Status)" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium">
+                      {{ selectedTenant.status || selectedTenant.Status || 'pending' }}
+                    </span>
+                  </div>
+                </div>
+                
+                <div class="border-b border-gray-100 pb-3">
+                  <div class="text-sm font-medium text-gray-500">Application Date</div>
+                  <div class="text-base text-gray-900 mt-1">
+                    {{ formatDate(selectedTenant.created_at || selectedTenant.CreatedAt) }}
+                  </div>
+                </div>
+                
+                <div class="border-b border-gray-100 pb-3">
+                  <div class="text-sm font-medium text-gray-500">Phone Number</div>
+                  <div class="text-base text-gray-900 mt-1">
+                    {{ selectedTenant.phone || selectedTenant.Phone || 'Not provided' }}
+                  </div>
+                </div>
+                
+                <div class="border-b border-gray-100 pb-3">
+                  <div class="text-sm font-medium text-gray-500">User ID</div>
+                  <div class="text-base text-gray-900 mt-1">
+                    {{ selectedTenant.id || selectedTenant.ID || 'Not available' }}
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Second Column - FIXED TEMPLE DETAILS -->
+              <div class="space-y-4">
+                <div class="border-b border-gray-100 pb-3">
+                  <div class="text-sm font-medium text-gray-500">Temple Name</div>
+                  <div class="text-base text-gray-900 mt-1">
+                    {{ getTempleDetail(selectedTenant, 'temple_name') }}
+                  </div>
+                </div>
+                
+                <div class="border-b border-gray-100 pb-3">
+                  <div class="text-sm font-medium text-gray-500">Temple Location</div>
+                  <div class="text-base text-gray-900 mt-1">
+                    {{ getTempleDetail(selectedTenant, 'temple_place') }}
+                  </div>
+                </div>
+                
+                <div class="border-b border-gray-100 pb-3">
+                  <div class="text-sm font-medium text-gray-500">Temple Address</div>
+                  <div class="text-base text-gray-900 mt-1">
+                    {{ getTempleDetail(selectedTenant, 'temple_address') }}
+                  </div>
+                </div>
+                
+                <div class="border-b border-gray-100 pb-3">
+                  <div class="text-sm font-medium text-gray-500">Temple Phone</div>
+                  <div class="text-base text-gray-900 mt-1">
+                    {{ getTempleDetail(selectedTenant, 'temple_phone_no') }}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Description Section - FIXED -->
+            <div class="mt-5 border-t border-gray-100 pt-4">
+              <div class="text-sm font-medium text-gray-500 mb-2">Temple Description</div>
+              <div class="text-base text-gray-900 bg-gray-50 p-4 rounded-lg">
+                {{ getTempleDescription(selectedTenant) }}
+              </div>
+            </div>
+
+            <!-- Debug Section -->
+            <div v-if="debugMode" class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+              <button 
+                @click="debugTenantDetails(selectedTenant)"
+                class="px-3 py-1 bg-yellow-200 hover:bg-yellow-300 text-yellow-800 rounded text-sm"
+              >
+                Debug Temple Details
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
+          <button 
+            @click="showDetailsModal = false"
+            class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg"
+          >
+            Close
+          </button>
+          
+          <div v-if="isStatusPending(selectedTenant)">
+            <button
+              @click="handleApproveFromDetails"
+              class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50"
+              :disabled="isProcessing"
+            >
+              {{ isProcessing ? 'Processing...' : 'Approve' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- API Debug Modal -->
     <div v-if="showApiDebugModal" class="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center">
       <div class="bg-white rounded-xl p-6 w-full max-w-3xl mx-4 max-h-[80vh] overflow-auto">
@@ -274,7 +429,7 @@ export default {
   name: 'TenantApprovals',
   emits: ['updated'],
   setup(props, { emit }) {
-    // Data
+    // Data - FIXED initialization
     const loading = ref(true)
     const tenants = ref([])
     const allTenants = ref([]) // Store all tenants for "View All" functionality
@@ -291,6 +446,9 @@ export default {
     const selectedTenant = ref(null)
     const rejectReason = ref('')
     
+    // Details modal
+    const showDetailsModal = ref(false)
+    
     // Filters
     const statusFilter = ref('')
     
@@ -298,17 +456,104 @@ export default {
     const currentPage = ref(1)
     const itemsPerPage = ref(5)
     
-    // Computed properties
+    // ==================== NEW TEMPLE DETAILS HELPERS ====================
+    
+    // Helper methods for temple details - FIXED to access nested temple_details
+    const getTempleDetail = (tenant, field, fallback = 'Not provided') => {
+      if (!tenant) return fallback;
+      
+      // Check if temple_details exists and has the field
+      if (tenant.temple_details && tenant.temple_details[field]) {
+        return tenant.temple_details[field];
+      }
+      
+      // Fallback to direct property access (for backward compatibility)
+      if (tenant[field]) {
+        return tenant[field];
+      }
+      
+      // Check different case variations
+      const variations = [
+        field,
+        field.toLowerCase(),
+        field.toUpperCase(),
+        // Convert snake_case to camelCase
+        field.replace(/_([a-z])/g, (match, letter) => letter.toUpperCase()),
+        // Convert camelCase to PascalCase
+        field.charAt(0).toUpperCase() + field.slice(1)
+      ];
+      
+      for (const variation of variations) {
+        if (tenant[variation]) {
+          return tenant[variation];
+        }
+      }
+      
+      return fallback;
+    };
+
+    const getTempleDescription = (tenant) => {
+      if (!tenant) return 'No additional details provided.';
+      
+      // Check temple_details first
+      if (tenant.temple_details) {
+        if (tenant.temple_details.temple_description) {
+          return tenant.temple_details.temple_description;
+        }
+      }
+      
+      // Fallback checks
+      const descriptionFields = [
+        'temple_description', 'templeDescription', 'TempleDescription',
+        'description', 'Description'
+      ];
+      
+      for (const field of descriptionFields) {
+        if (tenant[field]) {
+          return tenant[field];
+        }
+      }
+      
+      return 'No additional details provided.';
+    };
+
+    // Add a debug method to see what data is available
+    const debugTenantDetails = (tenant) => {
+      if (!tenant) return;
+      
+      console.log('=== TENANT DEBUG ===');
+      console.log('Full tenant object:', tenant);
+      console.log('Temple details object:', tenant.temple_details);
+      
+      if (tenant.temple_details) {
+        console.log('Temple name:', tenant.temple_details.temple_name);
+        console.log('Temple place:', tenant.temple_details.temple_place);
+        console.log('Temple address:', tenant.temple_details.temple_address);
+        console.log('Temple phone:', tenant.temple_details.temple_phone_no);
+        console.log('Temple description:', tenant.temple_details.temple_description);
+      }
+      
+      // Show all available keys
+      console.log('Available keys on tenant:', Object.keys(tenant));
+      if (tenant.temple_details) {
+        console.log('Available keys on temple_details:', Object.keys(tenant.temple_details));
+      }
+      console.log('==================');
+    };
+    
+    // ===================================================================
+    
+    // Computed properties - FIXED with array checks
     const pendingCount = computed(() => 
-      allTenants.value.filter(t => isStatusPending(t)).length
+      Array.isArray(allTenants.value) ? allTenants.value.filter(t => isStatusPending(t)).length : 0
     )
     
     const approvedCount = computed(() => 
-      allTenants.value.filter(t => isStatusApproved(t)).length
+      Array.isArray(allTenants.value) ? allTenants.value.filter(t => isStatusApproved(t)).length : 0
     )
     
     const rejectedCount = computed(() => 
-      allTenants.value.filter(t => isStatusRejected(t)).length
+      Array.isArray(allTenants.value) ? allTenants.value.filter(t => isStatusRejected(t)).length : 0
     )
     
     // Status check helpers - Updated to check both uppercase and lowercase properties
@@ -330,46 +575,51 @@ export default {
       return status === 'rejected' || status === 'declined';
     }
     
-    // Filtered tenants based on status
+    // Filtered tenants based on status - FIXED with array checks
     const filteredTenants = computed(() => {
-      let sourceData = statusFilter.value === '' ? allTenants.value : tenants.value;
+      // Ensure we always work with arrays
+      const allTenantsArray = Array.isArray(allTenants.value) ? allTenants.value : [];
       
       if (!statusFilter.value) {
-        return allTenants.value; // Show all tenants when "View All" is selected
+        return allTenantsArray; // Show all tenants when "View All" is selected
       }
       
       switch (statusFilter.value.toLowerCase()) {
         case 'pending':
-          return allTenants.value.filter(tenant => isStatusPending(tenant));
+          return allTenantsArray.filter(tenant => isStatusPending(tenant));
         case 'approved':
-          return allTenants.value.filter(tenant => isStatusApproved(tenant));
+          return allTenantsArray.filter(tenant => isStatusApproved(tenant));
         case 'rejected':
-          return allTenants.value.filter(tenant => isStatusRejected(tenant));
+          return allTenantsArray.filter(tenant => isStatusRejected(tenant));
         default:
-          return allTenants.value;
+          return allTenantsArray;
       }
     })
     
-    // Paginated tenants
+    // Paginated tenants - FIXED with array checks
     const paginatedTenants = computed(() => {
+      const filtered = Array.isArray(filteredTenants.value) ? filteredTenants.value : [];
       const start = (currentPage.value - 1) * itemsPerPage.value
       const end = start + itemsPerPage.value
-      return filteredTenants.value.slice(start, end)
+      return filtered.slice(start, end)
     })
     
-    // Pagination helpers
+    // Pagination helpers - FIXED with array checks
     const totalPages = computed(() => {
-      return Math.ceil(filteredTenants.value.length / itemsPerPage.value) || 1
+      const filtered = Array.isArray(filteredTenants.value) ? filteredTenants.value : [];
+      return Math.ceil(filtered.length / itemsPerPage.value) || 1
     })
     
     const paginationStart = computed(() => {
-      return filteredTenants.value.length === 0 
+      const filtered = Array.isArray(filteredTenants.value) ? filteredTenants.value : [];
+      return filtered.length === 0 
         ? 0 
         : (currentPage.value - 1) * itemsPerPage.value + 1
     })
     
     const paginationEnd = computed(() => {
-      return Math.min(currentPage.value * itemsPerPage.value, filteredTenants.value.length)
+      const filtered = Array.isArray(filteredTenants.value) ? filteredTenants.value : [];
+      return Math.min(currentPage.value * itemsPerPage.value, filtered.length)
     })
     
     const displayedPageNumbers = computed(() => {
@@ -504,6 +754,23 @@ export default {
       }
     }
     
+    // Handle View Details button click - UPDATED WITH DEBUG
+    const handleViewDetails = (tenant) => {
+      selectedTenant.value = tenant;
+      
+      // Add debug logging
+      console.log('Opening details for tenant:', tenant);
+      debugTenantDetails(tenant);
+      
+      showDetailsModal.value = true;
+    }
+    
+    // Handle Approve from Details modal
+    const handleApproveFromDetails = () => {
+      handleApprove(selectedTenant.value);
+      showDetailsModal.value = false;
+    }
+    
     // Load pending tenants (default view)
     const loadTenants = async () => {
       loading.value = true
@@ -527,17 +794,22 @@ export default {
           console.log('API response:', data)
           
           if (data && data.data) {
-            tenants.value = data.data
-            allTenants.value = data.data
-            console.log(`Loaded ${tenants.value.length} tenant applications from API`)
-            toast.success(`Loaded ${tenants.value.length} tenant applications`)
-          } else if (data) {
+            // Ensure data.data is an array
+            const tenantsData = Array.isArray(data.data) ? data.data : [];
+            tenants.value = tenantsData
+            allTenants.value = tenantsData
+            console.log(`Loaded ${tenantsData.length} tenant applications from API`)
+            toast.success(`Loaded ${tenantsData.length} tenant applications`)
+          } else if (Array.isArray(data)) {
             tenants.value = data
             allTenants.value = data
-            console.log(`Loaded ${tenants.value.length} tenant applications from API`)
-            toast.success(`Loaded ${tenants.value.length} tenant applications`)
+            console.log(`Loaded ${data.length} tenant applications from API`)
+            toast.success(`Loaded ${data.length} tenant applications`)
           } else {
             console.warn('API returned unexpected format:', data)
+            // Set empty arrays as fallback
+            tenants.value = []
+            allTenants.value = []
             toast.error('Could not load tenant data: unexpected API response format')
           }
         } catch (apiError) {
@@ -553,7 +825,7 @@ export default {
               let tenantsData = []
               
               if (serviceResponse.data.pending_tenants) {
-                tenantsData = serviceResponse.data.pending_tenants
+                tenantsData = Array.isArray(serviceResponse.data.pending_tenants) ? serviceResponse.data.pending_tenants : [];
                 console.log('Found pending_tenants in service response')
               } else if (Array.isArray(serviceResponse.data)) {
                 tenantsData = serviceResponse.data
@@ -573,15 +845,21 @@ export default {
               }
             } else {
               console.warn('Service call failed or returned unexpected format')
+              tenants.value = []
+              allTenants.value = []
               toast.error('Could not load tenant data from API')
             }
           } catch (serviceError) {
             console.error('Error calling service:', serviceError)
+            tenants.value = []
+            allTenants.value = []
             toast.error('Could not load tenant data')
           }
         }
       } catch (error) {
         console.error('Error in loadTenants:', error)
+        tenants.value = []
+        allTenants.value = []
         toast.error('Error loading tenant data')
       } finally {
         loading.value = false
@@ -640,11 +918,12 @@ export default {
             debugInfo.push(`API Response Data: ${JSON.stringify(data, null, 2)}`)
             
             // Try to load the data if not already loaded
-            if (allTenants.value.length === 0 && data && data.data) {
-              tenants.value = data.data
-              allTenants.value = data.data
-              debugInfo.push(`\nAUTOMATICALLY LOADED ${data.data.length} TENANTS FROM API RESPONSE`)
-            } else if (allTenants.value.length === 0 && Array.isArray(data)) {
+            if ((!Array.isArray(allTenants.value) || allTenants.value.length === 0) && data && data.data) {
+              const tenantsData = Array.isArray(data.data) ? data.data : [];
+              tenants.value = tenantsData
+              allTenants.value = tenantsData
+              debugInfo.push(`\nAUTOMATICALLY LOADED ${tenantsData.length} TENANTS FROM API RESPONSE`)
+            } else if ((!Array.isArray(allTenants.value) || allTenants.value.length === 0) && Array.isArray(data)) {
               tenants.value = data
               allTenants.value = data
               debugInfo.push(`\nAUTOMATICALLY LOADED ${data.length} TENANTS FROM API RESPONSE`)
@@ -660,8 +939,8 @@ export default {
         
         // 3. Display tenant data
         debugInfo.push('\n==== TENANT DATA ====\n')
-        debugInfo.push(`Total Tenants: ${allTenants.value.length}`)
-        if (allTenants.value.length > 0) {
+        debugInfo.push(`Total Tenants: ${Array.isArray(allTenants.value) ? allTenants.value.length : 0}`)
+        if (Array.isArray(allTenants.value) && allTenants.value.length > 0) {
           const firstTenant = allTenants.value[0]
           debugInfo.push(`First Tenant Data: ${JSON.stringify(firstTenant, null, 2)}`)
           debugInfo.push(`First Tenant ID: ${firstTenant.id || firstTenant.ID || 'Not found'}`)
@@ -745,7 +1024,7 @@ export default {
       }
     }
     
-    // Updated to use id instead of ID
+    // Updated to use id instead of ID - FIXED ENDPOINT
     const handleApprove = async (tenant) => {
       if (!tenant) {
         toast.error('Cannot approve: Missing tenant');
@@ -764,7 +1043,7 @@ export default {
       console.log(`Attempting to approve tenant ${tenantId} with PATCH to /api/v1/superadmin/tenants/${tenantId}/approval`);
       
       try {
-        // Make a direct API call to the approval endpoint
+        // Make a direct API call to the approval endpoint - RESTORED CORRECT ENDPOINT
         const response = await fetch(`/api/v1/superadmin/tenants/${tenantId}/approval`, {
           method: 'PATCH',
           headers: {
@@ -818,7 +1097,7 @@ export default {
       showRejectModal.value = true;
     };
     
-    // Updated to use id instead of ID
+    // Updated to use id instead of ID - FIXED ENDPOINT
     const confirmReject = async () => {
       const tenant = selectedTenant.value;
       
@@ -845,7 +1124,7 @@ export default {
       isProcessing.value = true;
       
       try {
-        // Make a direct API call to the rejection endpoint
+        // Make a direct API call to the rejection endpoint - RESTORED CORRECT ENDPOINT
         const response = await fetch(`/api/v1/superadmin/tenants/${tenantId}/approval`, {
           method: 'PATCH',
           headers: {
@@ -921,6 +1200,14 @@ export default {
       selectedTenant,
       rejectReason,
       confirmReject,
+      // Details modal
+      showDetailsModal,
+      handleViewDetails,
+      handleApproveFromDetails,
+      // NEW TEMPLE DETAILS HELPERS
+      getTempleDetail,
+      getTempleDescription,
+      debugTenantDetails,
       // Debug & Mock data
       debugMode,
       debugTenantData,
