@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/middleware"
 )
 
 type Handler struct {
@@ -69,16 +70,17 @@ func (h *Handler) UpdateTenantApprovalStatus(c *gin.Context) {
 
 	adminID := c.GetUint("userID")
 	action := strings.ToLower(body.Status)
+	ip := middleware.GetIPFromContext(c)
 
 	switch action {
 	case "approved":
-		err = h.service.ApproveTenant(c.Request.Context(), uint(userID), adminID)
+		err = h.service.ApproveTenant(c.Request.Context(), uint(userID), adminID, ip)
 	case "rejected":
 		if body.Reason == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Rejection reason required"})
 			return
 		}
-		err = h.service.RejectTenant(c.Request.Context(), uint(userID), adminID, body.Reason)
+		err = h.service.RejectTenant(c.Request.Context(), uint(userID), adminID, body.Reason, ip)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status. Use APPROVED or REJECTED"})
 		return
@@ -144,16 +146,17 @@ func (h *Handler) UpdateEntityApprovalStatus(c *gin.Context) {
 
 	adminID := c.GetUint("userID")
 	action := strings.ToLower(body.Status)
+	ip := middleware.GetIPFromContext(c)
 
 	switch action {
 	case "approved":
-		err = h.service.ApproveEntity(c.Request.Context(), uint(entityID), adminID)
+		err = h.service.ApproveEntity(c.Request.Context(), uint(entityID), adminID, ip)
 	case "rejected":
 		if body.Reason == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Rejection reason required"})
 			return
 		}
-		err = h.service.RejectEntity(c.Request.Context(), uint(entityID), adminID, body.Reason)
+		err = h.service.RejectEntity(c.Request.Context(), uint(entityID), adminID, body.Reason, ip)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status. Use APPROVED or REJECTED"})
 		return
@@ -213,7 +216,9 @@ func (h *Handler) CreateUser(c *gin.Context) {
 	}
 
 	adminID := c.GetUint("userID")
-	if err := h.service.CreateUser(c.Request.Context(), req, adminID); err != nil {
+	ip := middleware.GetIPFromContext(c)
+	
+	if err := h.service.CreateUser(c.Request.Context(), req, adminID, ip); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -286,7 +291,9 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 	}
 
 	adminID := c.GetUint("userID")
-	if err := h.service.UpdateUser(c.Request.Context(), uint(userID), req, adminID); err != nil {
+	ip := middleware.GetIPFromContext(c)
+	
+	if err := h.service.UpdateUser(c.Request.Context(), uint(userID), req, adminID, ip); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -304,7 +311,9 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 	}
 
 	adminID := c.GetUint("userID")
-	if err := h.service.DeleteUser(c.Request.Context(), uint(userID), adminID); err != nil {
+	ip := middleware.GetIPFromContext(c)
+	
+	if err := h.service.DeleteUser(c.Request.Context(), uint(userID), adminID, ip); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -346,7 +355,9 @@ func (h *Handler) UpdateUserStatus(c *gin.Context) {
 	}
 
 	adminID := c.GetUint("userID")
-	if err := h.service.UpdateUserStatus(c.Request.Context(), uint(userID), status, adminID); err != nil {
+	ip := middleware.GetIPFromContext(c)
+	
+	if err := h.service.UpdateUserStatus(c.Request.Context(), uint(userID), status, adminID, ip); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -375,7 +386,10 @@ func (h *Handler) CreateRole(c *gin.Context) {
         return
     }
 
-    err := h.service.CreateRole(c.Request.Context(), &req)
+    adminID := c.GetUint("userID")
+    ip := middleware.GetIPFromContext(c)
+
+    err := h.service.CreateRole(c.Request.Context(), &req, adminID, ip)
     if err != nil {
         if strings.Contains(err.Error(), "already exists") {
             c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
@@ -400,7 +414,6 @@ func (h *Handler) GetRoles(c *gin.Context) {
 }
 
 // UpdateRole handles updating a user role.
-// UpdateRole handles updating a user role.
 func (h *Handler) UpdateRole(c *gin.Context) {
 	idStr := c.Param("id")
 	roleID, err := strconv.ParseUint(idStr, 10, 64)
@@ -415,7 +428,10 @@ func (h *Handler) UpdateRole(c *gin.Context) {
 		return
 	}
 
-	err = h.service.UpdateRole(c.Request.Context(), uint(roleID), &req)
+	adminID := c.GetUint("userID")
+	ip := middleware.GetIPFromContext(c)
+
+	err = h.service.UpdateRole(c.Request.Context(), uint(roleID), &req, adminID, ip)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists") {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
@@ -432,7 +448,7 @@ func (h *Handler) UpdateRole(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Role updated successfully"})
 }
 
-// 🎯 NEW: ToggleRoleStatus handles activating/inactivating a user role (PATCH request).
+// ToggleRoleStatus handles activating/inactivating a user role (PATCH request).
 func (h *Handler) ToggleRoleStatus(c *gin.Context) {
 	idStr := c.Param("id")
 	roleID, err := strconv.ParseUint(idStr, 10, 64)
@@ -447,7 +463,10 @@ func (h *Handler) ToggleRoleStatus(c *gin.Context) {
 		return
 	}
 
-	err = h.service.ToggleRoleStatus(c.Request.Context(), uint(roleID), req.Status)
+	adminID := c.GetUint("userID")
+	ip := middleware.GetIPFromContext(c)
+
+	err = h.service.ToggleRoleStatus(c.Request.Context(), uint(roleID), req.Status, adminID, ip)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})

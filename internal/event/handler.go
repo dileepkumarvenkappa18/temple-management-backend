@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/middleware"
 )
 
 type Handler struct {
@@ -48,55 +49,27 @@ func (h *Handler) CreateEvent(c *gin.Context) {
 		return
 	}
 
-	eventDate, err := time.Parse("2006-01-02", req.EventDate)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event_date format. Use YYYY-MM-DD"})
-		return
-	}
-
-	var eventTimePtr *time.Time
-	if req.EventTime != "" {
-		eventTimeParsed, err := time.Parse("15:04", req.EventTime)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event_time format. Use HH:MM (24-hour)"})
-			return
+	// Basic validation for date being too far in the past
+	if req.EventDate != "" {
+		if eventDate, err := time.Parse("2006-01-02", req.EventDate); err == nil {
+			if eventDate.Before(time.Now().AddDate(-10, 0, 0)) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "event date is too far in the past"})
+				return
+			}
 		}
-		eventTime := time.Date(0, 1, 1, eventTimeParsed.Hour(), eventTimeParsed.Minute(), 0, 0, time.UTC)
-		eventTimePtr = &eventTime
 	}
 
-	if eventDate.Before(time.Now().AddDate(-10, 0, 0)) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "event date is too far in the past"})
-		return
-	}
+	// Get IP address for audit logging
+	ip := middleware.GetIPFromContext(c)
 
-	// ✅ Handle nil IsActive (default to true)
-	isActive := true
-	if req.IsActive != nil {
-		isActive = *req.IsActive
-	}
-
-	finalReq := &Event{
-		Title:       req.Title,
-		Description: req.Description,
-		EventType:   req.EventType,
-		EventDate:   eventDate,
-		EventTime:   eventTimePtr,
-		Location:    req.Location,
-		IsActive:    isActive,
-		CreatedBy:   user.ID,
-		EntityID:    *user.EntityID,
-	}
-
-	if err := h.Service.Repo.CreateEvent(finalReq); err != nil {
+	// Use the service method that includes validation and audit logging
+	if err := h.Service.CreateEvent(&req, user.ID, *user.EntityID, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create event: " + err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"message": "event created successfully"})
 }
-
-
 
 // ===========================
 // 🔍 Get Event - GET /events/:id
@@ -195,7 +168,11 @@ func (h *Handler) UpdateEvent(c *gin.Context) {
 		return
 	}
 
-	if err := h.Service.UpdateEvent(uint(id), &req, *user.EntityID); err != nil {
+	// Get IP address for audit logging
+	ip := middleware.GetIPFromContext(c)
+
+	// Use the updated service method that includes audit logging
+	if err := h.Service.UpdateEvent(uint(id), &req, *user.EntityID, user.ID, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update event: " + err.Error()})
 		return
 	}
@@ -218,7 +195,11 @@ func (h *Handler) DeleteEvent(c *gin.Context) {
 		return
 	}
 
-	if err := h.Service.DeleteEvent(uint(id), *user.EntityID); err != nil {
+	// Get IP address for audit logging
+	ip := middleware.GetIPFromContext(c)
+
+	// Use the updated service method that includes audit logging
+	if err := h.Service.DeleteEvent(uint(id), *user.EntityID, user.ID, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete event: " + err.Error()})
 		return
 	}

@@ -15,6 +15,7 @@ import (
 
 	razorpay "github.com/razorpay/razorpay-go"
 	"github.com/sharath018/temple-management-backend/config"
+	"github.com/sharath018/temple-management-backend/internal/auditlog"
 )
 
 type Service interface {
@@ -40,17 +41,19 @@ type Service interface {
 }
 
 type service struct {
-	repo   Repository
-	client *razorpay.Client
-	cfg    *config.Config
+	repo       Repository
+	client     *razorpay.Client
+	cfg        *config.Config
+	auditSvc   auditlog.Service // ✅ NEW: Audit service dependency
 }
 
-func NewService(repo Repository, cfg *config.Config) Service {
+func NewService(repo Repository, cfg *config.Config, auditSvc auditlog.Service) Service {
 	client := razorpay.NewClient(cfg.RazorpayKey, cfg.RazorpaySecret)
 	return &service{
-		repo:   repo,
-		client: client,
-		cfg:    cfg,
+		repo:     repo,
+		client:   client,
+		cfg:      cfg,
+		auditSvc: auditSvc, // ✅ NEW: Inject audit service
 	}
 }
 
@@ -60,6 +63,8 @@ func NewService(repo Repository, cfg *config.Config) Service {
 
 // StartDonation initializes the Razorpay order and creates a pending donation entry
 func (s *service) StartDonation(req CreateDonationRequest) (*CreateDonationResponse, error) {
+	ctx := context.Background()
+	
 	// Create Razorpay order
 	amountInPaise := int(req.Amount * 100)
 	
@@ -80,11 +85,25 @@ func (s *service) StartDonation(req CreateDonationRequest) (*CreateDonationRespo
 
 	order, err := s.client.Order.Create(data, nil)
 	if err != nil {
+		// ✅ NEW: Log donation initiation failure
+		s.auditSvc.LogAction(ctx, &req.UserID, &req.EntityID, "DONATION_INITIATED", map[string]interface{}{
+			"amount":        req.Amount,
+			"donation_type": req.DonationType,
+			"error":         err.Error(),
+		}, req.IPAddress, "failure")
+		
 		return nil, fmt.Errorf("razorpay order creation failed: %w", err)
 	}
 
 	orderID, ok := order["id"].(string)
 	if !ok {
+		// ✅ NEW: Log order ID extraction failure
+		s.auditSvc.LogAction(ctx, &req.UserID, &req.EntityID, "DONATION_INITIATED", map[string]interface{}{
+			"amount":        req.Amount,
+			"donation_type": req.DonationType,
+			"error":         "unable to extract order_id from Razorpay response",
+		}, req.IPAddress, "failure")
+		
 		return nil, errors.New("unable to extract order_id from Razorpay response")
 	}
 
@@ -102,8 +121,24 @@ func (s *service) StartDonation(req CreateDonationRequest) (*CreateDonationRespo
 	}
 
 	if err := s.repo.Create(context.Background(), donation); err != nil {
+		// ✅ NEW: Log donation record creation failure
+		s.auditSvc.LogAction(ctx, &req.UserID, &req.EntityID, "DONATION_INITIATED", map[string]interface{}{
+			"amount":        req.Amount,
+			"donation_type": req.DonationType,
+			"order_id":      orderID,
+			"error":         err.Error(),
+		}, req.IPAddress, "failure")
+		
 		return nil, fmt.Errorf("failed to create donation record: %w", err)
 	}
+
+	// ✅ NEW: Log successful donation initiation
+	s.auditSvc.LogAction(ctx, &req.UserID, &req.EntityID, "DONATION_INITIATED", map[string]interface{}{
+		"amount":        req.Amount,
+		"donation_type": req.DonationType,
+		"order_id":      orderID,
+		"reference_id":  req.ReferenceID,
+	}, req.IPAddress, "success")
 
 	return &CreateDonationResponse{
 		OrderID:     orderID,
@@ -115,33 +150,71 @@ func (s *service) StartDonation(req CreateDonationRequest) (*CreateDonationRespo
 
 // VerifyAndUpdateDonation securely verifies Razorpay signature and updates payment status
 func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
+	ctx := context.Background()
+	
 	// Step 1: Verify HMAC Signature
 	expected := hmac.New(sha256.New, []byte(s.cfg.RazorpaySecret))
 	expected.Write([]byte(req.OrderID + "|" + req.PaymentID))
 	computedSignature := hex.EncodeToString(expected.Sum(nil))
 
 	if computedSignature != req.RazorpaySig {
+		// ✅ NEW: Log payment verification failure due to invalid signature
+		s.auditSvc.LogAction(ctx, nil, nil, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
+			"order_id":   req.OrderID,
+			"payment_id": req.PaymentID,
+			"reason":     "invalid payment signature",
+		}, req.IPAddress, "failure")
+		
 		return fmt.Errorf("invalid payment signature")
 	}
 
 	// Step 2: Fetch payment details from Razorpay
 	payment, err := s.client.Payment.Fetch(req.PaymentID, nil, nil)
 	if err != nil {
+		// ✅ NEW: Log Razorpay fetch failure
+		s.auditSvc.LogAction(ctx, nil, nil, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
+			"order_id":   req.OrderID,
+			"payment_id": req.PaymentID,
+			"reason":     "razorpay payment fetch failed",
+			"error":      err.Error(),
+		}, req.IPAddress, "failure")
+		
 		return fmt.Errorf("razorpay payment fetch failed: %w", err)
 	}
 
 	status, ok := payment["status"].(string)
 	if !ok {
+		// ✅ NEW: Log invalid payment status format
+		s.auditSvc.LogAction(ctx, nil, nil, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
+			"order_id":   req.OrderID,
+			"payment_id": req.PaymentID,
+			"reason":     "invalid payment status format",
+		}, req.IPAddress, "failure")
+		
 		return errors.New("invalid payment status format")
 	}
 
 	// Step 3: Get donation record
 	donation, err := s.repo.GetByOrderID(context.Background(), req.OrderID)
 	if err != nil {
+		// ✅ NEW: Log donation record not found
+		s.auditSvc.LogAction(ctx, nil, nil, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
+			"order_id":   req.OrderID,
+			"payment_id": req.PaymentID,
+			"reason":     "donation record not found",
+		}, req.IPAddress, "failure")
+		
 		return errors.New("donation record not found for given order ID")
 	}
 
 	if donation.Status == StatusSuccess {
+		// ✅ NEW: Log already processed donation
+		s.auditSvc.LogAction(ctx, &donation.UserID, &donation.EntityID, "DONATION_ALREADY_PROCESSED", map[string]interface{}{
+			"order_id":   req.OrderID,
+			"payment_id": req.PaymentID,
+			"amount":     donation.Amount,
+		}, req.IPAddress, "success")
+		
 		return nil // Already processed
 	}
 
@@ -154,15 +227,28 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 		amountPaise, _ := val.Float64()
 		amount = amountPaise / 100
 	default:
+		// ✅ NEW: Log unsupported amount type
+		s.auditSvc.LogAction(ctx, &donation.UserID, &donation.EntityID, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
+			"order_id":   req.OrderID,
+			"payment_id": req.PaymentID,
+			"reason":     "unsupported amount type",
+			"amount_type": fmt.Sprintf("%T", val),
+		}, req.IPAddress, "failure")
+		
 		return fmt.Errorf("unsupported amount type: %T", val)
 	}
 
 	newStatus := StatusFailed
 	var donatedAt *time.Time
+	auditAction := "DONATION_FAILED"
+	auditStatus := "failure"
+	
 	if status == "captured" {
 		newStatus = StatusSuccess
 		now := time.Now()
 		donatedAt = &now
+		auditAction = "DONATION_SUCCESS"
+		auditStatus = "success"
 	}
 
 	// Extract payment method
@@ -171,13 +257,40 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 		method = paymentMethod
 	}
 
-	return s.repo.UpdatePaymentDetails(context.Background(), req.OrderID, UpdatePaymentDetailsParams{
+	// Update the donation record
+	err = s.repo.UpdatePaymentDetails(context.Background(), req.OrderID, UpdatePaymentDetailsParams{
 		Status:    newStatus,
 		PaymentID: &req.PaymentID,
 		Method:    method,
 		Amount:    amount,
 		DonatedAt: donatedAt,
 	})
+
+	if err != nil {
+		// ✅ NEW: Log database update failure
+		s.auditSvc.LogAction(ctx, &donation.UserID, &donation.EntityID, "DONATION_UPDATE_FAILED", map[string]interface{}{
+			"order_id":   req.OrderID,
+			"payment_id": req.PaymentID,
+			"amount":     amount,
+			"method":     method,
+			"error":      err.Error(),
+		}, req.IPAddress, "failure")
+		
+		return err
+	}
+
+	// ✅ NEW: Log final donation status (success or failure)
+	s.auditSvc.LogAction(ctx, &donation.UserID, &donation.EntityID, auditAction, map[string]interface{}{
+		"order_id":       req.OrderID,
+		"payment_id":     req.PaymentID,
+		"amount":         amount,
+		"donation_type":  donation.DonationType,
+		"method":         method,
+		"razorpay_status": status,
+		"reference_id":   donation.ReferenceID,
+	}, req.IPAddress, auditStatus)
+
+	return nil
 }
 
 // ==============================

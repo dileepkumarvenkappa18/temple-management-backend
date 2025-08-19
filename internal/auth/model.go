@@ -9,7 +9,7 @@ import (
 // UserRole represents the user_roles table
 type UserRole struct {
 	ID                  uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	RoleName            string    `gorm:"size:50;unique;not null" json:"role_name"` // tenant, devotee, volunteer, super_admin
+	RoleName            string    `gorm:"size:50;unique;not null" json:"role_name"` // templeadmin, devotee, volunteer, super_admin
 	Description         string    `gorm:"type:text" json:"description"`
 	CanRegisterPublicly bool      `gorm:"default:true" json:"can_register_publicly"`
 	CreatedAt           time.Time `json:"created_at"`

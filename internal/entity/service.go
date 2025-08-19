@@ -1,11 +1,13 @@
 package entity
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"time"
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/internal/auditlog"
 )
 
 type MembershipService interface {
@@ -15,18 +17,16 @@ type MembershipService interface {
 type Service struct {
 	Repo              *Repository
 	MembershipService MembershipService
+	AuditService      auditlog.Service // 🆕 ADD AUDIT SERVICE
 }
 
-
-func NewService(r *Repository, ms MembershipService) *Service {
+func NewService(r *Repository, ms MembershipService, as auditlog.Service) *Service {
 	return &Service{
 		Repo:              r,
 		MembershipService: ms,
+		AuditService:      as, // 🆕 INJECT AUDIT SERVICE
 	}
 }
-
-
-
 
 var (
 	ErrMissingFields = errors.New("temple name, deity, phone, and email are required")
@@ -35,12 +35,21 @@ var (
 // ========== ENTITY CORE ==========
 
 // Temple Admin → Create Entity
-func (s *Service) CreateEntity(e *Entity, userID uint) error {
+func (s *Service) CreateEntity(e *Entity, userID uint, ip string) error {
 	// Validate required fields
 	if strings.TrimSpace(e.Name) == "" ||
 		e.MainDeity == nil || strings.TrimSpace(*e.MainDeity) == "" ||
 		strings.TrimSpace(e.Phone) == "" ||
 		strings.TrimSpace(e.Email) == "" {
+		
+		// 🔍 LOG FAILED TEMPLE CREATION ATTEMPT
+		auditDetails := map[string]interface{}{
+			"temple_name": strings.TrimSpace(e.Name),
+			"email":       strings.TrimSpace(e.Email),
+			"error":       "Missing required fields",
+		}
+		s.AuditService.LogAction(context.Background(), &userID, nil, "TEMPLE_CREATE_FAILED", auditDetails, ip, "failure")
+		
 		return ErrMissingFields
 	}
 
@@ -78,6 +87,14 @@ func (s *Service) CreateEntity(e *Entity, userID uint) error {
 
 	// Save entity
 	if err := s.Repo.CreateEntity(e); err != nil {
+		// 🔍 LOG FAILED TEMPLE CREATION (DB ERROR)
+		auditDetails := map[string]interface{}{
+			"temple_name": e.Name,
+			"email":       e.Email,
+			"error":       err.Error(),
+		}
+		s.AuditService.LogAction(context.Background(), &userID, nil, "TEMPLE_CREATE_FAILED", auditDetails, ip, "failure")
+		
 		return err
 	}
 
@@ -91,7 +108,34 @@ func (s *Service) CreateEntity(e *Entity, userID uint) error {
 		UpdatedAt:   now,
 	}
 
-	return s.Repo.CreateApprovalRequest(req)
+	if err := s.Repo.CreateApprovalRequest(req); err != nil {
+		// 🔍 LOG FAILED APPROVAL REQUEST CREATION
+		auditDetails := map[string]interface{}{
+			"temple_name": e.Name,
+			"temple_id":   e.ID,
+			"email":       e.Email,
+			"error":       err.Error(),
+		}
+		s.AuditService.LogAction(context.Background(), &userID, &e.ID, "TEMPLE_APPROVAL_REQUEST_FAILED", auditDetails, ip, "failure")
+		
+		return err
+	}
+
+	// 🔍 LOG SUCCESSFUL TEMPLE CREATION
+	auditDetails := map[string]interface{}{
+		"temple_name":   e.Name,
+		"temple_id":     e.ID,
+		"temple_type":   e.TempleType,
+		"email":         e.Email,
+		"phone":         e.Phone,
+		"city":          e.City,
+		"state":         e.State,
+		"main_deity":    e.MainDeity,
+		"status":        e.Status,
+	}
+	s.AuditService.LogAction(context.Background(), &userID, &e.ID, "TEMPLE_CREATED", auditDetails, ip, "success")
+
+	return nil
 }
 
 // Super Admin → Get all temples
@@ -110,14 +154,95 @@ func (s *Service) GetEntityByID(id int) (Entity, error) {
 }
 
 // Temple Admin → Update own temple
-func (s *Service) UpdateEntity(e Entity) error {
+func (s *Service) UpdateEntity(e Entity, userID uint, ip string) error {
+	// Get existing entity for comparison
+	existingEntity, err := s.Repo.GetEntityByID(int(e.ID))
+	if err != nil {
+		// 🔍 LOG FAILED TEMPLE UPDATE ATTEMPT (NOT FOUND)
+		auditDetails := map[string]interface{}{
+			"temple_id": e.ID,
+			"error":     "Temple not found",
+		}
+		s.AuditService.LogAction(context.Background(), &userID, &e.ID, "TEMPLE_UPDATE_FAILED", auditDetails, ip, "failure")
+		
+		return err
+	}
+
 	e.UpdatedAt = time.Now()
-	return s.Repo.UpdateEntity(e)
+	
+	if err := s.Repo.UpdateEntity(e); err != nil {
+		// 🔍 LOG FAILED TEMPLE UPDATE (DB ERROR)
+		auditDetails := map[string]interface{}{
+			"temple_id":   e.ID,
+			"temple_name": e.Name,
+			"error":       err.Error(),
+		}
+		s.AuditService.LogAction(context.Background(), &userID, &e.ID, "TEMPLE_UPDATE_FAILED", auditDetails, ip, "failure")
+		
+		return err
+	}
+
+	// 🔍 LOG SUCCESSFUL TEMPLE UPDATE
+	auditDetails := map[string]interface{}{
+		"temple_id":         e.ID,
+		"temple_name":       e.Name,
+		"previous_name":     existingEntity.Name,
+		"temple_type":       e.TempleType,
+		"email":             e.Email,
+		"phone":             e.Phone,
+		"city":              e.City,
+		"state":             e.State,
+		"main_deity":        e.MainDeity,
+		"description":       e.Description,
+		"updated_fields":    getUpdatedFields(existingEntity, e),
+	}
+	s.AuditService.LogAction(context.Background(), &userID, &e.ID, "TEMPLE_UPDATED", auditDetails, ip, "success")
+
+	return nil
 }
 
 // Super Admin → Delete temple
-func (s *Service) DeleteEntity(id int) error {
-	return s.Repo.DeleteEntity(id)
+func (s *Service) DeleteEntity(id int, userID uint, ip string) error {
+	// Get existing entity for audit log
+	existingEntity, err := s.Repo.GetEntityByID(id)
+	if err != nil {
+		// 🔍 LOG FAILED TEMPLE DELETION ATTEMPT (NOT FOUND)
+		auditDetails := map[string]interface{}{
+			"temple_id": id,
+			"error":     "Temple not found",
+		}
+		entityID := uint(id)
+		s.AuditService.LogAction(context.Background(), &userID, &entityID, "TEMPLE_DELETE_FAILED", auditDetails, ip, "failure")
+		
+		return err
+	}
+
+	if err := s.Repo.DeleteEntity(id); err != nil {
+		// 🔍 LOG FAILED TEMPLE DELETION (DB ERROR)
+		auditDetails := map[string]interface{}{
+			"temple_id":   id,
+			"temple_name": existingEntity.Name,
+			"error":       err.Error(),
+		}
+		entityID := uint(id)
+		s.AuditService.LogAction(context.Background(), &userID, &entityID, "TEMPLE_DELETE_FAILED", auditDetails, ip, "failure")
+		
+		return err
+	}
+
+	// 🔍 LOG SUCCESSFUL TEMPLE DELETION
+	auditDetails := map[string]interface{}{
+		"temple_id":   id,
+		"temple_name": existingEntity.Name,
+		"temple_type": existingEntity.TempleType,
+		"email":       existingEntity.Email,
+		"city":        existingEntity.City,
+		"state":       existingEntity.State,
+	}
+	entityID := uint(id)
+	s.AuditService.LogAction(context.Background(), &userID, &entityID, "TEMPLE_DELETED", auditDetails, ip, "success")
+
+	return nil
 }
 
 // ========== DEVOTEE MANAGEMENT ==========
@@ -131,7 +256,6 @@ func (s *Service) GetDevotees(entityID uint) ([]DevoteeDTO, error) {
 func (s *Service) GetDevoteeStats(entityID uint) (DevoteeStats, error) {
 	return s.Repo.GetDevoteeStats(entityID)
 }
-
 
 // DashboardSummary is the structured JSON response
 type DashboardSummary struct {
@@ -205,4 +329,47 @@ func (s *Service) GetDashboardSummary(entityID uint) (DashboardSummary, error) {
 	summary.UpcomingEvents.ThisWeek = thisWeekUpcoming
 
 	return summary, nil
+}
+
+// Helper function to track what fields were updated
+func getUpdatedFields(old, new Entity) []string {
+	var updatedFields []string
+
+	if old.Name != new.Name {
+		updatedFields = append(updatedFields, "name")
+	}
+	if (old.MainDeity == nil && new.MainDeity != nil) || 
+	   (old.MainDeity != nil && new.MainDeity == nil) ||
+	   (old.MainDeity != nil && new.MainDeity != nil && *old.MainDeity != *new.MainDeity) {
+		updatedFields = append(updatedFields, "main_deity")
+	}
+	if old.TempleType != new.TempleType {
+		updatedFields = append(updatedFields, "temple_type")
+	}
+	if old.Email != new.Email {
+		updatedFields = append(updatedFields, "email")
+	}
+	if old.Phone != new.Phone {
+		updatedFields = append(updatedFields, "phone")
+	}
+	if old.Description != new.Description {
+		updatedFields = append(updatedFields, "description")
+	}
+	if old.StreetAddress != new.StreetAddress {
+		updatedFields = append(updatedFields, "street_address")
+	}
+	if old.City != new.City {
+		updatedFields = append(updatedFields, "city")
+	}
+	if old.State != new.State {
+		updatedFields = append(updatedFields, "state")
+	}
+	if old.District != new.District {
+		updatedFields = append(updatedFields, "district")
+	}
+	if old.Pincode != new.Pincode {
+		updatedFields = append(updatedFields, "pincode")
+	}
+
+	return updatedFields
 }

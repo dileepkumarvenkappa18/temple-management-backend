@@ -15,7 +15,8 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/event"
 	"github.com/sharath018/temple-management-backend/internal/seva"
 	"github.com/sharath018/temple-management-backend/internal/userprofile"
-	"github.com/sharath018/temple-management-backend/internal/notification" // ✅ Add this
+	"github.com/sharath018/temple-management-backend/internal/notification"
+	"github.com/sharath018/temple-management-backend/internal/auditlog" // ✅ Add this
 )
 
 var DB *gorm.DB
@@ -60,6 +61,7 @@ if err := DB.AutoMigrate(
 	&userprofile.Child{},
 	&userprofile.EmergencyContact{},
 &userprofile.UserEntityMembership{},
+&auditlog.AuditLog{},
 ); err != nil {
 	log.Fatalf("❌ AutoMigrate failed: %v", err)
 }

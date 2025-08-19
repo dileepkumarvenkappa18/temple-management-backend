@@ -8,58 +8,131 @@ import (
 	"time"
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/internal/auditlog"
 	"github.com/sharath018/temple-management-backend/internal/entity"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type Service struct {
-	repo *Repository
+	repo         *Repository
+	auditService auditlog.Service
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo *Repository, auditService auditlog.Service) *Service {
+	return &Service{
+		repo:         repo,
+		auditService: auditService,
+	}
 }
 
 // ================== TENANT ==================
 
-func (s *Service) ApproveTenant(ctx context.Context, userID uint, adminID uint) error {
+func (s *Service) ApproveTenant(ctx context.Context, userID uint, adminID uint, ip string) error {
 	// Check existence and current status
 	user, err := s.repo.GetUserByID(ctx, userID)
 	if err != nil {
+		// Log failed approval attempt
+		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_APPROVAL_FAILED", map[string]interface{}{
+			"target_user_id": userID,
+			"reason":         "tenant not found",
+		}, ip, "failure")
 		return errors.New("tenant not found")
 	}
 
 	if user.Status == "active" {
+		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_APPROVAL_FAILED", map[string]interface{}{
+			"target_user_id":    userID,
+			"target_user_email": user.Email,
+			"reason":            "already approved",
+		}, ip, "failure")
 		return errors.New("tenant already approved")
 	}
 	if user.Status == "rejected" {
+		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_APPROVAL_FAILED", map[string]interface{}{
+			"target_user_id":    userID,
+			"target_user_email": user.Email,
+			"reason":            "already rejected",
+		}, ip, "failure")
 		return errors.New("tenant already rejected")
 	}
 
 	if err := s.repo.ApproveTenant(ctx, userID, adminID); err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_APPROVAL_FAILED", map[string]interface{}{
+			"target_user_id":    userID,
+			"target_user_email": user.Email,
+			"reason":            "database error",
+		}, ip, "failure")
 		return err
 	}
-	return s.repo.MarkTenantApprovalApproved(ctx, userID, adminID)
+
+	if err := s.repo.MarkTenantApprovalApproved(ctx, userID, adminID); err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_APPROVAL_FAILED", map[string]interface{}{
+			"target_user_id":    userID,
+			"target_user_email": user.Email,
+			"reason":            "failed to mark approval",
+		}, ip, "failure")
+		return err
+	}
+
+	// Log successful approval
+	s.auditService.LogAction(ctx, &adminID, nil, "TENANT_APPROVED", map[string]interface{}{
+		"target_user_id":    userID,
+		"target_user_email": user.Email,
+		"target_user_name":  user.FullName,
+	}, ip, "success")
+
+	return nil
 }
 
-func (s *Service) RejectTenant(ctx context.Context, userID uint, adminID uint, reason string) error {
+func (s *Service) RejectTenant(ctx context.Context, userID uint, adminID uint, reason string, ip string) error {
 	if reason == "" {
 		return errors.New("rejection reason is required")
 	}
 
 	user, err := s.repo.GetUserByID(ctx, userID)
 	if err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_REJECTION_FAILED", map[string]interface{}{
+			"target_user_id": userID,
+			"reason":         "tenant not found",
+		}, ip, "failure")
 		return errors.New("tenant not found")
 	}
 
 	if user.Status == "rejected" {
+		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_REJECTION_FAILED", map[string]interface{}{
+			"target_user_id":    userID,
+			"target_user_email": user.Email,
+			"reason":            "already rejected",
+		}, ip, "failure")
 		return errors.New("tenant already rejected")
 	}
 	if user.Status == "active" {
+		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_REJECTION_FAILED", map[string]interface{}{
+			"target_user_id":    userID,
+			"target_user_email": user.Email,
+			"reason":            "already approved",
+		}, ip, "failure")
 		return errors.New("tenant already approved")
 	}
 
-	return s.repo.RejectTenant(ctx, userID, adminID, reason)
+	if err := s.repo.RejectTenant(ctx, userID, adminID, reason); err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_REJECTION_FAILED", map[string]interface{}{
+			"target_user_id":    userID,
+			"target_user_email": user.Email,
+			"reason":            "database error",
+		}, ip, "failure")
+		return err
+	}
+
+	// Log successful rejection
+	s.auditService.LogAction(ctx, &adminID, nil, "TENANT_REJECTED", map[string]interface{}{
+		"target_user_id":      userID,
+		"target_user_email":   user.Email,
+		"target_user_name":    user.FullName,
+		"rejection_reason":    reason,
+	}, ip, "success")
+
+	return nil
 }
 
 func (s *Service) GetPendingTenants(ctx context.Context) ([]auth.User, error) {
@@ -73,9 +146,9 @@ func (s *Service) GetTenantsWithFilters(ctx context.Context, status string, limi
 func (s *Service) UpdateTenantApprovalStatus(ctx context.Context, userID, adminID uint, action string, reason string) error {
 	switch action {
 	case "approve":
-		return s.ApproveTenant(ctx, userID, adminID)
+		return s.ApproveTenant(ctx, userID, adminID, "")
 	case "reject":
-		return s.RejectTenant(ctx, userID, adminID, reason)
+		return s.RejectTenant(ctx, userID, adminID, reason, "")
 	default:
 		return errors.New("invalid action: must be approve or reject")
 	}
@@ -91,53 +164,121 @@ func (s *Service) GetEntitiesWithFilters(ctx context.Context, status string, lim
 	return s.repo.GetEntitiesWithFilters(ctx, status, limit, page)
 }
 
-func (s *Service) ApproveEntity(ctx context.Context, entityID uint, adminID uint) error {
+func (s *Service) ApproveEntity(ctx context.Context, entityID uint, adminID uint, ip string) error {
 	ent, err := s.repo.GetEntityByID(ctx, entityID)
 	if err != nil {
+		s.auditService.LogAction(ctx, &adminID, &entityID, "ENTITY_APPROVAL_FAILED", map[string]interface{}{
+			"entity_id": entityID,
+			"reason":    "entity not found",
+		}, ip, "failure")
 		return errors.New("entity not found")
 	}
 
 	if ent.Status == "approved" {
+		s.auditService.LogAction(ctx, &adminID, &entityID, "ENTITY_APPROVAL_FAILED", map[string]interface{}{
+			"entity_id":   entityID,
+			"entity_name": ent.Name,
+			"reason":      "already approved",
+		}, ip, "failure")
 		return errors.New("entity already approved")
 	}
 	if ent.Status == "rejected" {
+		s.auditService.LogAction(ctx, &adminID, &entityID, "ENTITY_APPROVAL_FAILED", map[string]interface{}{
+			"entity_id":   entityID,
+			"entity_name": ent.Name,
+			"reason":      "already rejected",
+		}, ip, "failure")
 		return errors.New("entity already rejected")
 	}
 
 	if err := s.repo.ApproveEntity(ctx, entityID, adminID); err != nil {
+		s.auditService.LogAction(ctx, &adminID, &entityID, "ENTITY_APPROVAL_FAILED", map[string]interface{}{
+			"entity_id":   entityID,
+			"entity_name": ent.Name,
+			"reason":      "database error",
+		}, ip, "failure")
 		return err
 	}
 
-	return s.repo.LinkEntityToUser(ctx, ent.CreatedBy, ent.ID)
+	if err := s.repo.LinkEntityToUser(ctx, ent.CreatedBy, ent.ID); err != nil {
+		s.auditService.LogAction(ctx, &adminID, &entityID, "ENTITY_APPROVAL_FAILED", map[string]interface{}{
+			"entity_id":   entityID,
+			"entity_name": ent.Name,
+			"reason":      "failed to link entity to user",
+		}, ip, "failure")
+		return err
+	}
+
+	// Log successful approval
+	s.auditService.LogAction(ctx, &adminID, &entityID, "ENTITY_APPROVED", map[string]interface{}{
+		"entity_id":    entityID,
+		"entity_name":  ent.Name,
+		"entity_type":  ent.TempleType,
+		"created_by":   ent.CreatedBy,
+	}, ip, "success")
+
+	return nil
 }
 
-func (s *Service) RejectEntity(ctx context.Context, entityID uint, adminID uint, reason string) error {
+func (s *Service) RejectEntity(ctx context.Context, entityID uint, adminID uint, reason string, ip string) error {
 	if reason == "" {
 		return errors.New("rejection reason is required")
 	}
 
 	ent, err := s.repo.GetEntityByID(ctx, entityID)
 	if err != nil {
+		s.auditService.LogAction(ctx, &adminID, &entityID, "ENTITY_REJECTION_FAILED", map[string]interface{}{
+			"entity_id": entityID,
+			"reason":    "entity not found",
+		}, ip, "failure")
 		return errors.New("entity not found")
 	}
 
 	if ent.Status == "rejected" {
+		s.auditService.LogAction(ctx, &adminID, &entityID, "ENTITY_REJECTION_FAILED", map[string]interface{}{
+			"entity_id":   entityID,
+			"entity_name": ent.Name,
+			"reason":      "already rejected",
+		}, ip, "failure")
 		return errors.New("entity already rejected")
 	}
 	if ent.Status == "approved" {
+		s.auditService.LogAction(ctx, &adminID, &entityID, "ENTITY_REJECTION_FAILED", map[string]interface{}{
+			"entity_id":   entityID,
+			"entity_name": ent.Name,
+			"reason":      "already approved",
+		}, ip, "failure")
 		return errors.New("entity already approved")
 	}
 
 	rejectedAt := time.Now()
-	return s.repo.RejectEntity(ctx, entityID, adminID, reason, rejectedAt)
+	if err := s.repo.RejectEntity(ctx, entityID, adminID, reason, rejectedAt); err != nil {
+		s.auditService.LogAction(ctx, &adminID, &entityID, "ENTITY_REJECTION_FAILED", map[string]interface{}{
+			"entity_id":   entityID,
+			"entity_name": ent.Name,
+			"reason":      "database error",
+		}, ip, "failure")
+		return err
+	}
+
+	// Log successful rejection
+	s.auditService.LogAction(ctx, &adminID, &entityID, "ENTITY_REJECTED", map[string]interface{}{
+		"entity_id":         entityID,
+		"entity_name":       ent.Name,
+		"entity_type":       ent.TempleType,
+		"created_by":        ent.CreatedBy,
+		"rejection_reason":  reason,
+	}, ip, "success")
+
+	return nil
 }
 
 func (s *Service) UpdateEntityApprovalStatus(ctx context.Context, entityID, adminID uint, action string, reason string) error {
 	switch action {
 	case "approve":
-		return s.ApproveEntity(ctx, entityID, adminID)
+		return s.ApproveEntity(ctx, entityID, adminID, "")
 	case "reject":
-		return s.RejectEntity(ctx, entityID, adminID, reason)
+		return s.RejectEntity(ctx, entityID, adminID, reason, "")
 	default:
 		return errors.New("invalid action: must be approve or reject")
 	}
@@ -202,31 +343,52 @@ func (s *Service) GetTempleApprovalCounts(ctx context.Context) (*TempleApprovalC
 // ================== USER MANAGEMENT ==================
 
 // Create user (admin-created users)
-func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, adminID uint) error {
+func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, adminID uint, ip string) error {
 	// Validate role exists
 	role, err := s.repo.FindRoleByName(ctx, strings.ToLower(req.Role))
 	if err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "USER_CREATE_FAILED", map[string]interface{}{
+			"target_email": req.Email,
+			"target_role":  req.Role,
+			"reason":       "invalid role",
+		}, ip, "failure")
 		return errors.New("invalid role")
 	}
 
 	// Check if email already exists
 	exists, err := s.repo.UserExistsByEmail(ctx, req.Email)
 	if err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "USER_CREATE_FAILED", map[string]interface{}{
+			"target_email": req.Email,
+			"reason":       "failed to check email availability",
+		}, ip, "failure")
 		return errors.New("failed to check email availability")
 	}
 	if exists {
+		s.auditService.LogAction(ctx, &adminID, nil, "USER_CREATE_FAILED", map[string]interface{}{
+			"target_email": req.Email,
+			"reason":       "email already exists",
+		}, ip, "failure")
 		return errors.New("email already exists")
 	}
 
 	// Clean and validate phone
 	phone, err := cleanPhone(req.Phone)
 	if err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "USER_CREATE_FAILED", map[string]interface{}{
+			"target_email": req.Email,
+			"reason":       "invalid phone number",
+		}, ip, "failure")
 		return err
 	}
 
 	// Hash password
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "USER_CREATE_FAILED", map[string]interface{}{
+			"target_email": req.Email,
+			"reason":       "failed to hash password",
+		}, ip, "failure")
 		return errors.New("failed to hash password")
 	}
 
@@ -241,6 +403,11 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, adminID
 	}
 
 	if err := s.repo.CreateUser(ctx, user); err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "USER_CREATE_FAILED", map[string]interface{}{
+			"target_email": req.Email,
+			"target_role":  req.Role,
+			"reason":       "failed to create user",
+		}, ip, "failure")
 		return errors.New("failed to create user")
 	}
 
@@ -256,9 +423,23 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, adminID
 		}
 
 		if err := s.repo.CreateTenantDetails(ctx, tenantDetails); err != nil {
+			s.auditService.LogAction(ctx, &adminID, nil, "USER_CREATE_FAILED", map[string]interface{}{
+				"target_user_id": user.ID,
+				"target_email":   req.Email,
+				"reason":         "failed to create temple details",
+			}, ip, "failure")
 			return errors.New("failed to create temple details")
 		}
 	}
+
+	// Log successful user creation
+	s.auditService.LogAction(ctx, &adminID, nil, "USER_CREATED", map[string]interface{}{
+		"target_user_id":   user.ID,
+		"target_email":     req.Email,
+		"target_name":      req.FullName,
+		"target_role":      req.Role,
+		"has_temple_details": strings.ToLower(req.Role) == "templeadmin",
+	}, ip, "success")
 
 	return nil
 }
@@ -274,45 +455,73 @@ func (s *Service) GetUserByID(ctx context.Context, userID uint) (*UserResponse, 
 }
 
 // Update user - UPDATED: SuperAdmin restrictions removed
-func (s *Service) UpdateUser(ctx context.Context, userID uint, req UpdateUserRequest, adminID uint) error {
+func (s *Service) UpdateUser(ctx context.Context, userID uint, req UpdateUserRequest, adminID uint, ip string) error {
 	// Get existing user to check if it exists
 	existingUser, err := s.repo.GetUserWithDetails(ctx, userID)
 	if err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATE_FAILED", map[string]interface{}{
+			"target_user_id": userID,
+			"reason":         "user not found",
+		}, ip, "failure")
 		return errors.New("user not found")
 	}
-
-	// ✅ REMOVED: SuperAdmin restriction
-	// Now SuperAdmin users can be updated
 
 	// Check if email is being changed and if new email already exists
 	if req.Email != "" && req.Email != existingUser.Email {
 		exists, err := s.repo.UserExistsByEmail(ctx, req.Email)
 		if err != nil {
+			s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATE_FAILED", map[string]interface{}{
+				"target_user_id": userID,
+				"target_email":   existingUser.Email,
+				"new_email":      req.Email,
+				"reason":         "failed to check email availability",
+			}, ip, "failure")
 			return errors.New("failed to check email availability")
 		}
 		if exists {
+			s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATE_FAILED", map[string]interface{}{
+				"target_user_id": userID,
+				"target_email":   existingUser.Email,
+				"new_email":      req.Email,
+				"reason":         "email already exists",
+			}, ip, "failure")
 			return errors.New("email already exists")
 		}
 	}
 
 	// Prepare user updates
 	userUpdates := &auth.User{}
+	changes := make(map[string]interface{})
+	
 	if req.FullName != "" {
 		userUpdates.FullName = req.FullName
+		changes["full_name"] = req.FullName
 	}
 	if req.Email != "" {
 		userUpdates.Email = req.Email
+		changes["email"] = req.Email
 	}
 	if req.Phone != "" {
 		phone, err := cleanPhone(req.Phone)
 		if err != nil {
+			s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATE_FAILED", map[string]interface{}{
+				"target_user_id": userID,
+				"target_email":   existingUser.Email,
+				"reason":         "invalid phone number",
+			}, ip, "failure")
 			return err
 		}
 		userUpdates.Phone = phone
+		changes["phone"] = phone
 	}
 
 	// Update user
 	if err := s.repo.UpdateUser(ctx, userID, userUpdates); err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATE_FAILED", map[string]interface{}{
+			"target_user_id": userID,
+			"target_email":   existingUser.Email,
+			"reason":         "failed to update user",
+		}, ip, "failure")
 		return errors.New("failed to update user")
 	}
 
@@ -322,60 +531,149 @@ func (s *Service) UpdateUser(ctx context.Context, userID uint, req UpdateUserReq
 		 req.TemplePhoneNo != "" || req.TempleDescription != "") {
 		
 		tenantDetails := &auth.TenantDetails{}
+		templeChanges := make(map[string]interface{})
+		
 		if req.TempleName != "" {
 			tenantDetails.TempleName = req.TempleName
+			templeChanges["temple_name"] = req.TempleName
 		}
 		if req.TemplePlace != "" {
 			tenantDetails.TemplePlace = req.TemplePlace
+			templeChanges["temple_place"] = req.TemplePlace
 		}
 		if req.TempleAddress != "" {
 			tenantDetails.TempleAddress = req.TempleAddress
+			templeChanges["temple_address"] = req.TempleAddress
 		}
 		if req.TemplePhoneNo != "" {
 			tenantDetails.TemplePhoneNo = req.TemplePhoneNo
+			templeChanges["temple_phone"] = req.TemplePhoneNo
 		}
 		if req.TempleDescription != "" {
 			tenantDetails.TempleDescription = req.TempleDescription
+			templeChanges["temple_description"] = req.TempleDescription
 		}
 
 		if err := s.repo.UpdateTenantDetails(ctx, userID, tenantDetails); err != nil {
+			s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATE_FAILED", map[string]interface{}{
+				"target_user_id": userID,
+				"target_email":   existingUser.Email,
+				"reason":         "failed to update temple details",
+			}, ip, "failure")
 			return errors.New("failed to update temple details")
 		}
+		
+		changes["temple_details"] = templeChanges
 	}
+
+	// Log successful user update
+	s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATED", map[string]interface{}{
+		"target_user_id":   userID,
+		"target_email":     existingUser.Email,
+		"target_name":      existingUser.FullName,
+		"changes":          changes,
+	}, ip, "success")
 
 	return nil
 }
 
 // Delete user - KEPT: Still prevent SuperAdmin deletion for safety
-func (s *Service) DeleteUser(ctx context.Context, userID uint, adminID uint) error {
+func (s *Service) DeleteUser(ctx context.Context, userID uint, adminID uint, ip string) error {
 	// Get existing user to check role
 	existingUser, err := s.repo.GetUserWithDetails(ctx, userID)
 	if err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "USER_DELETE_FAILED", map[string]interface{}{
+			"target_user_id": userID,
+			"reason":         "user not found",
+		}, ip, "failure")
 		return errors.New("user not found")
 	}
 
 	// Keep this restriction for safety - prevent deleting superadmin users
 	if existingUser.Role.RoleName == "superadmin" {
+		s.auditService.LogAction(ctx, &adminID, nil, "USER_DELETE_FAILED", map[string]interface{}{
+			"target_user_id": userID,
+			"target_email":   existingUser.Email,
+			"reason":         "cannot delete superadmin user",
+		}, ip, "failure")
 		return errors.New("cannot delete superadmin user")
 	}
 
 	// Prevent self-deletion
 	if userID == adminID {
+		s.auditService.LogAction(ctx, &adminID, nil, "USER_DELETE_FAILED", map[string]interface{}{
+			"target_user_id": userID,
+			"target_email":   existingUser.Email,
+			"reason":         "cannot delete own account",
+		}, ip, "failure")
 		return errors.New("cannot delete your own account")
 	}
 
-	return s.repo.DeleteUser(ctx, userID)
+	if err := s.repo.DeleteUser(ctx, userID); err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "USER_DELETE_FAILED", map[string]interface{}{
+			"target_user_id": userID,
+			"target_email":   existingUser.Email,
+			"reason":         "database error",
+		}, ip, "failure")
+		return err
+	}
+
+	// Log successful user deletion
+	s.auditService.LogAction(ctx, &adminID, nil, "USER_DELETED", map[string]interface{}{
+		"target_user_id": userID,
+		"target_email":   existingUser.Email,
+		"target_name":    existingUser.FullName,
+		"target_role":    existingUser.Role.RoleName,
+	}, ip, "success")
+
+	return nil
 }
 
 // Update user status - UPDATED: SuperAdmin restriction removed
 // Update user status - UPDATED: Simplified after removing SuperAdmin restrictions
-func (s *Service) UpdateUserStatus(ctx context.Context, userID uint, status string, adminID uint) error {
-	// Only keep the self-deactivation check - no need to fetch user details
+func (s *Service) UpdateUserStatus(ctx context.Context, userID uint, status string, adminID uint, ip string) error {
+	// Get existing user first
+	existingUser, err := s.repo.GetUserWithDetails(ctx, userID)
+	if err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "USER_STATUS_UPDATE_FAILED", map[string]interface{}{
+			"target_user_id": userID,
+			"new_status":     status,
+			"reason":         "user not found",
+		}, ip, "failure")
+		return errors.New("user not found")
+	}
+
+	// Only keep the self-deactivation check
 	if userID == adminID && status == "inactive" {
+		s.auditService.LogAction(ctx, &adminID, nil, "USER_STATUS_UPDATE_FAILED", map[string]interface{}{
+			"target_user_id": userID,
+			"target_email":   existingUser.Email,
+			"new_status":     status,
+			"reason":         "cannot deactivate own account",
+		}, ip, "failure")
 		return errors.New("cannot deactivate your own account")
 	}
 
-	return s.repo.UpdateUserStatus(ctx, userID, status)
+	if err := s.repo.UpdateUserStatus(ctx, userID, status); err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "USER_STATUS_UPDATE_FAILED", map[string]interface{}{
+			"target_user_id": userID,
+			"target_email":   existingUser.Email,
+			"new_status":     status,
+			"reason":         "database error",
+		}, ip, "failure")
+		return err
+	}
+
+	// Log successful status update
+	s.auditService.LogAction(ctx, &adminID, nil, "USER_STATUS_UPDATED", map[string]interface{}{
+		"target_user_id": userID,
+		"target_email":   existingUser.Email,
+		"target_name":    existingUser.FullName,
+		"old_status":     existingUser.Status,
+		"new_status":     status,
+	}, ip, "success")
+
+	return nil
 }
 
 // Get all user roles
@@ -404,18 +702,30 @@ func cleanPhone(raw string) (string, error) {
 // ================== USER ROLES ==================
 
 // CreateRole handles the creation of a new user role.
-func (s *Service) CreateRole(ctx context.Context, req *auth.CreateRoleRequest) error {
+func (s *Service) CreateRole(ctx context.Context, req *auth.CreateRoleRequest, adminID uint, ip string) error {
 	// 1. Basic validation from the DTO
 	if req.RoleName == "" || req.Description == "" {
+		s.auditService.LogAction(ctx, &adminID, nil, "ROLE_CREATE_FAILED", map[string]interface{}{
+			"role_name": req.RoleName,
+			"reason":    "role name and description are required",
+		}, ip, "failure")
 		return errors.New("role name and description are required")
 	}
 
 	// 2. Check for uniqueness using the new repository method
 	exists, err := s.repo.CheckIfRoleNameExists(ctx, req.RoleName)
 	if err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "ROLE_CREATE_FAILED", map[string]interface{}{
+			"role_name": req.RoleName,
+			"reason":    "failed to check role uniqueness",
+		}, ip, "failure")
 		return err
 	}
 	if exists {
+		s.auditService.LogAction(ctx, &adminID, nil, "ROLE_CREATE_FAILED", map[string]interface{}{
+			"role_name": req.RoleName,
+			"reason":    "role name already exists",
+		}, ip, "failure")
 		return errors.New("role name already exists")
 	}
 
@@ -428,7 +738,23 @@ func (s *Service) CreateRole(ctx context.Context, req *auth.CreateRoleRequest) e
 	}
 
 	// 4. Save to the database via the repository
-	return s.repo.CreateUserRole(ctx, newRole)
+	if err := s.repo.CreateUserRole(ctx, newRole); err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "ROLE_CREATE_FAILED", map[string]interface{}{
+			"role_name": req.RoleName,
+			"reason":    "database error",
+		}, ip, "failure")
+		return err
+	}
+
+	// Log successful role creation
+	s.auditService.LogAction(ctx, &adminID, nil, "ROLE_CREATED", map[string]interface{}{
+		"role_id":               newRole.ID,
+		"role_name":             req.RoleName,
+		"description":           req.Description,
+		"can_register_publicly": false,
+	}, ip, "success")
+
+	return nil
 }
 
 // GetRoles fetches all active roles for the UI.
@@ -455,56 +781,130 @@ func (s *Service) GetRoles(ctx context.Context) ([]auth.RoleResponse, error) {
 }
 
 // UpdateRole updates an existing user role's details.
-// 🎯 FIX: Changed 'req' type from *auth.CreateRoleRequest to *auth.UpdateRoleRequest
-func (s *Service) UpdateRole(ctx context.Context, roleID uint, req *auth.UpdateRoleRequest) error {
+func (s *Service) UpdateRole(ctx context.Context, roleID uint, req *auth.UpdateRoleRequest, adminID uint, ip string) error {
 	role, err := s.repo.GetUserRoleByID(ctx, roleID)
 	if err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "ROLE_UPDATE_FAILED", map[string]interface{}{
+			"role_id": roleID,
+			"reason":  "database error",
+		}, ip, "failure")
 		return err
 	}
 	if role == nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "ROLE_UPDATE_FAILED", map[string]interface{}{
+			"role_id": roleID,
+			"reason":  "role not found",
+		}, ip, "failure")
 		return errors.New("role not found")
 	}
+
+	changes := make(map[string]interface{})
 
 	// Update only if provided
 	if req.RoleName != "" && req.RoleName != role.RoleName {
 		exists, err := s.repo.CheckIfRoleNameExists(ctx, req.RoleName)
 		if err != nil {
+			s.auditService.LogAction(ctx, &adminID, nil, "ROLE_UPDATE_FAILED", map[string]interface{}{
+				"role_id":   roleID,
+				"role_name": role.RoleName,
+				"reason":    "failed to check role uniqueness",
+			}, ip, "failure")
 			return err
 		}
 		if exists {
+			s.auditService.LogAction(ctx, &adminID, nil, "ROLE_UPDATE_FAILED", map[string]interface{}{
+				"role_id":      roleID,
+				"role_name":    role.RoleName,
+				"new_name":     req.RoleName,
+				"reason":       "role name already exists",
+			}, ip, "failure")
 			return errors.New("role name already exists")
 		}
+		changes["role_name"] = map[string]string{"old": role.RoleName, "new": req.RoleName}
 		role.RoleName = req.RoleName
 	}
 	if req.Description != "" {
+		changes["description"] = map[string]string{"old": role.Description, "new": req.Description}
 		role.Description = req.Description
 	}
 	if req.CanRegisterPublicly != nil {
+		changes["can_register_publicly"] = map[string]bool{"old": role.CanRegisterPublicly, "new": *req.CanRegisterPublicly}
 		role.CanRegisterPublicly = *req.CanRegisterPublicly
 	}
 
 	role.UpdatedAt = time.Now()
 
-	return s.repo.UpdateUserRole(ctx, role)
+	if err := s.repo.UpdateUserRole(ctx, role); err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "ROLE_UPDATE_FAILED", map[string]interface{}{
+			"role_id":   roleID,
+			"role_name": role.RoleName,
+			"reason":    "database error",
+		}, ip, "failure")
+		return err
+	}
+
+	// Log successful role update
+	s.auditService.LogAction(ctx, &adminID, nil, "ROLE_UPDATED", map[string]interface{}{
+		"role_id":   roleID,
+		"role_name": role.RoleName,
+		"changes":   changes,
+	}, ip, "success")
+
+	return nil
 }
 
-// 🎯 NEW: ToggleRoleStatus specifically handles updating only the status.
-func (s *Service) ToggleRoleStatus(ctx context.Context, roleID uint, status string) error {
+// ToggleRoleStatus specifically handles updating only the status.
+func (s *Service) ToggleRoleStatus(ctx context.Context, roleID uint, status string, adminID uint, ip string) error {
 	role, err := s.repo.GetUserRoleByID(ctx, roleID)
 	if err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "ROLE_STATUS_UPDATE_FAILED", map[string]interface{}{
+			"role_id":    roleID,
+			"new_status": status,
+			"reason":     "database error",
+		}, ip, "failure")
 		return err
 	}
 	if role == nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "ROLE_STATUS_UPDATE_FAILED", map[string]interface{}{
+			"role_id":    roleID,
+			"new_status": status,
+			"reason":     "role not found",
+		}, ip, "failure")
 		return errors.New("role not found")
 	}
 
 	// Check if the status is a valid value
 	if status != "active" && status != "inactive" {
+		s.auditService.LogAction(ctx, &adminID, nil, "ROLE_STATUS_UPDATE_FAILED", map[string]interface{}{
+			"role_id":    roleID,
+			"role_name":  role.RoleName,
+			"new_status": status,
+			"reason":     "invalid status provided",
+		}, ip, "failure")
 		return errors.New("invalid status provided")
 	}
 
+	oldStatus := role.Status
 	role.Status = status
 	role.UpdatedAt = time.Now()
 
-	return s.repo.UpdateUserRole(ctx, role)
+	if err := s.repo.UpdateUserRole(ctx, role); err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "ROLE_STATUS_UPDATE_FAILED", map[string]interface{}{
+			"role_id":    roleID,
+			"role_name":  role.RoleName,
+			"new_status": status,
+			"reason":     "database error",
+		}, ip, "failure")
+		return err
+	}
+
+	// Log successful status update
+	s.auditService.LogAction(ctx, &adminID, nil, "ROLE_STATUS_UPDATED", map[string]interface{}{
+		"role_id":    roleID,
+		"role_name":  role.RoleName,
+		"old_status": oldStatus,
+		"new_status": status,
+	}, ip, "success")
+
+	return nil
 }

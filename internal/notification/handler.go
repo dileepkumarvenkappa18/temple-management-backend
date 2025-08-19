@@ -6,20 +6,28 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/internal/auditlog"
+	"github.com/sharath018/temple-management-backend/middleware"
 )
 
 // Handler wraps the service
 type Handler struct {
-	Service Service
+	Service  Service
+	AuditSvc auditlog.Service // ✅ NEW: Audit service for IP extraction
 }
 
-func NewHandler(s Service) *Handler {
-	return &Handler{Service: s}
+// ✅ Updated constructor to accept audit service
+func NewHandler(s Service, auditSvc auditlog.Service) *Handler {
+	return &Handler{
+		Service:  s,
+		AuditSvc: auditSvc,
+	}
 }
 
 // POST /api/v1/notifications/templates
 func (h *Handler) CreateTemplate(c *gin.Context) {
 	user := c.MustGet("user").(auth.User)
+	ip := middleware.GetIPFromContext(c) // ✅ Extract IP for audit
 
 	var input NotificationTemplate
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -30,7 +38,8 @@ func (h *Handler) CreateTemplate(c *gin.Context) {
 	input.UserID = user.ID
 	input.EntityID = *user.EntityID
 
-	if err := h.Service.CreateTemplate(c.Request.Context(), &input); err != nil {
+	// ✅ Pass IP to service for audit logging
+	if err := h.Service.CreateTemplate(c.Request.Context(), &input, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create template"})
 		return
 	}
@@ -73,6 +82,7 @@ func (h *Handler) GetTemplateByID(c *gin.Context) {
 // PUT /api/v1/notifications/templates/:id
 func (h *Handler) UpdateTemplate(c *gin.Context) {
 	user := c.MustGet("user").(auth.User)
+	ip := middleware.GetIPFromContext(c) // ✅ Extract IP for audit
 
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -90,7 +100,8 @@ func (h *Handler) UpdateTemplate(c *gin.Context) {
 	input.UserID = user.ID
 	input.EntityID = *user.EntityID
 
-	if err := h.Service.UpdateTemplate(c.Request.Context(), &input); err != nil {
+	// ✅ Pass IP to service for audit logging
+	if err := h.Service.UpdateTemplate(c.Request.Context(), &input, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update template"})
 		return
 	}
@@ -101,6 +112,7 @@ func (h *Handler) UpdateTemplate(c *gin.Context) {
 // DELETE /api/v1/notifications/templates/:id
 func (h *Handler) DeleteTemplate(c *gin.Context) {
 	user := c.MustGet("user").(auth.User)
+	ip := middleware.GetIPFromContext(c) // ✅ Extract IP for audit
 
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -108,7 +120,8 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 		return
 	}
 
-	if err := h.Service.DeleteTemplate(c.Request.Context(), uint(id), *user.EntityID); err != nil {
+	// ✅ Pass user ID and IP to service for audit logging
+	if err := h.Service.DeleteTemplate(c.Request.Context(), uint(id), *user.EntityID, user.ID, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete template"})
 		return
 	}
@@ -119,6 +132,7 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 // POST /api/v1/notifications/send
 func (h *Handler) SendNotification(c *gin.Context) {
 	user := c.MustGet("user").(auth.User)
+	ip := middleware.GetIPFromContext(c) // ✅ Extract IP for audit
 
 	var req struct {
 		TemplateID *uint    `json:"template_id"`                 // Optional
@@ -161,6 +175,7 @@ func (h *Handler) SendNotification(c *gin.Context) {
 		}
 	}
 
+	// ✅ Pass IP to service for audit logging
 	if err := h.Service.SendNotification(
 		c.Request.Context(),
 		user.ID,
@@ -170,6 +185,7 @@ func (h *Handler) SendNotification(c *gin.Context) {
 		req.Subject,
 		req.Body,
 		req.Recipients,
+		ip,
 	); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send notification"})
 		return
@@ -177,7 +193,6 @@ func (h *Handler) SendNotification(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "notification sent"})
 }
-
 
 // GET /api/v1/notifications/logs
 func (h *Handler) GetMyNotifications(c *gin.Context) {

@@ -3,7 +3,7 @@ package donation
 import "time"
 
 // ==============================
-// DTOs and Request/Response Models - FIXED
+// DTOs and Request/Response Models - FIXED + AUDIT SUPPORT
 // ==============================
 
 // CreateDonationRequest is sent by frontend to initiate a donation
@@ -14,6 +14,7 @@ type CreateDonationRequest struct {
 	DonationType string  `json:"donationType" binding:"required,oneof=general seva event festival construction annadanam education maintenance"`
 	ReferenceID  *uint   `json:"referenceID,omitempty"`          // Optional: SevaID or EventID
 	Note         *string `json:"note,omitempty"`                 // Optional donor message
+	IPAddress    string  `json:"-"`                             // ✅ NEW: For audit logging (filled from middleware)
 }
 
 // CreateDonationResponse is returned to frontend after creating Razorpay order
@@ -29,6 +30,7 @@ type VerifyPaymentRequest struct {
 	OrderID      string `json:"orderID" binding:"required"`            // Razorpay order ID
 	PaymentID    string `json:"paymentID" binding:"required"`          // Razorpay payment ID
 	RazorpaySig  string `json:"razorpaySig" binding:"required"`        // Signature to verify payment
+	IPAddress    string `json:"-"`                                     // ✅ NEW: For audit logging (filled from middleware)
 }
 
 // DonationWithUser includes user and entity information - FIXED FIELD MAPPING

@@ -4,22 +4,23 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/sharath018/temple-management-backend/internal/auditlog"
 )
 
 type Service interface {
 	// Seva Core
-	CreateSeva(ctx context.Context, seva *Seva, userRole string, entityID uint) error
-	UpdateSeva(ctx context.Context, seva *Seva, userRole string, entityID uint) error
+	CreateSeva(ctx context.Context, seva *Seva, userRole string, entityID uint, userID uint, ip string) error
+	UpdateSeva(ctx context.Context, seva *Seva, userRole string, entityID uint, userID uint, ip string) error
 	DeleteSeva(ctx context.Context, sevaID uint, userRole string) error
 	GetSevasByEntity(ctx context.Context, entityID uint) ([]Seva, error)
 	GetSevaByID(ctx context.Context, id uint) (*Seva, error)
 
 	// Booking Core
-	BookSeva(ctx context.Context, booking *SevaBooking, userRole string, userID uint, entityID uint) error
+	BookSeva(ctx context.Context, booking *SevaBooking, userRole string, userID uint, entityID uint, ip string) error
 	GetBookingsForUser(ctx context.Context, userID uint) ([]SevaBooking, error)
 	GetBookingsForEntity(ctx context.Context, entityID uint) ([]SevaBooking, error)
-	UpdateBookingStatus(ctx context.Context, bookingID uint, newStatus string) error
-
+	UpdateBookingStatus(ctx context.Context, bookingID uint, newStatus string, userID uint, ip string) error
 
 	// Composite Booking Details
 	GetDetailedBookingsForEntity(ctx context.Context, entityID uint) ([]DetailedBooking, error)
@@ -35,32 +36,87 @@ type Service interface {
 	GetBookingStatusCounts(ctx context.Context, entityID uint) (BookingStatusCounts, error)
 
 	GetPaginatedSevas(ctx context.Context, entityID uint, sevaType string, search string, limit int, offset int) ([]Seva, error)
-
 }
 
 type service struct {
-	repo Repository
+	repo       Repository
+	auditSvc   auditlog.Service
 }
 
-func NewService(repo Repository) Service {
-	return &service{repo}
+func NewService(repo Repository, auditSvc auditlog.Service) Service {
+	return &service{
+		repo:     repo,
+		auditSvc: auditSvc,
+	}
 }
 
 // Templeadmin only
-func (s *service) CreateSeva(ctx context.Context, seva *Seva, userRole string, entityID uint) error {
+func (s *service) CreateSeva(ctx context.Context, seva *Seva, userRole string, entityID uint, userID uint, ip string) error {
 	if userRole != "templeadmin" {
+		// Audit failed attempt
+		s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_CREATE_FAILED", map[string]interface{}{
+			"reason": "unauthorized access",
+			"seva_name": seva.Name,
+		}, ip, "failure")
 		return errors.New("unauthorized: only templeadmin can create sevas")
 	}
 	seva.EntityID = entityID
-	return s.repo.CreateSeva(ctx, seva)
+
+	// Create seva
+	err := s.repo.CreateSeva(ctx, seva)
+	if err != nil {
+		// Audit failed creation
+		s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_CREATE_FAILED", map[string]interface{}{
+			"seva_name": seva.Name,
+			"seva_type": seva.SevaType,
+			"error": err.Error(),
+		}, ip, "failure")
+		return err
+	}
+
+	// Audit successful creation
+	s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_CREATED", map[string]interface{}{
+		"seva_id": seva.ID,
+		"seva_name": seva.Name,
+		"seva_type": seva.SevaType,
+		"price": seva.Price,
+	}, ip, "success")
+
+	return nil
 }
 
-func (s *service) UpdateSeva(ctx context.Context, seva *Seva, userRole string, entityID uint) error {
+func (s *service) UpdateSeva(ctx context.Context, seva *Seva, userRole string, entityID uint, userID uint, ip string) error {
 	if userRole != "templeadmin" {
+		// Audit failed attempt
+		s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_UPDATE_FAILED", map[string]interface{}{
+			"reason": "unauthorized access",
+			"seva_id": seva.ID,
+		}, ip, "failure")
 		return errors.New("unauthorized: only templeadmin can update sevas")
 	}
 	seva.EntityID = entityID
-	return s.repo.UpdateSeva(ctx, seva)
+
+	// Update seva
+	err := s.repo.UpdateSeva(ctx, seva)
+	if err != nil {
+		// Audit failed update
+		s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_UPDATE_FAILED", map[string]interface{}{
+			"seva_id": seva.ID,
+			"seva_name": seva.Name,
+			"error": err.Error(),
+		}, ip, "failure")
+		return err
+	}
+
+	// Audit successful update
+	s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_UPDATED", map[string]interface{}{
+		"seva_id": seva.ID,
+		"seva_name": seva.Name,
+		"seva_type": seva.SevaType,
+		"price": seva.Price,
+	}, ip, "success")
+
+	return nil
 }
 
 func (s *service) DeleteSeva(ctx context.Context, sevaID uint, userRole string) error {
@@ -79,14 +135,25 @@ func (s *service) GetSevaByID(ctx context.Context, id uint) (*Seva, error) {
 }
 
 // Devotee only
-func (s *service) BookSeva(ctx context.Context, booking *SevaBooking, userRole string, userID uint, entityID uint) error {
+func (s *service) BookSeva(ctx context.Context, booking *SevaBooking, userRole string, userID uint, entityID uint, ip string) error {
 	if userRole != "devotee" {
+		// Audit failed attempt
+		s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_BOOKING_FAILED", map[string]interface{}{
+			"reason": "unauthorized access",
+			"seva_id": booking.SevaID,
+		}, ip, "failure")
 		return errors.New("unauthorized: only devotee can book sevas")
 	}
 
 	// Validate Seva exists
-	_, err := s.repo.GetSevaByID(ctx, booking.SevaID)
+	seva, err := s.repo.GetSevaByID(ctx, booking.SevaID)
 	if err != nil {
+		// Audit failed booking
+		s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_BOOKING_FAILED", map[string]interface{}{
+			"seva_id": booking.SevaID,
+			"reason": "seva not found",
+			"error": err.Error(),
+		}, ip, "failure")
 		return err
 	}
 
@@ -95,10 +162,29 @@ func (s *service) BookSeva(ctx context.Context, booking *SevaBooking, userRole s
 	booking.BookingTime = time.Now() // ✅ Fix: Set current time
 	booking.Status = "pending"
 
-	return s.repo.BookSeva(ctx, booking)
+	// Create booking
+	err = s.repo.BookSeva(ctx, booking)
+	if err != nil {
+		// Audit failed booking
+		s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_BOOKING_FAILED", map[string]interface{}{
+			"seva_id": booking.SevaID,
+			"seva_name": seva.Name,
+			"error": err.Error(),
+		}, ip, "failure")
+		return err
+	}
+
+	// Audit successful booking
+	s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_BOOKED", map[string]interface{}{
+		"booking_id": booking.ID,
+		"seva_id": booking.SevaID,
+		"seva_name": seva.Name,
+		"seva_type": seva.SevaType,
+		"status": booking.Status,
+	}, ip, "success")
+
+	return nil
 }
-
-
 
 func (s *service) GetBookingsForUser(ctx context.Context, userID uint) ([]SevaBooking, error) {
 	return s.repo.ListBookingsByUserID(ctx, userID)
@@ -109,38 +195,61 @@ func (s *service) GetBookingsForEntity(ctx context.Context, entityID uint) ([]Se
 }
 
 // Temple Admin only
-func (s *service) UpdateBookingStatus(ctx context.Context, bookingID uint, newStatus string) error {
-	return s.repo.UpdateBookingStatus(ctx, bookingID, newStatus)
+func (s *service) UpdateBookingStatus(ctx context.Context, bookingID uint, newStatus string, userID uint, ip string) error {
+	// Get booking details for audit
+	booking, err := s.repo.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		// Audit failed attempt
+		s.auditSvc.LogAction(ctx, &userID, nil, "SEVA_BOOKING_STATUS_UPDATE_FAILED", map[string]interface{}{
+			"booking_id": bookingID,
+			"new_status": newStatus,
+			"reason": "booking not found",
+			"error": err.Error(),
+		}, ip, "failure")
+		return err
+	}
+
+	// Get seva details for better audit logging
+	seva, _ := s.repo.GetSevaByID(ctx, booking.SevaID)
+
+	// Update status
+	err = s.repo.UpdateBookingStatus(ctx, bookingID, newStatus)
+	if err != nil {
+		// Audit failed update
+		s.auditSvc.LogAction(ctx, &userID, &booking.EntityID, "SEVA_BOOKING_STATUS_UPDATE_FAILED", map[string]interface{}{
+			"booking_id": bookingID,
+			"seva_id": booking.SevaID,
+			"new_status": newStatus,
+			"error": err.Error(),
+		}, ip, "failure")
+		return err
+	}
+
+	// Audit successful status update with specific action
+	action := "SEVA_BOOKING_STATUS_UPDATED"
+	if newStatus == "approved" {
+		action = "SEVA_BOOKING_APPROVED"
+	} else if newStatus == "rejected" {
+		action = "SEVA_BOOKING_REJECTED"
+	}
+
+	auditDetails := map[string]interface{}{
+		"booking_id": bookingID,
+		"seva_id": booking.SevaID,
+		"devotee_id": booking.UserID,
+		"old_status": booking.Status,
+		"new_status": newStatus,
+	}
+
+	if seva != nil {
+		auditDetails["seva_name"] = seva.Name
+		auditDetails["seva_type"] = seva.SevaType
+	}
+
+	s.auditSvc.LogAction(ctx, &userID, &booking.EntityID, action, auditDetails, ip, "success")
+
+	return nil
 }
-
-
-
-// 🔄 Templeadmin only: Add/Replace Availability
-// func (s *service) SetAvailabilityForSeva(ctx context.Context, sevaID uint, slots []SevaAvailability, userRole string) error {
-// 	if userRole != "templeadmin" {
-// 		return errors.New("unauthorized: only templeadmin can manage availability")
-// 	}
-
-// 	// Remove previous availability
-// 	if err := s.repo.DeleteAvailabilityBySevaID(ctx, sevaID); err != nil {
-// 		return err
-// 	}
-
-// 	// Save new availability
-// 	for _, slot := range slots {
-// 		slot.SevaID = sevaID
-// 		if err := s.repo.CreateAvailability(ctx, &slot); err != nil {
-// 			return err
-// 		}
-// 	}
-
-// 	return nil
-// }
-
-// 🔄 Public: View availability for seva
-// func (s *service) GetAvailabilityForSeva(ctx context.Context, sevaID uint) ([]SevaAvailability, error) {
-// 	return s.repo.GetAvailabilityBySevaID(ctx, sevaID)
-// }
 
 // 🔄 Templeadmin only: Full booking table with names, types, etc.
 func (s *service) GetDetailedBookingsForEntity(ctx context.Context, entityID uint) ([]DetailedBooking, error) {

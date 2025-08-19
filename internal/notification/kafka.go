@@ -42,6 +42,12 @@ func StartKafkaConsumer(svc Service) {
 			}
 
 			// Process the notification
+			// ✅ FIXED: Use IP from message or default to "kafka-worker"
+			ip := msg.IPAddress
+			if ip == "" {
+				ip = "kafka-worker" // Default for Kafka workers
+			}
+			
 			err = svc.SendNotification(
 				context.Background(),
 				msg.SenderID,
@@ -51,6 +57,7 @@ func StartKafkaConsumer(svc Service) {
 				msg.Subject,
 				msg.Body,
 				msg.Recipients,
+				ip, // ✅ FIXED: Added IP parameter for audit logging
 			)
 
 			if err != nil {

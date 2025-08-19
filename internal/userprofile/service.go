@@ -1,10 +1,12 @@
 package userprofile
 
 import (
+	"context"
 	"errors"
 	"time"
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/internal/auditlog"
 	"github.com/sharath018/temple-management-backend/internal/entity"
 	"gorm.io/gorm"
 )
@@ -12,15 +14,13 @@ import (
 // ========== INTERFACES ==========
 
 type Service interface {
-	CreateOrUpdateProfile(userID uint, entityID uint, input DevoteeProfileInput) (*DevoteeProfile, error)
+	CreateOrUpdateProfile(ctx context.Context, userID uint, entityID uint, input DevoteeProfileInput, ip string) (*DevoteeProfile, error)
 	Get(userID uint) (*DevoteeProfile, error)
-	JoinTemple(userID uint, entityID uint) (*UserEntityMembership, error)
+	JoinTemple(ctx context.Context, userID uint, entityID uint, userRole string, ip string) (*UserEntityMembership, error)
 	ListMemberships(userID uint) ([]UserEntityMembership, error)
-	SearchTemples(query, state, templeType string) ([]entity.Entity, error) // ✅ Changed return type
+	SearchTemples(query, state, templeType string) ([]entity.Entity, error)
 	GetRecentTemples() ([]entity.Entity, error)
 	UpdateMembershipStatus(userID uint, entityID uint, status string) error
-
-
 }
 
 // ========== SERVICE INIT ==========
@@ -28,10 +28,15 @@ type Service interface {
 type service struct {
 	repo     Repository
 	authRepo auth.Repository
+	auditSvc auditlog.Service // ✅ ADDED AUDIT SERVICE
 }
 
-func NewService(repo Repository, authRepo auth.Repository) Service {
-	return &service{repo: repo, authRepo: authRepo}
+func NewService(repo Repository, authRepo auth.Repository, auditSvc auditlog.Service) Service {
+	return &service{
+		repo:     repo,
+		authRepo: authRepo,
+		auditSvc: auditSvc, // ✅ INJECT AUDIT SERVICE
+	}
 }
 
 // ========== PROFILE DTO ==========
@@ -100,14 +105,13 @@ type DevoteeProfileInput struct {
 	AdditionalNotes       *string `json:"additional_notes"`
 }
 
-
 // ========== PROFILE LOGIC ==========
 
 func (s *service) Get(userID uint) (*DevoteeProfile, error) {
 	return s.repo.GetByUserID(userID)
 }
 
-func (s *service) CreateOrUpdateProfile(userID, entityID uint, input DevoteeProfileInput) (*DevoteeProfile, error) {
+func (s *service) CreateOrUpdateProfile(ctx context.Context, userID, entityID uint, input DevoteeProfileInput, ip string) (*DevoteeProfile, error) {
 	existing, err := s.repo.GetByUserID(userID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
@@ -171,22 +175,51 @@ func (s *service) CreateOrUpdateProfile(userID, entityID uint, input DevoteeProf
 		UpdatedAt:                   time.Now(),
 	}
 
+	var action string
+	var status string
+
 	// If profile already exists, update it
 	if existing != nil && existing.ID > 0 {
 		profile.ID = existing.ID
 		err = s.repo.Update(profile)
-		return profile, err
+		action = "PROFILE_UPDATED"
+	} else {
+		// Else create new
+		err = s.repo.Create(profile)
+		action = "PROFILE_CREATED"
 	}
 
-	// Else create new
-	err = s.repo.Create(profile)
+	// ✅ AUDIT LOG: Profile Create/Update
+	if err != nil {
+		status = "failure"
+	} else {
+		status = "success"
+	}
+
+	// Get profile name for audit details
+	profileName := ""
+	if input.FullName != nil {
+		profileName = *input.FullName
+	}
+
+	auditDetails := map[string]interface{}{
+		"profile_id": profile.ID,
+		"full_name":  profileName,
+		"entity_id":  entityID,
+	}
+
+	// Log the audit action (don't fail the operation if audit fails)
+	if auditErr := s.auditSvc.LogAction(ctx, &userID, &entityID, action, auditDetails, ip, status); auditErr != nil {
+		// Log error but don't fail the operation
+		// In production, you might want to log this to a monitoring service
+	}
+
 	return profile, err
 }
 
-
 // ========== MEMBERSHIP LOGIC ==========
 
-func (s *service) JoinTemple(userID uint, entityID uint) (*UserEntityMembership, error) {
+func (s *service) JoinTemple(ctx context.Context, userID uint, entityID uint, userRole string, ip string) (*UserEntityMembership, error) {
 	temple, err := s.repo.GetFullTempleByID(entityID)
 	if err != nil {
 		return nil, err
@@ -211,7 +244,42 @@ func (s *service) JoinTemple(userID uint, entityID uint) (*UserEntityMembership,
 		EntityID: entityID,
 		JoinedAt: time.Now(),
 	}
-	if err := s.repo.CreateMembership(membership); err != nil {
+	
+	err = s.repo.CreateMembership(membership)
+	
+	// ✅ AUDIT LOG: Temple Join
+	var action string
+	var status string
+
+	if err != nil {
+		status = "failure"
+	} else {
+		status = "success"
+	}
+
+	// Determine action based on user role
+	switch userRole {
+	case "volunteer":
+		action = "VOLUNTEER_JOINED_TEMPLE"
+	case "devotee":
+		action = "DEVOTEE_JOINED_TEMPLE"
+	default:
+		action = "USER_JOINED_TEMPLE" // fallback
+	}
+
+	auditDetails := map[string]interface{}{
+		"temple_name": temple.Name,
+		"user_role":   userRole,
+		"entity_id":   entityID,
+	}
+
+	// Log the audit action (don't fail the operation if audit fails)
+	if auditErr := s.auditSvc.LogAction(ctx, &userID, &entityID, action, auditDetails, ip, status); auditErr != nil {
+		// Log error but don't fail the operation
+		// In production, you might want to log this to a monitoring service
+	}
+
+	if err != nil {
 		return nil, err
 	}
 
@@ -223,7 +291,7 @@ func (s *service) ListMemberships(userID uint) ([]UserEntityMembership, error) {
 }
 
 func (s *service) SearchTemples(query, state, templeType string) ([]entity.Entity, error) {
-	return s.repo.SearchTemples(query, state, templeType) // ✅ Uses simplified return
+	return s.repo.SearchTemples(query, state, templeType)
 }
 
 // ========== PROFILE COMPLETION LOGIC ==========
@@ -273,7 +341,6 @@ func calculateCompletionPercentage(p DevoteeProfileInput) int {
 func (s *service) GetRecentTemples() ([]entity.Entity, error) {
 	return s.repo.FetchRecentTemples()
 }
-
 
 func (s *service) UpdateMembershipStatus(userID uint, entityID uint, status string) error {
 	return s.repo.UpdateMembershipStatus(userID, entityID, status)

@@ -11,6 +11,7 @@ import (
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/database"
 	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/internal/auditlog" // ✅ ADD IMPORT
 	"github.com/sharath018/temple-management-backend/internal/entity"
 	"github.com/sharath018/temple-management-backend/internal/event"
 	"github.com/sharath018/temple-management-backend/internal/eventrsvp"
@@ -31,10 +32,16 @@ func main() {
 	// ✅ Init Kafka
 	utils.InitializeKafka()
 
-	// ✅ Inject authRepo into notification service
+	// ✅ Initialize repositories and services
 	authRepo := auth.NewRepository(db)
+	
+	// ✅ Initialize audit log service
+	auditRepo := auditlog.NewRepository(db)
+	auditSvc := auditlog.NewService(auditRepo)
+	
+	// ✅ Inject authRepo and auditSvc into notification service
 	notificationRepo := notification.NewRepository(db)
-	notificationService := notification.NewService(notificationRepo, authRepo, cfg)
+	notificationService := notification.NewService(notificationRepo, authRepo, cfg, auditSvc) // ✅ FIXED: Added auditSvc
 	notification.StartKafkaConsumer(notificationService)
 
 	// ✅ Seed roles and super admin
@@ -45,8 +52,9 @@ func main() {
 		panic(fmt.Sprintf("❌ Failed to seed Super Admin: %v", err))
 	}
 
-	// ✅ Auto-migrate models
+	// ✅ Auto-migrate models - ADD AUDIT LOG MODEL
 	if err := db.AutoMigrate(
+		&auditlog.AuditLog{}, // ✅ ADD THIS LINE
 		&entity.Entity{},
 		&event.Event{},
 		&eventrsvp.RSVP{},

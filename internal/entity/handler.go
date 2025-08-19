@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auth"
-	// "github.com/sharath018/temple-management-backend/utils"
+	"github.com/sharath018/temple-management-backend/middleware"
 )
 
 type Handler struct {
@@ -49,7 +49,10 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 		input.Status = "pending"
 	}
 
-	if err := h.Service.CreateEntity(&input, userID); err != nil {
+	// 🆕 GET IP ADDRESS FOR AUDIT LOGGING
+	ip := middleware.GetIPFromContext(c)
+
+	if err := h.Service.CreateEntity(&input, userID, ip); err != nil {
 		log.Printf("Service Error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create entity", "details": err.Error()})
 		return
@@ -124,10 +127,21 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		return
 	}
 
+	// Get authenticated user for audit logging
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	userID := user.(auth.User).ID
+
 	input.ID = uint(id)
 	input.UpdatedAt = time.Now()
 
-	if err := h.Service.UpdateEntity(input); err != nil {
+	// 🆕 GET IP ADDRESS FOR AUDIT LOGGING
+	ip := middleware.GetIPFromContext(c)
+
+	if err := h.Service.UpdateEntity(input, userID, ip); err != nil {
 		log.Printf("Update Error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update temple", "details": err.Error()})
 		return
@@ -144,7 +158,18 @@ func (h *Handler) DeleteEntity(c *gin.Context) {
 		return
 	}
 
-	if err := h.Service.DeleteEntity(id); err != nil {
+	// Get authenticated user for audit logging
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	userID := user.(auth.User).ID
+
+	// 🆕 GET IP ADDRESS FOR AUDIT LOGGING
+	ip := middleware.GetIPFromContext(c)
+
+	if err := h.Service.DeleteEntity(id, userID, ip); err != nil {
 		log.Printf("Delete Error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete temple", "details": err.Error()})
 		return
@@ -226,8 +251,8 @@ func (h *Handler) UpdateDevoteeMembershipStatus(c *gin.Context) {
 	}
 
 	var req struct {
-	Status string `json:"status" binding:"required,oneof=active inactive"`
-}
+		Status string `json:"status" binding:"required,oneof=active inactive"`
+	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

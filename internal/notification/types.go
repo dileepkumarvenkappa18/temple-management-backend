@@ -12,4 +12,5 @@ type NotificationMessage struct {
 	EntityID   uint      `json:"entity_id"`     // temple
 	SenderID   uint      `json:"sender_id"`     // templeadmin
 	SentAt     time.Time `json:"sent_at"`       // time sent
+	IPAddress  string    `json:"ip_address"`    // ✅ NEW: For audit logging
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/middleware"
 )
 
 type Handler struct {
@@ -38,7 +39,6 @@ func (h *Handler) GetMyProfile(c *gin.Context) {
 }
 
 // POST /profiles
-// POST /profiles
 func (h *Handler) CreateOrUpdateProfile(c *gin.Context) {
 	user, ok := c.Get("user")
 	if !ok {
@@ -68,7 +68,11 @@ func (h *Handler) CreateOrUpdateProfile(c *gin.Context) {
 		entityID = memberships[0].EntityID // default to first membership
 	}
 
-	profile, err := h.service.CreateOrUpdateProfile(currentUser.ID, entityID, input)
+	// ✅ EXTRACT IP ADDRESS FROM CONTEXT
+	ip := middleware.GetIPFromContext(c)
+
+	// ✅ PASS CONTEXT AND IP TO SERVICE
+	profile, err := h.service.CreateOrUpdateProfile(c.Request.Context(), currentUser.ID, entityID, input, ip)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not save profile"})
 		return
@@ -77,11 +81,11 @@ func (h *Handler) CreateOrUpdateProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, profile)
 }
 
-
 // ===========================
 // 🔹 MEMBERSHIP ENDPOINTS
 // ===========================
 
+// POST /memberships
 // POST /memberships
 func (h *Handler) JoinTemple(c *gin.Context) {
 	user, ok := c.Get("user")
@@ -99,7 +103,17 @@ func (h *Handler) JoinTemple(c *gin.Context) {
 		return
 	}
 
-	membership, err := h.service.JoinTemple(currentUser.ID, input.EntityID)
+	// ✅ EXTRACT IP ADDRESS FROM CONTEXT
+	ip := middleware.GetIPFromContext(c)
+
+	// ✅ GET USER ROLE FOR AUDIT LOGGING
+	userRole := "unknown"
+	if currentUser.Role.RoleName != "" {
+		userRole = currentUser.Role.RoleName
+	}
+
+	// ✅ PASS CONTEXT, USER ROLE AND IP TO SERVICE
+	membership, err := h.service.JoinTemple(c.Request.Context(), currentUser.ID, input.EntityID, userRole, ip)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -107,6 +121,7 @@ func (h *Handler) JoinTemple(c *gin.Context) {
 
 	c.JSON(http.StatusOK, membership)
 }
+
 
 // GET /memberships
 func (h *Handler) ListMemberships(c *gin.Context) {
@@ -154,4 +169,3 @@ func (h *Handler) GetRecentTemples(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, temples)
 }
-

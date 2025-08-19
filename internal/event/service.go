@@ -1,26 +1,48 @@
 package event
 
 import (
+	"context"
 	"errors"
 	"time"
+
+	"github.com/sharath018/temple-management-backend/internal/auditlog"
 )
 
 // Service wraps business logic for temple events
 type Service struct {
-	Repo *Repository
+	Repo       *Repository
+	AuditSvc   auditlog.Service // NEW: Audit service for logging
 }
 
-// NewService initializes a new Service
-func NewService(r *Repository) *Service {
-	return &Service{Repo: r}
+// NewService initializes a new Service with audit logging
+func NewService(r *Repository, auditSvc auditlog.Service) *Service {
+	return &Service{
+		Repo:     r,
+		AuditSvc: auditSvc,
+	}
 }
 
 // ===========================
 // 🎯 Create Event
-func (s *Service) CreateEvent(req *CreateEventRequest, createdBy uint, entityID uint) error {
+func (s *Service) CreateEvent(req *CreateEventRequest, createdBy uint, entityID uint, ip string) error {
 	// 🔄 Parse EventDate
 	eventDate, err := time.Parse("2006-01-02", req.EventDate)
 	if err != nil {
+		// Log failed event creation attempt
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&createdBy,
+			&entityID,
+			"EVENT_CREATED",
+			map[string]interface{}{
+				"title":        req.Title,
+				"event_type":   req.EventType,
+				"error":        "invalid event_date format",
+				"event_date":   req.EventDate,
+			},
+			ip,
+			"failure",
+		)
 		return errors.New("invalid event_date format. Use YYYY-MM-DD")
 	}
 
@@ -29,6 +51,21 @@ func (s *Service) CreateEvent(req *CreateEventRequest, createdBy uint, entityID 
 	if req.EventTime != "" {
 		parsedTime, err := time.Parse("15:04", req.EventTime)
 		if err != nil {
+			// Log failed event creation attempt
+			s.AuditSvc.LogAction(
+				context.Background(),
+				&createdBy,
+				&entityID,
+				"EVENT_CREATED",
+				map[string]interface{}{
+					"title":       req.Title,
+					"event_type":  req.EventType,
+					"error":       "invalid event_time format",
+					"event_time":  req.EventTime,
+				},
+				ip,
+				"failure",
+			)
 			return errors.New("invalid event_time format. Use HH:MM in 24-hour format")
 		}
 		normalizedTime := time.Date(0, 1, 1, parsedTime.Hour(), parsedTime.Minute(), 0, 0, time.UTC)
@@ -53,7 +90,47 @@ func (s *Service) CreateEvent(req *CreateEventRequest, createdBy uint, entityID 
 		EntityID:    entityID,
 	}
 
-	return s.Repo.CreateEvent(event)
+	// Attempt to create event in database
+	err = s.Repo.CreateEvent(event)
+	if err != nil {
+		// Log failed event creation
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&createdBy,
+			&entityID,
+			"EVENT_CREATED",
+			map[string]interface{}{
+				"title":       req.Title,
+				"event_type":  req.EventType,
+				"event_date":  req.EventDate,
+				"location":    req.Location,
+				"error":       err.Error(),
+			},
+			ip,
+			"failure",
+		)
+		return err
+	}
+
+	// Log successful event creation
+	s.AuditSvc.LogAction(
+		context.Background(),
+		&createdBy,
+		&entityID,
+		"EVENT_CREATED",
+		map[string]interface{}{
+			"event_id":    event.ID,
+			"title":       event.Title,
+			"event_type":  event.EventType,
+			"event_date":  event.EventDate.Format("2006-01-02"),
+			"location":    event.Location,
+			"is_active":   event.IsActive,
+		},
+		ip,
+		"success",
+	)
+
+	return nil
 }
 
 // ===========================
@@ -99,19 +176,71 @@ func (s *Service) GetEventStats(entityID uint) (*EventStatsResponse, error) {
 }
 
 // ===========================
-// 🛠 Update Event (with ownership check)
-func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, entityID uint) error {
+// 🛠 Update Event (with ownership check and audit logging)
+func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, entityID uint, userID uint, ip string) error {
+	// First check if event exists and user has permission
 	event, err := s.Repo.GetEventByID(id)
 	if err != nil {
+		// Log failed update attempt - event not found
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&userID,
+			&entityID,
+			"EVENT_UPDATED",
+			map[string]interface{}{
+				"event_id": id,
+				"error":    "event not found",
+			},
+			ip,
+			"failure",
+		)
 		return err
 	}
+
 	if event.EntityID != entityID {
+		// Log unauthorized update attempt
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&userID,
+			&entityID,
+			"EVENT_UPDATED",
+			map[string]interface{}{
+				"event_id":     id,
+				"event_title":  event.Title,
+				"error":        "unauthorized access",
+				"event_entity": event.EntityID,
+			},
+			ip,
+			"failure",
+		)
 		return errors.New("unauthorized: cannot update this event")
 	}
+
+	// Store original values for audit log
+	originalTitle := event.Title
+	originalEventType := event.EventType
+	originalEventDate := event.EventDate.Format("2006-01-02")
+	originalLocation := event.Location
+	originalIsActive := event.IsActive
 
 	// 🔄 Parse and update EventDate
 	eventDate, err := time.Parse("2006-01-02", req.EventDate)
 	if err != nil {
+		// Log failed update due to invalid date
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&userID,
+			&entityID,
+			"EVENT_UPDATED",
+			map[string]interface{}{
+				"event_id":         id,
+				"event_title":      event.Title,
+				"error":            "invalid event_date format",
+				"invalid_date":     req.EventDate,
+			},
+			ip,
+			"failure",
+		)
 		return errors.New("invalid event_date format. Use YYYY-MM-DD")
 	}
 	event.EventDate = eventDate
@@ -120,6 +249,21 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, entityID uint) e
 	if req.EventTime != "" {
 		parsedTime, err := time.Parse("15:04", req.EventTime)
 		if err != nil {
+			// Log failed update due to invalid time
+			s.AuditSvc.LogAction(
+				context.Background(),
+				&userID,
+				&entityID,
+				"EVENT_UPDATED",
+				map[string]interface{}{
+					"event_id":         id,
+					"event_title":      event.Title,
+					"error":            "invalid event_time format",
+					"invalid_time":     req.EventTime,
+				},
+				ip,
+				"failure",
+			)
 			return errors.New("invalid event_time format. Use HH:MM in 24-hour format")
 		}
 		normalizedTime := time.Date(0, 1, 1, parsedTime.Hour(), parsedTime.Minute(), 0, 0, time.UTC)
@@ -138,20 +282,143 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, entityID uint) e
 	}
 
 	// ✅ Now update using parsed `*Event`
-	return s.Repo.UpdateEvent(event)
-}
-
-
-// ===========================
-// ❌ Delete Event (with ownership check)
-func (s *Service) DeleteEvent(id uint, entityID uint) error {
-	event, err := s.Repo.GetEventByID(id)
+	err = s.Repo.UpdateEvent(event)
 	if err != nil {
+		// Log failed update attempt
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&userID,
+			&entityID,
+			"EVENT_UPDATED",
+			map[string]interface{}{
+				"event_id":    id,
+				"event_title": originalTitle,
+				"error":       err.Error(),
+			},
+			ip,
+			"failure",
+		)
 		return err
 	}
+
+	// Log successful event update with changes
+	changes := make(map[string]interface{})
+	if originalTitle != event.Title {
+		changes["title_changed"] = map[string]string{"from": originalTitle, "to": event.Title}
+	}
+	if originalEventType != event.EventType {
+		changes["event_type_changed"] = map[string]string{"from": originalEventType, "to": event.EventType}
+	}
+	if originalEventDate != event.EventDate.Format("2006-01-02") {
+		changes["event_date_changed"] = map[string]string{"from": originalEventDate, "to": event.EventDate.Format("2006-01-02")}
+	}
+	if originalLocation != event.Location {
+		changes["location_changed"] = map[string]string{"from": originalLocation, "to": event.Location}
+	}
+	if originalIsActive != event.IsActive {
+		changes["status_changed"] = map[string]bool{"from": originalIsActive, "to": event.IsActive}
+	}
+
+	s.AuditSvc.LogAction(
+		context.Background(),
+		&userID,
+		&entityID,
+		"EVENT_UPDATED",
+		map[string]interface{}{
+			"event_id":    event.ID,
+			"event_title": event.Title,
+			"changes":     changes,
+		},
+		ip,
+		"success",
+	)
+
+	return nil
+}
+
+// ===========================
+// ❌ Delete Event (with ownership check and audit logging)
+func (s *Service) DeleteEvent(id uint, entityID uint, userID uint, ip string) error {
+	// First check if event exists and user has permission
+	event, err := s.Repo.GetEventByID(id)
+	if err != nil {
+		// Log failed delete attempt - event not found
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&userID,
+			&entityID,
+			"EVENT_DELETED",
+			map[string]interface{}{
+				"event_id": id,
+				"error":    "event not found",
+			},
+			ip,
+			"failure",
+		)
+		return err
+	}
+
 	if event.EntityID != entityID {
+		// Log unauthorized delete attempt
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&userID,
+			&entityID,
+			"EVENT_DELETED",
+			map[string]interface{}{
+				"event_id":     id,
+				"event_title":  event.Title,
+				"error":        "unauthorized access",
+				"event_entity": event.EntityID,
+			},
+			ip,
+			"failure",
+		)
 		return errors.New("unauthorized: cannot delete this event")
 	}
 
-	return s.Repo.DeleteEvent(id, entityID)
+	// Store event details for audit log before deletion
+	eventTitle := event.Title
+	eventType := event.EventType
+	eventDate := event.EventDate.Format("2006-01-02")
+	location := event.Location
+
+	// Attempt to delete the event
+	err = s.Repo.DeleteEvent(id, entityID)
+	if err != nil {
+		// Log failed delete attempt
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&userID,
+			&entityID,
+			"EVENT_DELETED",
+			map[string]interface{}{
+				"event_id":    id,
+				"event_title": eventTitle,
+				"error":       err.Error(),
+			},
+			ip,
+			"failure",
+		)
+		return err
+	}
+
+	// Log successful event deletion
+	s.AuditSvc.LogAction(
+		context.Background(),
+		&userID,
+		&entityID,
+		"EVENT_DELETED",
+		map[string]interface{}{
+			"event_id":    id,
+			"event_title": eventTitle,
+			"event_type":  eventType,
+			"event_date":  eventDate,
+			"location":    location,
+		},
+		ip,
+		"success",
+	)
+
+	return nil
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/middleware"
 )
 
 // Handler represents the donation HTTP handler
@@ -47,6 +48,7 @@ func (h *Handler) CreateDonation(c *gin.Context) {
 
 	req.UserID = currentUser.ID
 	req.EntityID = *currentUser.EntityID
+	req.IPAddress = middleware.GetIPFromContext(c) // ✅ NEW: Extract IP for audit logging
 
 	order, err := h.svc.StartDonation(req)
 	if err != nil {
@@ -69,6 +71,8 @@ func (h *Handler) VerifyDonation(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	req.IPAddress = middleware.GetIPFromContext(c) // ✅ NEW: Extract IP for audit logging
 
 	if err := h.svc.VerifyAndUpdateDonation(req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

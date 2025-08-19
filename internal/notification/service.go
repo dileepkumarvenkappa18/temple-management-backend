@@ -9,46 +9,89 @@ import (
 
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/internal/auditlog"
 	"gorm.io/datatypes"
 )
 
-// Service interface
+// Service interface - updated with IP parameters for audit logging
 type Service interface {
-	CreateTemplate(ctx context.Context, template *NotificationTemplate) error
-	UpdateTemplate(ctx context.Context, template *NotificationTemplate) error
+	CreateTemplate(ctx context.Context, template *NotificationTemplate, ip string) error
+	UpdateTemplate(ctx context.Context, template *NotificationTemplate, ip string) error
 	GetTemplates(ctx context.Context, entityID uint) ([]NotificationTemplate, error)
 	GetTemplateByID(ctx context.Context, id uint, entityID uint) (*NotificationTemplate, error)
-	DeleteTemplate(ctx context.Context, id uint, entityID uint) error
-	SendNotification(ctx context.Context, senderID, entityID uint, templateID *uint, channel, subject, body string, recipients []string) error
+	DeleteTemplate(ctx context.Context, id uint, entityID uint, userID uint, ip string) error
+	SendNotification(ctx context.Context, senderID, entityID uint, templateID *uint, channel, subject, body string, recipients []string, ip string) error
 	GetNotificationsByUser(ctx context.Context, userID uint) ([]NotificationLog, error)
 	GetEmailsByAudience(entityID uint, audience string) ([]string, error)
 }
 
 type service struct {
-	repo     Repository
-	authRepo auth.Repository // ✅ Injected auth repo
-	email    Channel
-	sms      Channel
-	whatsapp Channel
+	repo       Repository
+	authRepo   auth.Repository
+	auditSvc   auditlog.Service // ✅ NEW: Audit service
+	email      Channel
+	sms        Channel
+	whatsapp   Channel
 }
 
-// ✅ Updated constructor
-func NewService(repo Repository, authRepo auth.Repository, cfg *config.Config) Service {
+// ✅ Updated constructor to accept audit service
+func NewService(repo Repository, authRepo auth.Repository, cfg *config.Config, auditSvc auditlog.Service) Service {
 	return &service{
-		repo:     repo,
-		authRepo: authRepo,                  // ✅ assigned here
-		email:    NewEmailSender(cfg),
-		sms:      NewSMSChannel(),
-		whatsapp: NewWhatsAppChannel(),
+		repo:       repo,
+		authRepo:   authRepo,
+		auditSvc:   auditSvc, // ✅ injected audit service
+		email:      NewEmailSender(cfg),
+		sms:        NewSMSChannel(),
+		whatsapp:   NewWhatsAppChannel(),
 	}
 }
 
-func (s *service) CreateTemplate(ctx context.Context, t *NotificationTemplate) error {
-	return s.repo.CreateTemplate(ctx, t)
+// ✅ Updated with audit logging
+func (s *service) CreateTemplate(ctx context.Context, t *NotificationTemplate, ip string) error {
+	err := s.repo.CreateTemplate(ctx, t)
+	
+	// ✅ Audit log the template creation
+	status := "success"
+	if err != nil {
+		status = "failure"
+	}
+	
+	details := map[string]interface{}{
+		"template_name": t.Name,
+		"category":      t.Category,
+	}
+	
+	auditErr := s.auditSvc.LogAction(ctx, &t.UserID, &t.EntityID, "TEMPLATE_CREATED", details, ip, status)
+	if auditErr != nil {
+		// Log audit error but don't fail the main operation
+		fmt.Printf("❌ Audit log error: %v\n", auditErr)
+	}
+	
+	return err
 }
 
-func (s *service) UpdateTemplate(ctx context.Context, t *NotificationTemplate) error {
-	return s.repo.UpdateTemplate(ctx, t)
+// ✅ Updated with audit logging
+func (s *service) UpdateTemplate(ctx context.Context, t *NotificationTemplate, ip string) error {
+	err := s.repo.UpdateTemplate(ctx, t)
+	
+	// ✅ Audit log the template update
+	status := "success"
+	if err != nil {
+		status = "failure"
+	}
+	
+	details := map[string]interface{}{
+		"template_id":   t.ID,
+		"template_name": t.Name,
+		"category":      t.Category,
+	}
+	
+	auditErr := s.auditSvc.LogAction(ctx, &t.UserID, &t.EntityID, "TEMPLATE_UPDATED", details, ip, status)
+	if auditErr != nil {
+		fmt.Printf("❌ Audit log error: %v\n", auditErr)
+	}
+	
+	return err
 }
 
 func (s *service) GetTemplates(ctx context.Context, entityID uint) ([]NotificationTemplate, error) {
@@ -59,16 +102,44 @@ func (s *service) GetTemplateByID(ctx context.Context, id uint, entityID uint) (
 	return s.repo.GetTemplateByID(ctx, id, entityID)
 }
 
-func (s *service) DeleteTemplate(ctx context.Context, id uint, entityID uint) error {
-	return s.repo.DeleteTemplate(ctx, id, entityID)
+// ✅ Updated with audit logging
+func (s *service) DeleteTemplate(ctx context.Context, id uint, entityID uint, userID uint, ip string) error {
+	// Get template details before deletion for audit
+	template, getErr := s.repo.GetTemplateByID(ctx, id, entityID)
+	templateName := "unknown"
+	if getErr == nil && template != nil {
+		templateName = template.Name
+	}
+	
+	err := s.repo.DeleteTemplate(ctx, id, entityID)
+	
+	// ✅ Audit log the template deletion
+	status := "success"
+	if err != nil {
+		status = "failure"
+	}
+	
+	details := map[string]interface{}{
+		"template_id":   id,
+		"template_name": templateName,
+	}
+	
+	auditErr := s.auditSvc.LogAction(ctx, &userID, &entityID, "TEMPLATE_DELETED", details, ip, status)
+	if auditErr != nil {
+		fmt.Printf("❌ Audit log error: %v\n", auditErr)
+	}
+	
+	return err
 }
 
+// ✅ Updated with audit logging
 func (s *service) SendNotification(
 	ctx context.Context,
 	senderID, entityID uint,
 	templateID *uint,
 	channel, subject, body string,
 	recipients []string,
+	ip string,
 ) error {
 	if len(recipients) == 0 {
 		return errors.New("no recipients specified")
@@ -104,6 +175,7 @@ func (s *service) SendNotification(
 		sendErr = fmt.Errorf("unsupported channel: %s", channel)
 	}
 
+	// Update notification log status
 	if sendErr != nil {
 		errMsg := sendErr.Error()
 		log.Status = "failed"
@@ -113,7 +185,43 @@ func (s *service) SendNotification(
 	}
 
 	log.UpdatedAt = time.Now()
-	return s.repo.UpdateNotificationLog(ctx, log)
+	updateErr := s.repo.UpdateNotificationLog(ctx, log)
+
+	// ✅ Audit log the notification send action
+	auditAction := ""
+	switch channel {
+	case "email":
+		auditAction = "EMAIL_SENT"
+	case "sms":
+		auditAction = "SMS_SENT"
+	case "whatsapp":
+		auditAction = "WHATSAPP_SENT"
+	default:
+		auditAction = "NOTIFICATION_SENT"
+	}
+
+	status := "success"
+	if sendErr != nil {
+		status = "failure"
+	}
+
+	details := map[string]interface{}{
+		"channel":          channel,
+		"recipients_count": len(recipients),
+		"template_id":      templateID,
+		"subject":          subject,
+	}
+
+	auditErr := s.auditSvc.LogAction(ctx, &senderID, &entityID, auditAction, details, ip, status)
+	if auditErr != nil {
+		fmt.Printf("❌ Audit log error: %v\n", auditErr)
+	}
+
+	// Return the original send error if any, otherwise return update error
+	if sendErr != nil {
+		return sendErr
+	}
+	return updateErr
 }
 
 func (s *service) GetNotificationsByUser(ctx context.Context, userID uint) ([]NotificationLog, error) {
