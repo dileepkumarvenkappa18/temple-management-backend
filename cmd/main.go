@@ -66,6 +66,8 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+	// NEW: Load HTML templates for the reset password page
+	router.LoadHTMLGlob("templates/*")
 
 	// ✅ Optional request logger for CORS debugging
 	router.Use(func(c *gin.Context) {

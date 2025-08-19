@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"net/http"
+	"strings"
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/database"
@@ -23,10 +25,26 @@ import (
 )
 
 func Setup(r *gin.Engine, cfg *config.Config) {
+		// Add static file serving for the public directory
+	r.Static("/public", "./public")
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "OK"})
 	})
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+		// NEW: Add a direct route for reset password
+	r.GET("/auth-pages/reset-password", func(c *gin.Context) {
+		token := c.Query("token")
+		if token == "" {
+			c.HTML(http.StatusBadRequest, "reset_password.html", gin.H{
+				"error": "No reset token provided. Please check your email link.",
+			})
+			return
+		}
+		c.HTML(http.StatusOK, "reset_password.html", gin.H{
+			"token": token,
+		})
+	})
 
 	api := r.Group("/api/v1")
 	api.Use(middleware.RateLimiterMiddleware()) // 🛡 Global rate limit: 5 req/sec per IP
@@ -48,9 +66,9 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		authGroup.POST("/login", authHandler.Login)
 		authGroup.POST("/refresh", authHandler.Refresh)
 
-		// ✅ NEW: Forgot/Reset/Logout
-		authGroup.POST("/forgot-password", authHandler.ForgotPassword)
-		authGroup.POST("/reset-password", authHandler.ResetPassword)
+// ✅ NEW: Forgot/Reset/Logout
+authGroup.POST("/forgot-password", authHandler.ForgotPassword)
+authGroup.POST("/reset-password", authHandler.ResetPassword)
 
 		// ✅ NEW: Public roles endpoint for registration (no auth required)
 		authGroup.GET("/public-roles", authHandler.GetPublicRoles)
@@ -134,6 +152,10 @@ func Setup(r *gin.Engine, cfg *config.Config) {
         superadminRoutes.POST("/roles", superadminHandler.CreateRole)
         superadminRoutes.PUT("/roles/:id", superadminHandler.UpdateRole)
         superadminRoutes.PATCH("/roles/:id/status", superadminHandler.ToggleRoleStatus)
+
+		// Reset user password (superadmin resets any user’s password)
+superadminRoutes.POST("/users/:id/reset-password", superadminHandler.ResetUserPassword)
+superadminRoutes.GET("/users/search", superadminHandler.SearchUserByEmail)
 	}
 
 // ========== Seva ==========
@@ -315,4 +337,17 @@ protected.GET("/events/stats", middleware.RBACMiddleware("templeadmin", "devotee
 			reportsRoutes.GET("/devotee-birthdays", reportsHandler.GetDevoteeBirthdaysReport) // NEW ENDPOINT
 		}
 	}
+
+	// Serve the SPA (Single Page Application) for any other route
+	r.NoRoute(func(c *gin.Context) {
+		// Check if the request is for an API endpoint
+		if strings.HasPrefix(c.Request.URL.Path, "/api") {
+			// If it's an API route that wasn't found, return 404 JSON
+			c.JSON(http.StatusNotFound, gin.H{"error": "API endpoint not found"})
+			return
+		}
+
+		// Serve the index.html file for all other routes
+		c.File("./public/index.html")
+	})
 }

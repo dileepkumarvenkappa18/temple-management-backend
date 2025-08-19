@@ -257,8 +257,7 @@ func (s *service) RequestPasswordReset(email string) error {
 		return errors.New("could not save reset token")
 	}
 
-	// TODO: utils.SendResetLink(user.Email, resetToken)
-	// For now, just print the token
+	// Send reset link via email
 	if err := utils.SendResetLink(user.Email, resetToken); err != nil {
 		return errors.New("failed to send email")
 	}
@@ -319,7 +318,7 @@ func (s *service) GetUserByID(userID uint) (User, error) {
 }
 
 // =============================
-// Helpers
+// Helpers (for reset tokens)
 // =============================
 
 func generateSecureToken() string {

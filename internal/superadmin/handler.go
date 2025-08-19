@@ -478,3 +478,51 @@ func (h *Handler) ToggleRoleStatus(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Role status updated successfully"})
 }
+
+// =========================== PASSWORD RESET ===========================
+
+// GET /superadmin/users/search?email=user@example.com
+func (h *Handler) SearchUserByEmail(c *gin.Context) {
+	email := c.Query("email")
+	if email == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Email is required"})
+		return
+	}
+
+	user, err := h.service.SearchUserByEmail(c.Request.Context(), email)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": user})
+}
+
+// POST /superadmin/users/:id/reset-password
+func (h *Handler) ResetUserPassword(c *gin.Context) {
+	idStr := c.Param("id")
+	userID, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	var req struct {
+		Password  string `json:"password" binding:"required,min=8"`
+		SendEmail bool   `json:"sendEmail"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be at least 8 characters"})
+		return
+	}
+
+	adminID := c.GetUint("userID")
+
+	if err := h.service.ResetUserPassword(c.Request.Context(), uint(userID), req.Password, adminID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully"})
+}

@@ -7,9 +7,11 @@ import (
 	"strings"
 	"time"
 
+
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
 	"github.com/sharath018/temple-management-backend/internal/entity"
+	"github.com/sharath018/temple-management-backend/utils"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -905,6 +907,68 @@ func (s *Service) ToggleRoleStatus(ctx context.Context, roleID uint, status stri
 		"old_status": oldStatus,
 		"new_status": status,
 	}, ip, "success")
+
+	return nil
+}
+
+
+
+// ================== PASSWORD RESET ==================
+
+// SearchUserByEmail searches for a user by email
+func (s *Service) SearchUserByEmail(ctx context.Context, email string) (*UserResponse, error) {
+	// Check if email exists
+	exists, err := s.repo.UserExistsByEmail(ctx, email)
+	if err != nil {
+		return nil, errors.New("failed to search for user")
+	}
+	if !exists {
+		return nil, errors.New("user not found")
+	}
+
+	// Get user by email
+	user, err := s.repo.GetUserByEmail(ctx, email)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	// Get full user details
+	userResponse, err := s.repo.GetUserWithDetails(ctx, user.ID)
+	if err != nil {
+		return nil, errors.New("failed to get user details")
+	}
+
+	return userResponse, nil
+}
+
+// ResetUserPassword resets a user's password and sends notification
+func (s *Service) ResetUserPassword(ctx context.Context, userID uint, newPassword string, adminID uint) error {
+	// Get existing user to check if it exists
+	user, err := s.repo.GetUserByID(ctx, userID)
+	if err != nil {
+		return errors.New("user not found")
+	}
+
+	// Hash the new password
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return errors.New("failed to hash password")
+	}
+
+	// Update the password
+	if err := s.repo.UpdateUserPassword(ctx, userID, string(hash)); err != nil {
+		return errors.New("failed to update password")
+	}
+
+	// Get admin info for the notification
+	admin, err := s.repo.GetUserByID(ctx, adminID)
+	if err != nil {
+		// Don't fail the password reset if we can't get admin details
+		// Just proceed without admin info in the notification
+		utils.SendPasswordResetNotification(user.Email, user.FullName, "Admin", newPassword)
+	} else {
+		utils.SendPasswordResetNotification(user.Email, user.FullName, admin.FullName, newPassword)
+	}
 
 	return nil
 }

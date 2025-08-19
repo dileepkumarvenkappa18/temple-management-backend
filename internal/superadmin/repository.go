@@ -629,3 +629,31 @@ func (r *Repository) DeactivateUserRole(ctx context.Context, roleID uint) error 
         Where("id = ?", roleID).
         Update("status", "inactive").Error
 }
+
+// =========================== PASSWORD RESET ===========================
+
+// GetUserByEmail retrieves a user by their email address
+func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*auth.User, error) {
+    var user auth.User
+    result := r.db.WithContext(ctx).Where("email = ?", email).First(&user)
+    if result.Error != nil {
+        return nil, result.Error
+    }
+    return &user, nil
+}
+
+// UpdateUserPassword updates a user's password
+func (r *Repository) UpdateUserPassword(ctx context.Context, userID uint, newPasswordHash string) error {
+    result := r.db.WithContext(ctx).Model(&auth.User{}).Where("id = ?", userID).
+        Update("password_hash", newPasswordHash)
+    
+    if result.Error != nil {
+        return result.Error
+    }
+    
+    if result.RowsAffected == 0 {
+        return errors.New("user not found")
+    }
+    
+    return nil
+}
