@@ -48,5 +48,17 @@ export default [
       role: 'superadmin',
       title: 'Assign Tenants to User'
     }
+  },
+  // New route for audit logs
+  {
+    path: 'audit-logs',
+    name: 'AuditLogs',
+    component: () => import('@/views/superadmin/AuditLogsView.vue'),
+    meta: { 
+      requiresAuth: true, 
+      role: 'superadmin',
+      title: 'Audit Logs', 
+      breadcrumb: 'Audit Logs'
+    }
   }
-]
+];

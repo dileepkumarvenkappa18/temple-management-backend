@@ -1,15 +1,15 @@
 <template>
-  <nav class="flex items-center space-x-2 text-sm" aria-label="Breadcrumb">
+  <!-- <nav class="flex items-center space-x-2 text-sm" aria-label="Breadcrumb">
     <ol class="flex items-center space-x-2">
       <li v-for="(item, index) in finalBreadcrumbItems" :key="index" class="flex items-center">
-        <!-- Home/Dashboard Icon for first item -->
+        Home/Dashboard Icon for first item
         <div v-if="index === 0" class="flex items-center">
           <svg class="w-4 h-4 text-gray-400 mr-2" fill="currentColor" viewBox="0 0 24 24">
             <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
           </svg>
         </div>
         
-        <!-- Separator -->
+        Separator
         <svg 
           v-if="index > 0" 
           class="w-4 h-4 text-gray-300 mx-2" 
@@ -19,7 +19,7 @@
           <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
         </svg>
 
-        <!-- Breadcrumb Link -->
+        Breadcrumb Link
         <router-link
           v-if="!item.current && item.to"
           :to="item.to"
@@ -28,7 +28,7 @@
           {{ item.name }}
         </router-link>
 
-        <!-- Current Page (Non-clickable) -->
+        Current Page (Non-clickable)
         <span
           v-else
           class="font-semibold"
@@ -37,7 +37,7 @@
           {{ item.name }}
         </span>
 
-        <!-- Badge/Counter -->
+        Badge/Counter
         <span 
           v-if="item.badge" 
           class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
@@ -46,7 +46,7 @@
         </span>
       </li>
     </ol>
-  </nav>
+  </nav> -->
 </template>
 
 <script setup>

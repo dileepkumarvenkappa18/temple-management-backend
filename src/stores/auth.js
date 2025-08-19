@@ -100,26 +100,26 @@ export const useAuthStore = defineStore('auth', () => {
   
   // Initialize auth state
   const initialize = () => {
-  const storedToken = localStorage.getItem('auth_token')
-  if (storedToken) {
-    token.value = storedToken
+    const storedToken = localStorage.getItem('auth_token')
+    if (storedToken) {
+      token.value = storedToken
 
-    const storedUser = localStorage.getItem('user_data')
-    if (storedUser && storedUser !== 'undefined') {
-      try {
-        user.value = JSON.parse(storedUser)
-        // ❌ REMOVE this: isAuthenticated.value = true
-        api.defaults.headers.common['Authorization'] = `Bearer ${token.value}`
-        console.log('Auth initialized with stored user:', user.value)
-        console.log('Set Authorization header with token')
-      } catch (e) {
-        console.error('Failed to parse stored user_data:', e)
+      const storedUser = localStorage.getItem('user_data')
+      if (storedUser && storedUser !== 'undefined') {
+        try {
+          user.value = JSON.parse(storedUser)
+          // ❌ REMOVE this: isAuthenticated.value = true
+          api.defaults.headers.common['Authorization'] = `Bearer ${token.value}`
+          console.log('Auth initialized with stored user:', user.value)
+          console.log('Set Authorization header with token')
+        } catch (e) {
+          console.error('Failed to parse stored user_data:', e)
+        }
+      } else {
+        console.warn('Token exists but no valid user data found')
       }
-    } else {
-      console.warn('Token exists but no valid user data found')
     }
   }
-}
 
   
   // Login action - only uses real backend
@@ -302,6 +302,50 @@ export const useAuthStore = defineStore('auth', () => {
       loading.value = false
     }
   }
+
+  const forgotPassword = async (email) => {
+    loading.value = true
+    error.value = null
+    
+    try {
+      const response = await api.post('/v1/auth/forgot-password', { email })
+      return {
+        success: true,
+        message: 'Password reset instructions sent to your email'
+      }
+    } catch (err) {
+      console.error('Forgot password error:', err)
+      error.value = err.response?.data?.message || err.message || 'Failed to send reset instructions'
+      return { success: false, error: error.value }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // Add this function to the useAuthStore store
+  const resetPassword = async (token, newPassword) => {
+  loading.value = true
+  error.value = null
+  
+  try {
+    // Updated to match backend field names
+    const response = await api.post('/v1/auth/reset-password', { 
+      token, 
+      newPassword  // Changed from password to newPassword to match backend
+    })
+    
+    return {
+      success: true,
+      message: 'Password has been reset successfully'
+    }
+  } catch (err) {
+    console.error('Reset password error:', err)
+    error.value = err.response?.data?.message || err.message || 'Failed to reset password'
+    return { success: false, error: error.value }
+  } finally {
+    loading.value = false
+  }
+}
   
   // Join temple (for devotees/volunteers)
   const joinTemple = async (templeId) => {
@@ -392,6 +436,8 @@ export const useAuthStore = defineStore('auth', () => {
     resetAppState,
     clearAllStorage,
     debugTenantData,
+    forgotPassword,
+    resetPassword,
     
     // For backwards compatibility
     initializeAuth: initialize,

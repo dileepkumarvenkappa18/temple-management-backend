@@ -78,16 +78,19 @@
 
     <!-- Main Router View - Only shown after initialization -->
     <template v-if="!isInitializing">
-      <router-view v-slot="{ Component, route }">
-        <Transition
-          :name="getPageTransition(route)"
-          mode="out-in"
-          enter-active-class="transition-all duration-300 ease-out"
-          leave-active-class="transition-all duration-200 ease-in"
-        >
-          <component :is="Component" :key="route.path" />
-        </Transition>
-      </router-view>
+      <!-- THIS IS THE UPDATED SECTION TO HANDLE LAYOUTS -->
+      <component :is="currentLayout">
+        <router-view v-slot="{ Component, route }">
+          <Transition
+            :name="getPageTransition(route)"
+            mode="out-in"
+            enter-active-class="transition-all duration-300 ease-out"
+            leave-active-class="transition-all duration-200 ease-in"
+          >
+            <component :is="Component" :key="route.path" />
+          </Transition>
+        </router-view>
+      </component>
     </template>
     
     <!-- Initialization Error Fallback -->
@@ -217,7 +220,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, markRaw, shallowRef } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -229,6 +232,12 @@ import {
   WifiIcon,
   DevicePhoneMobileIcon
 } from '@heroicons/vue/24/outline'
+
+// Import layouts
+import AuthLayout from '@/layouts/AuthLayout.vue'
+import PublicLayout from '@/layouts/PublicLayout.vue'
+import DashboardLayout from '@/layouts/DashboardLayout.vue'
+import SuperAdminLayout from '@/layouts/SuperAdminLayout.vue'
 
 // Router setup
 const router = useRouter()
@@ -254,11 +263,25 @@ const isModalOpen = ref(false)
 const showPWAPrompt = ref(false)
 let deferredPrompt = null
 
+// Layout management - NEW CODE
+const layouts = {
+  'AuthLayout': markRaw(AuthLayout),
+  'PublicLayout': markRaw(PublicLayout),
+  'DashboardLayout': markRaw(DashboardLayout),
+  'SuperAdminLayout': markRaw(SuperAdminLayout)
+}
+
+const currentLayout = computed(() => {
+  const layoutName = route.meta.layout || 'PublicLayout'
+  console.log('Current layout:', layoutName, 'for route:', route.path)
+  return layouts[layoutName] || layouts['PublicLayout']
+})
+
 // Auth-related computed properties
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const isPublicRoute = computed(() => !route.meta?.requiresAuth)
 const isAuthRoute = computed(() => 
-  ['/login', '/register', '/forgot-password'].includes(route.path) || 
+  ['/login', '/register', '/forgot-password', '/reset-password'].includes(route.path) || 
   route.path.startsWith('/auth/')
 )
 

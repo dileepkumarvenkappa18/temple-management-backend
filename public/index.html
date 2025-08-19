@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Temple Management System</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Redirect to your frontend -->
+    <script>
+        // Extract the path and query from the URL
+        const path = window.location.pathname;
+        const search = window.location.search;
+        const hash = window.location.hash;
+        
+        // If there's a hash, use it; otherwise, preserve the path and search
+        if (hash) {
+            // Hash already exists, don't need to do anything
+        } else if (path !== "/" && path !== "/index.html") {
+            // Convert the path to a hash route
+            window.location.replace("/#" + path + search);
+        } else if (search) {
+            // Just have a query string
+            window.location.replace("/#" + search);
+        } else {
+            // Just redirect to the root
+            window.location.replace("/#/");
+        }
+    </script>
+</head>
+<body>
+    <div id="app">
+        <h1 style="text-align: center; margin-top: 100px; color: #555;">Redirecting to Temple Management System...</h1>
+        <div style="text-align: center; margin-top: 30px;">
+            <div style="display: inline-block; width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        </div>
+    </div>
+    <style>
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</body>
+</html>

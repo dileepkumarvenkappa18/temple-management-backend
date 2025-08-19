@@ -18,6 +18,7 @@ import PrivacyPage from '@/views/public/PrivacyPage.vue'
 import LoginView from '@/views/auth/LoginView.vue'
 import RegisterView from '@/views/auth/RegisterView.vue'
 import ForgotPasswordView from '@/views/auth/ForgotPasswordView.vue'
+import ResetPasswordView from '@/views/auth/ResetPasswordView.vue' // Ensure this is correctly imported
 
 // Tenant Views
 import TenantDashboard from '@/views/tenant/TenantDashboard.vue'
@@ -127,6 +128,31 @@ const routes = [
     meta: { 
       title: 'Forgot Password',
       layout: 'AuthLayout' 
+    }
+  },
+
+  // UPDATED Reset Password Route - This is directly imported
+{
+  path: '/auth-pages/reset-password',
+  name: 'BackendResetPassword',
+  component: ResetPasswordView,
+  props: route => ({ token: route.query.token }),
+  meta: { 
+    title: 'Reset Password',
+    layout: 'AuthLayout',
+    requiresAuth: false
+  }
+},
+
+  // Debug Reset Password Route - For testing
+  {
+    path: '/debug-reset',
+    name: 'DebugReset',
+    component: ResetPasswordView,
+    meta: { 
+      title: 'Debug Reset Password',
+      layout: 'AuthLayout',
+      requiresAuth: false
     }
   },
 
@@ -649,15 +675,20 @@ const router = createRouter({
   }
 })
 
-// Route Guards (Basic implementation - enhance as needed)
+// Route Guards (Basic implementation - enhanced with debugging)
 router.beforeEach((to, from, next) => {
   // Set page title
   if (to.meta.title) {
     document.title = to.meta.title
   }
 
-  // For debugging
-  console.log('Navigating to:', to.path)
+  // Debug info for routing
+  console.log('🚀 Route navigation: ', {
+    to: to.path,
+    query: to.query,
+    matched: to.matched.length > 0 ? 'Yes' : 'No - 404 will occur',
+    layout: to.meta.layout || 'DefaultLayout'
+  })
 
   // For now, temporarily disable auth checks to test route access
   next()

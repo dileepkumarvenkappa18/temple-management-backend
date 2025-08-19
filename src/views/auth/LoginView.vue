@@ -1,8 +1,8 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-indigo-100 flex items-center justify-center px-4 sm:px-6 lg:px-8">
+  <div class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-indigo-100 flex items-center justify-center px-2 sm:px-4 lg:px-0">
     <!-- Background Pattern -->
     <div class="absolute inset-0 bg-white/50 backdrop-blur-sm">
-      <div class="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(79,70,229,0.1)_1px,transparent_0)] [background-size:24px_24px]"></div>
+      <div class="absolute inset-0 bg-[radial-gradient(circle_at_2px_2px,rgba(79,70,229,0.1)_1px,transparent_0)] [background-size:24px_24px]"></div>
     </div>
     
     <!-- Main Content -->
