@@ -1,4 +1,4 @@
-// src/stores/auth.js
+// src/stores/auth.js - FIXED WITH COMPLETE ROLE MAPPING
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '@/plugins/axios'
@@ -16,78 +16,80 @@ export const useAuthStore = defineStore('auth', () => {
   
   // Getters
   const isAuthenticated = computed(() => !!token.value && !!user.value)
+  
+  // ✅ FIXED: Complete role mapping including ALL backend roleIds
   const userRole = computed(() => {
     if (!user.value) return null
     
     // Handle both string roles and numeric role_id
     if (typeof user.value.role === 'string') {
-      return user.value.role.toLowerCase()
+      return user.value.role.toLowerCase().trim()
     }
     
-    // Map role_id to string role if needed
+    // ✅ COMPLETE role mapping for ALL backend roleIds
     const ROLE_MAP = {
       1: 'superadmin',
-      2: 'templeadmin',
+      2: 'templeadmin', 
       3: 'devotee',
-      4: 'volunteer'
+      4: 'volunteer',
+      5: 'standard_user',     // ✅ ADDED: Standard user
+      6: 'monitoring_user'    // ✅ ADDED: Monitoring user
     }
     
-    return user.value.roleId ? ROLE_MAP[user.value.roleId] : null
+    const mappedRole = user.value.roleId ? ROLE_MAP[user.value.roleId] : null
+    
+    // Debug logging
+    console.log('🎭 Role mapping:', {
+      roleId: user.value.roleId,
+      mappedRole,
+      userObject: user.value
+    })
+    
+    return mappedRole
   })
 
-
-  const getDashboardPath = () => {
-    if (!user.value) return '/login'
+  // ✅ FIXED: Better dashboard path logic
+  const getDashboardPath = (userRole) => {
+    const role = (userRole || '').toLowerCase().trim()
     
-    const role = (userRole.value || '').toLowerCase()
-    const entityId = user.value.entityId || user.value.current_entity?.id
+    console.log('🎯 Getting dashboard path for role:', role)
+    
+    // ✅ CRITICAL: Handle special admin roles first
+    if (role === 'standard_user' || role === 'standarduser') {
+      console.log('✅ Standard user -> /tenant-selection')
+      return '/tenant-selection'
+    }
+    
+    if (role === 'monitoring_user' || role === 'monitoringuser') {
+      console.log('✅ Monitoring user -> /tenant-selection')
+      return '/tenant-selection'
+    }
     
     if (role === 'superadmin' || role === 'super_admin') {
+      console.log('✅ Super admin -> /superadmin/dashboard')
       return '/superadmin/dashboard'
-    } else if (role === 'templeadmin' || role === 'tenant') {
-      const tenantId = user.value.id || currentTenantId.value
-      return `/tenant/${tenantId}/dashboard`
+    }
+    
+    // Handle other roles
+    const entityId = user.value?.entityId || user.value?.current_entity?.id
+    
+    if (role === 'templeadmin' || role === 'tenant') {
+      const tenantId = user.value?.id || currentTenantId.value
+      return tenantId ? `/tenant/${tenantId}/dashboard` : '/tenant/dashboard'
     } else if (role === 'devotee') {
       return entityId ? `/entity/${entityId}/devotee/dashboard` : '/devotee/temple-selection'
     } else if (role === 'volunteer') {
       return entityId ? `/entity/${entityId}/volunteer/dashboard` : '/volunteer/temple-selection'
-    } else if (role === 'standard_user' || role === 'standarduser' || 
-              role === 'monitoring_user' || role === 'monitoringuser') {
-      return '/tenant-selection'
     }
     
+    console.log('⚠️ Unknown role, defaulting to home')
     return '/'
   }
   
   // Dashboard route getter
   const dashboardRoute = computed(() => {
     if (!user.value) return '/login'
-    
-    const role = userRole.value
-    console.log('Determining dashboard route for role:', role)
-    
-    const entityId = user.value.entityId || user.value.current_entity?.id
-    
-    if (role === 'superadmin' || role === 'super_admin') {
-      return '/superadmin/dashboard'
-    } else if (role === 'templeadmin' || role === 'tenant') {
-      // Use direct path to tenant dashboard with ID
-      const tenantId = user.value.id || currentTenantId.value
-      if (tenantId) {
-        return `/tenant/${tenantId}/dashboard`
-      }
-      return '/tenant/dashboard'
-    } else if (role === 'devotee') {
-      // MODIFIED: Always return temple selection for devotees
-      return '/devotee/temple-selection'
-    } else if (role === 'volunteer') {
-      return entityId ? `/entity/${entityId}/volunteer/dashboard` : '/volunteer/temple-selection'
-    } else if (role === 'standard_user' || role === 'standarduser' || 
-              role === 'monitoring_user' || role === 'monitoringuser') {
-      return '/tenant-selection'
-    }
-    
-    return '/'
+    return getDashboardPath(userRole.value)
   })
   
   // Role-specific getters
@@ -122,6 +124,13 @@ export const useAuthStore = defineStore('auth', () => {
   })
   
   const isEndUser = computed(() => isDevotee.value || isVolunteer.value)
+  
+  // ✅ FIXED: Check if user needs tenant selection
+  const needsTenantSelection = computed(() => {
+    const role = userRole.value?.toLowerCase() || '';
+    return role === 'standard_user' || role === 'standarduser' || 
+           role === 'monitoring_user' || role === 'monitoringuser';
+  })
   
   // Refresh the auth token
   const refreshToken = async () => {
@@ -212,6 +221,7 @@ export const useAuthStore = defineStore('auth', () => {
           user.value = JSON.parse(storedUser)
           api.defaults.headers.common['Authorization'] = `Bearer ${token.value}`
           console.log('Auth initialized with stored user:', user.value)
+          console.log('User role computed as:', userRole.value) // ✅ ADDED: Debug role computation
           console.log('Set Authorization header with token')
           
           // ADDED: Refresh token timestamp
@@ -264,104 +274,83 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Login action - only uses real backend
- const login = async (credentials) => {
-  loading.value = true
-  error.value = null
-  
-  try {
-    console.log('Starting login request')
+  // ✅ FIXED: Login action - Clean and consistent
+  const login = async (credentials) => {
+    loading.value = true
+    error.value = null
     
-    // Reset all app state before login to ensure clean isolation
-    resetAppState()
-    
-    console.log('Performing backend login')
-    
-    const response = await api.post('/v1/auth/login', credentials)
-    
-    console.log('Login response received:', response.data)
-    
-    // Extract data from response based on backend structure
-    const data = response.data
-    const accessToken = data.accessToken || data.token || data.access_token || data.jwt
-    const userData = data.user || data.userData || data
-    
-    if (!accessToken) {
-      throw new Error('No authentication token received from server')
-    }
-    
-    // Store auth data
-    token.value = accessToken
-    user.value = userData
-    localStorage.setItem('auth_token', accessToken)
-    localStorage.setItem('user_data', JSON.stringify(userData))
-    
-    // Set token refresh timestamp
-    localStorage.setItem('token_last_refreshed', new Date().getTime());
-    
-    // Set axios default header for authentication
-    api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
-    console.log('Set Authorization header with token')
-    
-    // For tenant users, store and set tenant ID
-    if (userData.roleId === 2 || userData.role === 'templeadmin' || userData.role === 'tenant') {
-      const tenantId = userData.id
-      currentTenantId.value = tenantId
-      localStorage.setItem('current_tenant_id', tenantId)
+    try {
+      console.log('🚀 Starting login request')
       
-      // Set tenant header for API calls
-      api.defaults.headers.common['X-Tenant-ID'] = tenantId
-      console.log('Set X-Tenant-ID header:', tenantId)
-    }
-    
-    // Determine where to redirect based on role
-    let redirectPath = '/'
-    
-    // Normalize role for case-insensitive comparison
-    const userRoleValue = (userData.role || '').toLowerCase();
-    
-    console.log('Normalized user role for redirection:', userRoleValue);
-    
-    // CRITICAL FIX: Direct standard_user and monitoring_user roles to tenant selection
-    if (userRoleValue === 'standard_user' || userRoleValue === 'standarduser' || 
-        userRoleValue === 'monitoring_user' || userRoleValue === 'monitoringuser') {
-      redirectPath = '/tenant-selection'
-      console.log(`Setting explicit redirect path for ${userRoleValue}: ${redirectPath}`)
+      // Reset all app state before login to ensure clean isolation
+      resetAppState()
       
-      // EMERGENCY FIX: Force redirect immediately for these roles
-      console.log('EMERGENCY FIX: Forcing immediate redirect to tenant selection')
-      window.location.href = window.location.origin + '/tenant-selection'
+      console.log('📡 Performing backend login')
+      
+      const response = await api.post('/v1/auth/login', credentials)
+      
+      console.log('✅ Login response received:', response.data)
+      
+      // Extract data from response based on backend structure
+      const data = response.data
+      const accessToken = data.accessToken || data.token || data.access_token || data.jwt
+      const userData = data.user || data.userData || data
+      
+      if (!accessToken) {
+        throw new Error('No authentication token received from server')
+      }
+      
+      console.log('👤 Raw user data from backend:', userData) // ✅ ADDED: Debug user data
+      
+      // Store auth data
+      token.value = accessToken
+      user.value = userData
+      localStorage.setItem('auth_token', accessToken)
+      localStorage.setItem('user_data', JSON.stringify(userData))
+      
+      // ✅ ADDED: Debug role computation after user is set
+      console.log('🎭 Computed user role after login:', userRole.value)
+      console.log('🔍 Role computed from roleId:', userData.roleId)
+      
+      // Set token refresh timestamp
+      localStorage.setItem('token_last_refreshed', new Date().getTime());
+      
+      // Set axios default header for authentication
+      api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
+      console.log('🔑 Set Authorization header with token')
+      
+      // For tenant users, store and set tenant ID
+      if (userData.roleId === 2 || userData.role === 'templeadmin' || userData.role === 'tenant') {
+        const tenantId = userData.id
+        currentTenantId.value = tenantId
+        localStorage.setItem('current_tenant_id', tenantId)
+        
+        // Set tenant header for API calls
+        api.defaults.headers.common['X-Tenant-ID'] = tenantId
+        console.log('🏛️ Set X-Tenant-ID header:', tenantId)
+      }
+      
+      // ✅ FIXED: Use the getDashboardPath function consistently
+      const redirectPath = getDashboardPath(userRole.value)
+      
+      console.log('🎯 Login successful, redirecting to:', redirectPath)
+      console.log('👤 User role:', userRole.value)
+      console.log('📋 Full user object:', userData)
+      
+      return {
+        success: true,
+        user: userData,
+        redirectPath
+      }
+    } catch (err) {
+      console.error('❌ Login error:', err)
+      error.value = err.response?.data?.message || err.response?.data?.error || err.message || 'Login failed'
+      return { success: false, error: error.value }
+    } finally {
+      loading.value = false
+      console.log('✅ Login process completed, loading set to false')
     }
-    else if (userData.roleId === 1 || userRoleValue === 'superadmin' || userRoleValue === 'super_admin') {
-      redirectPath = '/superadmin/dashboard'
-    } else if (userData.roleId === 2 || userRoleValue === 'templeadmin' || userRoleValue === 'tenant') {
-      const tenantId = userData.id
-      redirectPath = `/tenant/${tenantId}/dashboard`
-      console.log(`Setting tenant-specific redirect path: ${redirectPath}`)
-    } else if (userData.roleId === 3 || userRoleValue === 'devotee') {
-      redirectPath = '/devotee/temple-selection'
-    } else if (userData.roleId === 4 || userRoleValue === 'volunteer') {
-      redirectPath = userData.entityId 
-        ? `/entity/${userData.entityId}/volunteer/dashboard` 
-        : '/volunteer/temple-selection'
-    }
-    
-    console.log('Login successful, will redirect to:', redirectPath)
-    
-    return {
-      success: true,
-      user: userData,
-      redirectPath
-    }
-  } catch (err) {
-    console.error('Login error:', err)
-    error.value = err.response?.data?.message || err.response?.data?.error || err.message || 'Login failed'
-    return { success: false, error: error.value }
-  } finally {
-    loading.value = false
-    console.log('Login process completed, loading set to false')
   }
-}
   
   // Register new user
   const register = async (userData) => {
@@ -464,7 +453,7 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.setItem('current_entity_id', templeId)
       
       // Get redirect path
-      const redirectPath = getDashboardPath()
+      const redirectPath = getDashboardPath(userRole.value)
       
       return {
         success: true,
@@ -488,7 +477,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
     
     try {
-      console.log('Selecting tenant ID:', tenantId);
+      console.log('🏛️ Selecting tenant ID:', tenantId);
       
       // Store the tenant ID
       localStorage.setItem('selected_tenant_id', tenantId);
@@ -563,6 +552,7 @@ export const useAuthStore = defineStore('auth', () => {
     isMonitoringUser,
     isEndUser,
     dashboardRoute,
+    needsTenantSelection,
     
     // Actions
     initialize,

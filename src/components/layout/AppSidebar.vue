@@ -85,7 +85,7 @@
                 <svg class="mr-2 h-4 w-4" :class="isActiveRoute('/tenant/reports/birthdays') ? 'text-indigo-600' : 'text-gray-500'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.701 2.701 0 00-1.5-.454M9 6v2m3-2v2m3-2v2M9 3h.01M12 3h.01M15 3h.01M21 21v-7a2 2 0 00-2-2H5a2 2 0 00-2 2v7h18zm-3-9v-2a2 2 0 00-2-2H8a2 2 0 00-2 2v2h12z" />
                 </svg>
-                <span>Birthdays Report</span>
+                <span>Devotee & Birthday Report</span>
               </router-link>
             </div>
           </transition>
@@ -214,6 +214,41 @@
           </svg>
           Super Admin Dashboard
         </router-link>
+
+        <!-- NEW: Reports Dashboard for Superadmin -->
+        <div class="mt-3">
+          <!-- Reports Dashboard Main Button -->
+          <div 
+            class="flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md bg-indigo-50 text-indigo-700 cursor-pointer"
+            @click="toggleSuperadminReports">
+            <div class="flex items-center">
+              <svg class="mr-3 h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>Reports Management</span>
+            </div>
+            <span class="text-xs font-bold text-indigo-600">
+              {{ isSuperadminReportsActive ? '−' : '+' }}
+            </span>
+          </div>
+
+          <!-- Superadmin Reports Dashboard Subsections -->
+          <transition name="slide-down">
+            <div v-if="isSuperadminReportsActive" class="mt-1 ml-6 space-y-1 bg-indigo-50 p-2 rounded-md">
+              <!-- All Reports -->
+              <router-link 
+                to="/superadmin/reports" 
+                class="px-3 py-2 text-sm rounded-md cursor-pointer flex items-center"
+                :class="isActiveRoute('/superadmin/reports') ? 'text-indigo-700 font-medium' : 'text-gray-700 hover:bg-indigo-100'"
+              >
+                <svg class="mr-2 h-4 w-4" :class="isActiveRoute('/superadmin/reports') ? 'text-indigo-600' : 'text-gray-500'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Tenant Reports</span>
+              </router-link>
+            </div>
+          </transition>
+        </div>
 
         <!-- NEW TENANT MANAGEMENT LINK -->
         <router-link to="/tenant-selection" class="flex items-center px-3 py-2 text-sm font-medium rounded-md" :class="isActiveRoute('/tenant-selection') ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-50'">
@@ -353,6 +388,7 @@ const actualRole = computed(() => {
 
 // Reports Dashboard state
 const isReportsDashboardActive = ref(false);
+const isSuperadminReportsActive = ref(false);
 
 // Methods
 const isActiveRoute = (path) => {
@@ -361,6 +397,10 @@ const isActiveRoute = (path) => {
 
 const toggleReportsDashboard = () => {
   isReportsDashboardActive.value = !isReportsDashboardActive.value;
+};
+
+const toggleSuperadminReports = () => {
+  isSuperadminReportsActive.value = !isSuperadminReportsActive.value;
 };
 </script>
 

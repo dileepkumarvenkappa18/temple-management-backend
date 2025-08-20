@@ -5,9 +5,9 @@
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div class="flex items-center justify-between">
           <div>
-            <h1 class="text-2xl font-bold text-gray-900">Devotee Birthdays Report</h1>
+            <h1 class="text-2xl font-bold text-gray-900">Devotee Reports</h1>
             <p class="text-gray-600 mt-1">
-              Download devotee birthday data for your temples
+              Download devotee data for your temples
               <span v-if="tenantId" class="text-indigo-600 font-medium"> (Tenant ID: {{ tenantId }})</span>
             </p>
           </div>
@@ -48,11 +48,46 @@
         </div>
       </div>
 
+      <!-- Report Type Selector -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-8">
+        <div class="p-6">
+          <h3 class="text-lg font-medium text-gray-900 mb-4">Select Report Type</h3>
+          <div class="flex space-x-4">
+            <button 
+              @click="activeReportType = 'birthdays'"
+              :class="[
+                'px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200',
+                activeReportType === 'birthdays' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ]"
+            >
+              Devotee Birthdays
+            </button>
+            <button 
+              @click="activeReportType = 'devotees'"
+              :class="[
+                'px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200',
+                activeReportType === 'devotees' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ]"
+            >
+              Devotee List
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Filter & Download Card -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-8">
         <div class="p-6 border-b border-gray-200">
-          <h3 class="text-xl font-bold text-gray-900">Devotee Birthdays</h3>
-          <p class="text-gray-600 mt-1">Configure filters and download devotee birthday data</p>
+          <h3 class="text-xl font-bold text-gray-900">
+            {{ activeReportType === 'birthdays' ? 'Devotee Birthdays' : 'Devotee List' }}
+          </h3>
+          <p class="text-gray-600 mt-1">
+            Configure filters and download {{ activeReportType === 'birthdays' ? 'devotee birthday data' : 'devotee list data' }}
+          </p>
         </div>
 
         <div class="p-6">
@@ -70,31 +105,72 @@
                   {{ temple.name }}
                 </option>
               </select>
-              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                <!-- <span class="text-xs">▼</span> -->
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700"></div>
+            </div>
+          </div>
+
+          <!-- Filter Section based on report type -->
+          <div v-if="activeReportType === 'birthdays'">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <!-- Birthday Date Range Filter -->
+              <div>
+                <label class="block text-gray-700 font-medium mb-2">Birthday Period</label>
+                <div class="flex flex-wrap gap-2">
+                  <button 
+                    v-for="filter in timeFilters" 
+                    :key="filter.value"
+                    @click="setActiveFilter(filter.value)"
+                    :disabled="reportsStore.loading || reportsStore.downloadLoading"
+                    class="px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    :class="activeFilter === filter.value ? 
+                      'bg-indigo-600 text-white' : 
+                      'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                  >
+                    {{ filter.label }}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- Filter Section -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <!-- Birthday Date Range Filter -->
-            <div>
-              <label class="block text-gray-700 font-medium mb-2">Birthday Period</label>
-              <div class="flex flex-wrap gap-2">
-                <button 
-                  v-for="filter in timeFilters" 
-                  :key="filter.value"
-                  @click="setActiveFilter(filter.value)"
-                  :disabled="reportsStore.loading || reportsStore.downloadLoading"
-                  class="px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  :class="activeFilter === filter.value ? 
-                    'bg-indigo-600 text-white' : 
-                    'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                >
-                  {{ filter.label }}
-                </button>
+          <div v-else>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <!-- Join Date Range Filter -->
+              <div>
+                <label class="block text-gray-700 font-medium mb-2">Join Date Period</label>
+                <div class="flex flex-wrap gap-2">
+                  <button 
+                    v-for="filter in timeFilters" 
+                    :key="filter.value"
+                    @click="setActiveFilter(filter.value)"
+                    :disabled="reportsStore.loading || reportsStore.downloadLoading"
+                    class="px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    :class="activeFilter === filter.value ? 
+                      'bg-indigo-600 text-white' : 
+                      'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                  >
+                    {{ filter.label }}
+                  </button>
+                </div>
               </div>
+              
+              <!-- Devotee Status Filter -->
+              <!-- <div>
+                <label class="block text-gray-700 font-medium mb-2">Devotee Status</label>
+                <div class="relative">
+                  <select 
+                    v-model="devoteeStatus" 
+                    :disabled="reportsStore.loading || reportsStore.downloadLoading"
+                    class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="new">New Members</option>
+                  </select>
+                  <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700"></div>
+                </div>
+              </div> -->
             </div>
           </div>
 
@@ -141,9 +217,7 @@
                       {{ format.label }}
                     </option>
                   </select>
-                  <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                    <!-- <span class="text-xs">▼</span> -->
-                  </div>
+                  <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700"></div>
                 </div>
 
                 <!-- Download Button -->
@@ -173,19 +247,31 @@
           <h3 class="text-lg font-medium text-gray-900 mb-4">Applied Filters</h3>
           
           <div class="flex flex-wrap gap-2">
+            <!-- Report Type Filter -->
+            <div class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
+              <span class="font-medium mr-1">Report Type:</span>
+              {{ activeReportType === 'birthdays' ? 'Devotee Birthdays' : 'Devotee List' }}
+            </div>
+            
             <!-- Temple Filter -->
             <div class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
               <span class="font-medium mr-1">Temple:</span>
               {{ selectedTemple === 'all' ? 'All Temples' : getTempleName(selectedTemple) }}
             </div>
             
-            <!-- Birthday Period Filter -->
+            <!-- Period Filter -->
             <div class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
-              <span class="font-medium mr-1">Period:</span>
+              <span class="font-medium mr-1">{{ activeReportType === 'birthdays' ? 'Birthday' : 'Join Date' }} Period:</span>
               {{ getTimeFilterLabel(activeFilter) }}
               <span v-if="activeFilter === 'custom'">
                 ({{ formatDate(startDate) }} - {{ formatDate(endDate) }})
               </span>
+            </div>
+
+            <!-- Devotee Status Filter (only for Devotee List) -->
+            <div v-if="activeReportType === 'devotees'" class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
+              <span class="font-medium mr-1">Status:</span>
+              {{ getDevoteeStatusLabel(devoteeStatus) }}
             </div>
             
             <!-- Format -->
@@ -249,7 +335,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useTempleStore } from '@/stores/temple';
 import { useAuthStore } from '@/stores/auth';
@@ -264,11 +350,13 @@ const reportsStore = useReportsStore();
 const { showToast } = useToast();
 
 // Reactive state
+const activeReportType = ref('birthdays'); // 'birthdays' or 'devotees'
 const selectedTemple = ref('all');
 const activeFilter = ref('monthly');
 const selectedFormat = ref('pdf');
 const startDate = ref(new Date().toISOString().split('T')[0]);
 const endDate = ref(new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0]);
+const devoteeStatus = ref('all'); // For Devotee List report
 
 // Filter options
 const timeFilters = [
@@ -282,6 +370,13 @@ const formats = [
   { label: 'PDF', value: 'pdf' },
   { label: 'CSV', value: 'csv' },
   { label: 'Excel', value: 'excel' },
+];
+
+const devoteeStatusOptions = [
+  { label: 'All Statuses', value: 'all' },
+  { label: 'Active', value: 'active' },
+  { label: 'Inactive', value: 'inactive' },
+  { label: 'New Members', value: 'new' },
 ];
 
 // Computed
@@ -337,6 +432,11 @@ const getFormatLabel = (format) => {
   return found ? found.label : 'Unknown';
 };
 
+const getDevoteeStatusLabel = (status) => {
+  const found = devoteeStatusOptions.find(s => s.value === status);
+  return found ? found.label : 'Unknown';
+};
+
 const formatDate = (dateString) => {
   if (!dateString) return '';
   const date = new Date(dateString);
@@ -348,13 +448,20 @@ const formatDate = (dateString) => {
 };
 
 const buildReportParams = () => {
-  return {
+  const params = {
     entityId: selectedTemple.value === 'all' ? 'all' : selectedTemple.value.toString(),
     dateRange: activeFilter.value,
     startDate: startDate.value,
     endDate: endDate.value,
     format: selectedFormat.value
   };
+  
+  // Add devotee status for Devotee List report
+  if (activeReportType.value === 'devotees') {
+    params.status = devoteeStatus.value;
+  }
+  
+  return params;
 };
 
 const fetchPreview = async () => {
@@ -362,7 +469,11 @@ const fetchPreview = async () => {
     const params = buildReportParams();
     delete params.format; // Don't include format for preview
     
-    await reportsStore.getDevoteeBirthdaysPreview(params);
+    if (activeReportType.value === 'birthdays') {
+      await reportsStore.getDevoteeBirthdaysPreview(params);
+    } else {
+      await reportsStore.getDevoteeListPreview(params);
+    }
   } catch (error) {
     console.error('Error fetching preview:', error);
     // Error is already handled by the store
@@ -387,11 +498,19 @@ const downloadReport = async () => {
 
     const params = buildReportParams();
     
-    console.log('Downloading devotee birthdays report with parameters:', params);
+    console.log(`Downloading ${activeReportType.value} report with parameters:`, params);
     
-    const result = await reportsStore.downloadDevoteeBirthdaysReport(params);
+    let result;
+    if (activeReportType.value === 'birthdays') {
+      result = await reportsStore.downloadDevoteeBirthdaysReport(params);
+    } else {
+      result = await reportsStore.downloadDevoteeListReport(params);
+    }
     
-    showToast(`Devotee Birthdays Report downloaded successfully in ${getFormatLabel(selectedFormat.value)} format`, 'success');
+    showToast(
+      `${activeReportType.value === 'birthdays' ? 'Devotee Birthdays' : 'Devotee List'} Report downloaded successfully in ${getFormatLabel(selectedFormat.value)} format`, 
+      'success'
+    );
     
     console.log('Download completed:', result);
     
@@ -400,6 +519,20 @@ const downloadReport = async () => {
     showToast(error.message || 'Failed to download report. Please try again.', 'error');
   }
 };
+
+// Watch for report type changes
+watch(activeReportType, () => {
+  // Clear any previous report data
+  reportsStore.clearReportData();
+  
+  // Fetch new preview based on selected report type
+  fetchPreview();
+});
+
+// Watch for filter changes
+watch([selectedTemple, devoteeStatus], () => {
+  fetchPreview();
+});
 
 // Lifecycle hooks
 onMounted(async () => {

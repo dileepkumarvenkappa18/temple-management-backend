@@ -318,6 +318,7 @@ const activityTypes = [
   { label: 'Events Report', value: 'events' },
   { label: 'Seva Reports', value: 'sevas' },
   { label: 'Seva Bookings', value: 'bookings' },
+  { label: 'Donations Reports', value: 'donations' }, // Added new report type
 ];
 
 const timeFilters = [
@@ -447,17 +448,6 @@ const downloadReport = async () => {
     showToast('Failed to download report. Please try again.', 'error');
   }
 };
-
-// Temporary debugging helper - add this to your TempleActivitiesReport.vue temporarily
-
-// Add this method to your TempleActivitiesReport.vue script setup:
-
-// Add this button temporarily to your template:
-/*
-<button @click="debugApiResponse" class="px-4 py-2 bg-red-500 text-white rounded">
-  Debug API Response
-</button>
-*/
 
 // Lifecycle hooks
 onMounted(async () => {

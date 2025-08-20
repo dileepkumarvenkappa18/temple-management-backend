@@ -1,4 +1,4 @@
-// src/router/index.js - Updated version with fixes for standarduser and monitoringuser
+// src/router/index.js - FIXED VERSION
 import { createRouter, createWebHistory } from 'vue-router'
 import { checkProfileCompleted, requireAuth } from './guards'
 import superadminRoutes from './routes/superadmin'
@@ -78,7 +78,6 @@ const routes = [
     path: '/',
     component: PublicLayout,
     children: [
-      
       {
         path: '',
         name: 'Landing',
@@ -100,11 +99,10 @@ const routes = [
         component: PrivacyPage,
         meta: { title: 'Privacy Policy' }
       }
-      
     ]
   },
 
-  // Auth Routes - Direct paths (as per your preference)
+  // Auth Routes - Direct paths
   {
     path: '/login',
     name: 'Login',
@@ -133,7 +131,7 @@ const routes = [
     }
   },
 
-  // UPDATED Reset Password Route - This is directly imported
+  // Reset Password Route
   {
     path: '/auth-pages/reset-password',
     name: 'BackendResetPassword',
@@ -204,8 +202,7 @@ const routes = [
     }
   },
 
-  // CRITICAL FIX: Add the Tenant Selection route at the root level with correct meta
-  // UPDATED to include both role formats
+  // ✅ CRITICAL FIX: Tenant Selection route - MOVED TO TOP PRIORITY
   {
     path: '/tenant-selection',
     name: 'TenantSelection',
@@ -265,7 +262,7 @@ const routes = [
           breadcrumb: 'Edit Temple'
         }
       },
-      // Add the tenant-specific dashboard route directly here
+      // Tenant-specific dashboard route
       {
         path: ':tenantId/dashboard',
         name: 'TenantSpecificDashboard',
@@ -276,7 +273,7 @@ const routes = [
           breadcrumb: 'Dashboard'
         }
       },
-      // NEW REPORT ROUTES
+      // Report routes
       {
         path: 'reports/temple-register',
         name: 'TempleRegisterReport',
@@ -313,8 +310,7 @@ const routes = [
     ]
   },
 
-  // IMPORTANT! Add a direct route for tenant-specific dashboard
-  // This is a fallback to ensure the route is always matched
+  // Direct route for tenant-specific dashboard
   {
     path: '/tenant/:tenantId/dashboard',
     name: 'TenantDirectDashboard',
@@ -333,7 +329,7 @@ const routes = [
   {
     path: '/entity/:id',
     component: DashboardLayout,
-    props: true, // Enable props passing for the layout
+    props: true,
     meta: { 
       requiresAuth: true,
       allowedRoles: ['tenant', 'entity_admin', 'templeadmin', 'standard_user', 'standarduser', 'monitoring_user', 'monitoringuser']
@@ -415,7 +411,6 @@ const routes = [
           allowedRoles: ['tenant', 'entity_admin', 'templeadmin', 'standard_user', 'standarduser']
         }
       },
-
       {
         path: 'message',
         name: 'MessageComposer',
@@ -427,7 +422,6 @@ const routes = [
           allowedRoles: ['tenant', 'entity_admin', 'templeadmin', 'standard_user', 'standarduser']
         }
       },
-
       {
         path: 'volunteers',
         name: 'VolunteerManagement',
@@ -492,7 +486,6 @@ const routes = [
       allowedRoles: ['devotee']
     },
     children: [
-      // ADD THIS NEW ROUTE FOR PROFILE CREATION
       {
         path: 'profile/create',
         name: 'DevoteeEntityProfileCreation',
@@ -553,7 +546,6 @@ const routes = [
           breadcrumb: 'My Events'
         }
       },
-      // Add the new route for My Seva Bookings
       {
         path: 'my-seva-bookings',
         name: 'DevoteeMySevaBookings',
@@ -567,7 +559,7 @@ const routes = [
     ]
   },
 
-  // Volunteer Routes - Phase 7 (COMPLETED)
+  // Volunteer Routes - Phase 7
   {
     path: '/volunteer',
     component: DashboardLayout,
@@ -588,7 +580,7 @@ const routes = [
     ]
   },
 
-  // Volunteer Entity-Specific Routes - Phase 7 (COMPLETED)
+  // Volunteer Entity-Specific Routes - Phase 7
   {
     path: '/entity/:id/volunteer',
     component: DashboardLayout,
@@ -639,15 +631,13 @@ const routes = [
       requiresAuth: true,
       allowedRoles: ['superadmin', 'super_admin']
     },
-    children: superadminRoutes // Use the imported superadmin routes here
+    children: superadminRoutes
   },
 
   // Convenience Redirects
   {
     path: '/temple-selection',
     redirect: to => {
-      // This would need to check user role and redirect appropriately
-      // For now, defaulting to devotee - should be enhanced with actual role check
       return '/devotee/temple-selection'
     }
   },
@@ -685,21 +675,18 @@ const router = createRouter({
   }
 })
 
-// Route Guards (Enhanced implementation with proper auth checks)
+// ✅ FIXED: Simplified and more robust route guards
 router.beforeEach((to, from, next) => {
   // Set page title
   if (to.meta.title) {
     document.title = to.meta.title
   }
 
-  // Debug info for routing - ENHANCED for more visibility
-  console.log('🚀 Route navigation: ', {
+  console.log('🚀 Route navigation:', {
     to: to.path,
     name: to.name,
-    query: to.query,
-    matched: to.matched.length > 0 ? 'Yes' : 'No - 404 will occur',
-    layout: to.meta.layout || 'DefaultLayout',
-    meta: to.meta
+    requiresAuth: to.meta.requiresAuth,
+    allowedRoles: to.meta.allowedRoles
   })
 
   // Check if route requires authentication
@@ -707,53 +694,38 @@ router.beforeEach((to, from, next) => {
     return requireAuth(to, from, next)
   }
   
-  // For all other routes, proceed normally
   next()
 })
 
-// CRITICAL FIX: Add a special guard specifically for standard_user and monitoring_user roles
-router.beforeResolve((to, from, next) => {
-  // Special handling for standarduser and monitoringuser
-  const authStore = useAuthStore();
+// ✅ MOST IMPORTANT FIX: Special redirect guard for standard/monitoring users
+router.beforeEach((to, from, next) => {
+  const authStore = useAuthStore()
   
-  // Check if user is authenticated
-  if (!authStore.isAuthenticated) {
-    next();
-    return;
+  // Only run for authenticated users
+  if (!authStore.isAuthenticated || !authStore.user) {
+    next()
+    return
   }
-  
-  const user = authStore.user;
-  if (!user || !user.role) {
-    next();
-    return;
-  }
-  
-  // Normalize role for case-insensitive comparison
-  const role = user.role.toLowerCase();
-  
-  // Create a console log for debugging
-  console.log('🛡️ SPECIAL GUARD CHECK:', {
-    role,
-    path: to.path,
-    isRedirecting: (role === 'standard_user' || role === 'standarduser' || 
-                   role === 'monitoring_user' || role === 'monitoringuser') &&
-                   to.path !== '/tenant-selection'
-  });
-  
-  // Force standarduser and monitoringuser to tenant selection
-  if ((role === 'standard_user' || role === 'standarduser' || 
-       role === 'monitoring_user' || role === 'monitoringuser') && 
-      to.path !== '/tenant-selection') {
-    
-    console.log('⚠️ CRITICAL REDIRECT: Forcing standard/monitoring user to tenant selection');
-    next('/tenant-selection');
-    return;
-  }
-  
-  next();
-});
 
-// Route helpers for components (Updated with Phase 7)
+  const userRole = (authStore.user.role || '').toLowerCase().trim()
+  
+  console.log('🛡️ SPECIAL ROLE CHECK:', {
+    userRole,
+    currentPath: to.path,
+    needsTenantSelection: authStore.needsTenantSelection
+  })
+
+  // Force standard_user and monitoring_user to tenant selection
+  if (authStore.needsTenantSelection && to.path !== '/tenant-selection') {
+    console.log('⚠️ REDIRECTING special user to tenant selection')
+    next('/tenant-selection')
+    return
+  }
+
+  next()
+})
+
+// Route helpers for components
 export function useRouteHelpers() {
   return {
     getTenantRoutes: () => [
@@ -805,7 +777,6 @@ export function useRouteHelpers() {
       }
     ],
 
-    // NEW: Volunteer Routes Helper - Phase 7
     getVolunteerRoutes: (entityId) => [
       { 
         name: 'VolunteerDashboard', 
@@ -839,7 +810,6 @@ export function useRouteHelpers() {
       { name: 'ForgotPassword', path: '/forgot-password', label: 'Forgot Password' }
     ],
     
-    // Updated: Added Support to common routes
     getCommonRoutes: () => [
       { name: 'Notifications', path: '/notifications', label: 'Notifications' },
       { name: 'Profile', path: '/profile', label: 'My Profile' },
@@ -847,14 +817,23 @@ export function useRouteHelpers() {
       { name: 'Support', path: '/support', label: 'Support' }
     ],
 
-    // FIXED: Get role-specific post-login redirect paths - Handle both standarduser and standard_user 
+    // ✅ FIXED: Cleaner role-specific redirect logic
     getPostLoginRedirect: (userRole, entityId = null) => {
-      const role = (userRole || '').toLowerCase();
+      const role = (userRole || '').toLowerCase().trim()
       
+      // Special admin roles
+      if (role === 'standard_user' || role === 'standarduser' || 
+          role === 'monitoring_user' || role === 'monitoringuser') {
+        return '/tenant-selection'
+      }
+      
+      // Regular roles
       switch (role) {
+        case 'superadmin':
+        case 'super_admin':
+          return '/superadmin/dashboard'
         case 'tenant':
         case 'templeadmin':
-          // Add tenantId to the dashboard path if available
           const tenantId = localStorage.getItem('current_tenant_id')
           return tenantId ? `/tenant/${tenantId}/dashboard` : '/tenant/dashboard'
         case 'devotee':
@@ -863,38 +842,11 @@ export function useRouteHelpers() {
           return entityId ? `/entity/${entityId}/volunteer/dashboard` : '/volunteer/temple-selection'
         case 'entity_admin':
           return entityId ? `/entity/${entityId}/dashboard` : '/tenant/dashboard'
-        case 'superadmin':
-        case 'super_admin':
-          return '/superadmin/dashboard'
-        case 'standard_user':
-        case 'standarduser': 
-        case 'monitoring_user':
-        case 'monitoringuser':
-          return '/tenant-selection'
         default:
           return '/'
       }
     }
   }
-}
-
-// NUCLEAR OPTION: Check for role in localStorage and force redirect if needed
-// This executes immediately when the router is loaded
-try {
-  setTimeout(() => {
-    const userData = JSON.parse(localStorage.getItem('user_data'));
-    if (userData && userData.role) {
-      const role = userData.role.toLowerCase();
-      if ((role === 'standard_user' || role === 'standarduser' || 
-           role === 'monitoring_user' || role === 'monitoringuser') && 
-          window.location.pathname !== '/tenant-selection') {
-        console.log('NUCLEAR OPTION: Forcing redirect to tenant selection');
-        window.location.href = window.location.origin + '/tenant-selection';
-      }
-    }
-  }, 500); // Small delay to ensure router is initialized
-} catch (e) {
-  console.error('Error in nuclear option:', e);
 }
 
 export default router

@@ -100,13 +100,11 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import axios from 'axios'
-import api from '@/plugins/axios'
-import { useAuthStore } from '@/stores/auth' // Added import for auth store
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
-const authStore = useAuthStore() // Added auth store
+const authStore = useAuthStore()
 
 // Form state
 const form = ref({
@@ -120,6 +118,7 @@ const error = ref(null)
 // Get redirect path from URL if available
 const redirectPath = computed(() => route.query.redirect || '')
 
+// ✅ CRITICAL FIX: Completely simplified login handler
 const handleLogin = async () => {
   if (!form.value.email || !form.value.password) {
     error.value = 'Please enter your email and password'
@@ -130,40 +129,40 @@ const handleLogin = async () => {
   error.value = null
   
   try {
-    // Use auth store login instead of direct API call
+    console.log('🔑 Starting login process...')
+    
+    // ✅ SIMPLIFIED: Only use auth store login method - no custom logic
     const result = await authStore.login({
       email: form.value.email,
       password: form.value.password
     })
     
     if (result.success) {
-      // CRITICAL FIX: Check for standard_user and monitoring_user roles
-      const userData = result.user;
-      const userRole = (userData.role || '').toLowerCase();
+      console.log('✅ Login successful!')
+      console.log('👤 User role:', authStore.userRole)
+      console.log('📍 Redirect path from auth store:', result.redirectPath)
       
-      // Log the user role for debugging
-      console.log('User logged in with role:', userRole);
+      // ✅ CRITICAL FIX: Always use result.redirectPath from auth store
+      // Don't override with redirectPath.value unless it's a special case
+      const targetPath = result.redirectPath
       
-      if (userRole === 'standard_user' || userRole === 'standarduser' || 
-          userRole === 'monitoring_user' || userRole === 'monitoringuser') {
-        console.log('CRITICAL FIX: Redirecting standard/monitoring user to tenant selection');
-        
-        // Force redirect to tenant selection
-        window.location.href = `${window.location.origin}/tenant-selection`;
-        return;
-      }
+      console.log('🚀 Navigating to:', targetPath)
       
-      // Use router to navigate to the dashboard path after successful login for other roles
-      console.log('Login successful, navigating to:', result.redirectPath)
-      router.push(redirectPath.value || result.redirectPath)
+      // Use router.push for proper Vue Router navigation
+      await router.push(targetPath)
+      
+      console.log('✅ Navigation completed successfully')
+      
     } else {
+      console.log('❌ Login failed:', result.error)
       error.value = result.error || 'Login failed'
     }
   } catch (err) {
-    console.error('Login error:', err)
+    console.error('💥 Login error:', err)
     
-    // Handle different error scenarios
+    // ✅ ENHANCED: Better error handling based on error type
     if (err.response) {
+      // Backend responded with an error
       if (err.response.status === 401) {
         error.value = 'Invalid email or password'
       } else if (err.response.status === 403) {
@@ -174,59 +173,15 @@ const handleLogin = async () => {
         error.value = err.response.data?.message || err.response.data?.error || 'Login failed'
       }
     } else if (err.request) {
+      // Network error
       error.value = 'Cannot connect to the server. Please check your internet connection'
     } else {
+      // Other error
       error.value = err.message || 'An unexpected error occurred'
     }
   } finally {
     isLoading.value = false
   }
-}
-
-// Helper function to extract auth data from response
-const extractAuthData = (data) => {
-  // Handle different response formats from different backend implementations
-  return {
-    token: data.token || data.accessToken || data.access_token || data.jwt,
-    user: data.user || data.userData || data
-  }
-}
-
-// Helper function to determine dashboard path based on role
-const getDashboardPath = (user) => {
-  // Default to basic dashboard
-  let path = '/'
-  
-  // Get role - handle different formats
-  const role = user.role || (user.roleId ? mapRoleIdToString(user.roleId) : null)
-  const entityId = user.entityId || user.current_entity?.id
-  
-  // Route based on role
-  if (role === 'superadmin' || role === 'super_admin') {
-    path = '/superadmin/dashboard'
-  } else if (role === 'templeadmin' || role === 'tenant') {
-    path = '/tenant/dashboard'
-  } else if (role === 'devotee') {
-    path = entityId ? `/entity/${entityId}/devotee/dashboard` : '/devotee/temple-selection'
-  } else if (role === 'volunteer') {
-    path = entityId ? `/entity/${entityId}/volunteer/dashboard` : '/volunteer/temple-selection'
-  } else if (role === 'standard_user' || role === 'standarduser' || 
-             role === 'monitoring_user' || role === 'monitoringuser') {
-    path = '/tenant-selection'
-  }
-  
-  return path
-}
-
-// Helper function to map role IDs to string roles
-const mapRoleIdToString = (roleId) => {
-  const ROLE_MAP = {
-    1: 'superadmin',
-    2: 'templeadmin',
-    3: 'devotee',
-    4: 'volunteer'
-  }
-  return ROLE_MAP[roleId] || null
 }
 </script>
 

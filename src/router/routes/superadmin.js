@@ -60,5 +60,16 @@ export default [
       title: 'Audit Logs', 
       breadcrumb: 'Audit Logs'
     }
+  },
+
+  {
+  path: 'reports',
+  name: 'superadmin-reports',
+  component: () => import('@/views/superadmin/SuperadminReportsView.vue'),
+  meta: {
+    requiresAuth: true,
+    role: 'superadmin',
+    title: 'Reports Management'
   }
+}
 ];

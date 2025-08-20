@@ -1,4 +1,4 @@
-// src/router/guards.js
+// src/router/guards.js - UPDATED FOR FIXED ROLE MAPPING
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useDevoteeStore } from '@/stores/devotee'
@@ -10,7 +10,7 @@ import { useDevoteeStore } from '@/stores/devotee'
 const roleMapping = {
   'templeadmin': 'tenant', // Backend returns 'templeadmin', but routes expect 'tenant'
   'standarduser': 'standard_user',
-  'monitoringuser': 'monitoring_user' // Update to map standarduser to standard_user
+  'monitoringuser': 'monitoring_user'
 }
 
 /**
@@ -29,7 +29,7 @@ function isStatusEqual(status1, status2) {
 }
 
 /**
- * Authentication Guard
+ * Authentication Guard - ✅ UPDATED FOR CORRECT ROLE HANDLING
  * Checks if user is authenticated before accessing protected routes
  */
 export function requireAuth(to, from, next) {
@@ -39,11 +39,10 @@ export function requireAuth(to, from, next) {
   console.log('🔐 Auth Check:', {
     isAuthenticated: authStore.isAuthenticated,
     user: authStore.user,
-    role: authStore.user?.role,
-    mappedRole: getMappedRole(authStore.user?.role),
+    userRole: authStore.userRole, // ✅ This should now work correctly
+    needsTenantSelection: authStore.needsTenantSelection,
     route: to.path,
-    toName: to.name,
-    toPath: to.path.includes('/tenant-selection')
+    toName: to.name
   })
   
   if (!authStore.isAuthenticated) {
@@ -58,28 +57,29 @@ export function requireAuth(to, from, next) {
     return false
   }
   
-  // Get user role for role-based checks
-  const userRole = authStore.user?.role || '';
-  const normalizedRole = userRole.toLowerCase();
-  
-  // CRITICAL FIX: Check for both formats of roles (with underscore and without)
-  const isStandardUser = normalizedRole === 'standard_user' || normalizedRole === 'standarduser';
-  const isMonitoringUser = normalizedRole === 'monitoring_user' || normalizedRole === 'monitoringuser';
-  
-  // Direct standard and monitoring users to tenant selection if not already there
-  if ((isStandardUser || isMonitoringUser) && 
+  // ✅ SIMPLIFIED: Use the needsTenantSelection computed property from auth store
+  if (authStore.needsTenantSelection && 
       to.name !== 'TenantSelection' && 
       !to.path.includes('/tenant-selection')) {
     
-    console.log(`📍 Role ${userRole} redirecting to tenant selection`);
+    console.log('📍 CRITICAL REDIRECT: User needs tenant selection, redirecting...')
+    console.log('- User role:', authStore.userRole)
+    console.log('- Needs tenant selection:', authStore.needsTenantSelection)
     
-    // Force redirect to tenant selection page
-    next({ path: '/tenant-selection' });
+    // Force redirect to tenant selection page using route name for consistency
+    next({ name: 'TenantSelection' });
     return false;
   }
   
+  // ✅ ALLOW: Superadmin can access tenant selection too
+  if (authStore.isSuperAdmin && to.name === 'TenantSelection') {
+    console.log('📍 SuperAdmin accessing tenant selection - allowed');
+    next();
+    return true;
+  }
+  
   // Devotee role check for temple selection redirection
-  if (normalizedRole === 'devotee' && to.name !== 'DevoteeTempleSelection' && !to.path.includes('/temple-selection')) {
+  if (authStore.isDevotee && to.name !== 'DevoteeTempleSelection' && !to.path.includes('/temple-selection')) {
     const entityId = to.params.id
     // Only redirect if not accessing entity specific routes
     if (!entityId || !to.path.includes(`/entity/${entityId}/`)) {
@@ -88,21 +88,22 @@ export function requireAuth(to, from, next) {
     }
   }
   
+  console.log('✅ Auth guard passed for role:', authStore.userRole);
   next()
   return true
 }
 
 /**
- * Guest Guard
+ * Guest Guard - ✅ UPDATED
  * Redirects authenticated users away from guest-only pages (login, register)
  */
 export function requireGuest(to, from, next) {
   const authStore = useAuthStore()
   
   if (authStore.isAuthenticated) {
-    // Use mapped role for redirection
-    const mappedRole = getMappedRole(authStore.user?.role)
-    const redirectPath = getDefaultRoute(mappedRole)
+    // ✅ Use auth store's getDashboardPath method
+    const redirectPath = authStore.getDashboardPath(authStore.userRole)
+    console.log('🚪 Guest guard: authenticated user redirected to:', redirectPath)
     next({ path: redirectPath })
     return false
   }
@@ -125,9 +126,7 @@ export function checkProfileCompleted(to, from, next) {
     return
   }
   
-  const mappedRole = getMappedRole(authStore.user?.role)
-  
-  if (mappedRole !== 'devotee') {
+  if (!authStore.isDevotee) {
     next({ name: 'Unauthorized' })
     return
   }
@@ -150,7 +149,7 @@ export function checkProfileCompleted(to, from, next) {
 }
 
 /**
- * Role-based Access Guard
+ * Role-based Access Guard - ✅ ENHANCED VERSION
  * Checks if user has required role to access the route
  */
 export function requireRole(roles) {
@@ -166,25 +165,45 @@ export function requireRole(roles) {
       return
     }
     
-    const userRole = authStore.user?.role || '';
-    const normalizedRole = userRole.toLowerCase();
+    const userRole = authStore.userRole || ''
+    const normalizedRole = userRole.toLowerCase().trim()
     
-    // IMPROVED: Check for both versions of role names
-    const userRoles = [normalizedRole];
+    // ✅ BUILD: Complete list of user roles (including variations)
+    const userRoles = [normalizedRole]
     
     // Add mapped version of the role if it exists
     if (roleMapping[normalizedRole]) {
-      userRoles.push(roleMapping[normalizedRole]);
+      userRoles.push(roleMapping[normalizedRole])
     }
     
-    // For 'standard_user' or 'monitoring_user', also check the alternative format
-    if (normalizedRole === 'standard_user') userRoles.push('standarduser');
-    if (normalizedRole === 'monitoring_user') userRoles.push('monitoringuser');
-    if (normalizedRole === 'standarduser') userRoles.push('standard_user');
-    if (normalizedRole === 'monitoringuser') userRoles.push('monitoring_user');
+    // ✅ ENHANCED: For special roles, also check the alternative format
+    const roleVariations = {
+      'standard_user': ['standarduser'],
+      'monitoring_user': ['monitoringuser'],
+      'standarduser': ['standard_user'],
+      'monitoringuser': ['monitoring_user'],
+      'super_admin': ['superadmin'],
+      'superadmin': ['super_admin']
+    }
+    
+    if (roleVariations[normalizedRole]) {
+      userRoles.push(...roleVariations[normalizedRole])
+    }
+    
+    // Normalize required roles for comparison
+    const normalizedRequiredRoles = roles.map(role => role.toLowerCase().trim())
     
     // Check if any of the user's roles are included in required roles
-    const hasRequiredRole = roles.some(role => userRoles.includes(role.toLowerCase()));
+    const hasRequiredRole = normalizedRequiredRoles.some(requiredRole => 
+      userRoles.includes(requiredRole)
+    )
+    
+    console.log('🎭 Role check:', {
+      userRole,
+      userRoles,
+      requiredRoles: normalizedRequiredRoles,
+      hasAccess: hasRequiredRole
+    })
     
     if (!hasRequiredRole) {
       showToast(`Access denied: User has role "${userRole}" but route requires one of: ${roles.join(', ')}`, 'error')
@@ -197,7 +216,7 @@ export function requireRole(roles) {
 }
 
 /**
- * SPECIFIC GUARD: Check Role (for route files)
+ * SPECIFIC GUARD: Check Role (for route files) - ✅ ENHANCED VERSION
  * This is the specific function your route files are importing
  */
 export function checkRole(to, from, next, requiredRole) {
@@ -212,25 +231,34 @@ export function checkRole(to, from, next, requiredRole) {
     return
   }
   
-  const userRole = authStore.user?.role || '';
-  const normalizedRole = userRole.toLowerCase();
+  const userRole = authStore.userRole || ''
+  const normalizedRole = userRole.toLowerCase().trim()
+  const normalizedRequiredRole = requiredRole.toLowerCase().trim()
   
-  // IMPROVED: Check for both versions of role names
-  const userRoles = [normalizedRole];
+  // ✅ BUILD: Complete list of user roles (including variations)
+  const userRoles = [normalizedRole]
   
   // Add mapped version of the role if it exists
   if (roleMapping[normalizedRole]) {
-    userRoles.push(roleMapping[normalizedRole]);
+    userRoles.push(roleMapping[normalizedRole])
   }
   
-  // For standard_user and monitoring_user, also check the alternative format
-  if (normalizedRole === 'standard_user') userRoles.push('standarduser');
-  if (normalizedRole === 'monitoring_user') userRoles.push('monitoringuser');
-  if (normalizedRole === 'standarduser') userRoles.push('standard_user');
-  if (normalizedRole === 'monitoringuser') userRoles.push('monitoring_user');
+  // ✅ ENHANCED: For special roles, also check the alternative format
+  const roleVariations = {
+    'standard_user': ['standarduser'],
+    'monitoring_user': ['monitoringuser'],
+    'standarduser': ['standard_user'],
+    'monitoringuser': ['monitoring_user'],
+    'super_admin': ['superadmin'],
+    'superadmin': ['super_admin']
+  }
+  
+  if (roleVariations[normalizedRole]) {
+    userRoles.push(...roleVariations[normalizedRole])
+  }
   
   // Compare user roles with required role
-  if (!userRoles.includes(requiredRole.toLowerCase())) {
+  if (!userRoles.includes(normalizedRequiredRole)) {
     showToast(`Access denied: User has role "${userRole}" but route requires: ${requiredRole}`, 'error')
     next({ name: 'Unauthorized' })
     return
@@ -240,12 +268,12 @@ export function checkRole(to, from, next, requiredRole) {
 }
 
 /**
- * Get default route based on user role
+ * Get default route based on user role - ✅ ENHANCED VERSION
  */
 export function getDefaultRoute(role) {
   if (!role) return '/';
   
-  const normalizedRole = role.toLowerCase();
+  const normalizedRole = role.toLowerCase().trim()
   
   const routes = {
     'tenant': '/tenant/dashboard',

@@ -233,12 +233,20 @@ const getInitials = (name) => {
     .slice(0, 2)
 }
 
-// Updated role display function to handle all possible role values
+// ✅ UPDATED: Role display function to handle ALL role types including new ones
 const getCurrentRoleDisplayName = () => {
   const role = currentRole.value
   
+  console.log('🎭 Profile dropdown - current role:', role) // Debug log
+  
   const roleNames = {
-    // Backend role names
+    // ✅ NEW: Added standard_user and monitoring_user roles
+    'standard_user': 'Standard User',
+    'standarduser': 'Standard User',
+    'monitoring_user': 'Monitoring User',
+    'monitoringuser': 'Monitoring User',
+    
+    // Existing backend role names
     'superadmin': 'Super Admin',
     'super_admin': 'Super Admin',
     'templeadmin': 'Temple Admin',
@@ -249,19 +257,27 @@ const getCurrentRoleDisplayName = () => {
     // Legacy role names (for backward compatibility)
     'entity_admin': 'Temple Manager',
     
-    // Numeric role IDs (if needed)
+    // ✅ UPDATED: Complete numeric role IDs mapping
     '1': 'Super Admin',
     '2': 'Temple Admin', 
     '3': 'Devotee',
-    '4': 'Volunteer'
+    '4': 'Volunteer',
+    '5': 'Standard User',      // ✅ NEW: Added roleId 5
+    '6': 'Monitoring User'     // ✅ NEW: Added roleId 6
   }
   
-  return roleNames[role] || 'User'
+  const displayName = roleNames[role] || 'User'
+  console.log('🎭 Profile dropdown - display name:', displayName) // Debug log
+  
+  return displayName
 }
 
+// ✅ UPDATED: Profile link function to handle new roles
 const getProfileLink = () => {
-  const entityId = route.params.entityId
+  const entityId = route.params.entityId || route.params.id
   const role = currentRole.value
+  
+  console.log('🔗 Profile link - role:', role, 'entityId:', entityId) // Debug log
   
   switch (role) {
     case 'superadmin':
@@ -271,19 +287,31 @@ const getProfileLink = () => {
     case 'templeadmin':
       return '/tenant/profile'
     case 'entity_admin':
-      return `/entity/${entityId}/profile`
+      return entityId ? `/entity/${entityId}/profile` : '/profile'
     case 'devotee':
-      return `/entity/${entityId}/devotee/profile`
+      return entityId ? `/entity/${entityId}/devotee/profile` : '/profile'
     case 'volunteer':
-      return `/entity/${entityId}/volunteer/profile`
+      return entityId ? `/entity/${entityId}/volunteer/profile` : '/profile'
+    // ✅ NEW: Handle standard_user and monitoring_user
+    case 'standard_user':
+    case 'standarduser':
+    case 'monitoring_user':
+    case 'monitoringuser':
+      // These users access entity dashboards, so profile should be entity-based
+      const currentTenantId = localStorage.getItem('current_tenant_id') || 
+                              localStorage.getItem('selected_tenant_id')
+      return currentTenantId ? `/entity/${currentTenantId}/profile` : '/profile'
     default:
       return '/profile'
   }
 }
 
+// ✅ UPDATED: Settings link function to handle new roles
 const getSettingsLink = () => {
-  const entityId = route.params.entityId
+  const entityId = route.params.entityId || route.params.id
   const role = currentRole.value
+  
+  console.log('⚙️ Settings link - role:', role, 'entityId:', entityId) // Debug log
   
   switch (role) {
     case 'superadmin':
@@ -293,11 +321,20 @@ const getSettingsLink = () => {
     case 'templeadmin':
       return '/tenant/settings'
     case 'entity_admin':
-      return `/entity/${entityId}/settings`
+      return entityId ? `/entity/${entityId}/settings` : '/settings'
     case 'devotee':
-      return `/entity/${entityId}/devotee/settings`
+      return entityId ? `/entity/${entityId}/devotee/settings` : '/settings'
     case 'volunteer':
-      return `/entity/${entityId}/volunteer/settings`
+      return entityId ? `/entity/${entityId}/volunteer/settings` : '/settings'
+    // ✅ NEW: Handle standard_user and monitoring_user
+    case 'standard_user':
+    case 'standarduser':
+    case 'monitoring_user':
+    case 'monitoringuser':
+      // These users access entity dashboards, so settings should be entity-based
+      const currentTenantId = localStorage.getItem('current_tenant_id') || 
+                              localStorage.getItem('selected_tenant_id')
+      return currentTenantId ? `/entity/${currentTenantId}/settings` : '/settings'
     default:
       return '/settings'
   }
