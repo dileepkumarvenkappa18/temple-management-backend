@@ -5,15 +5,14 @@
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div class="flex items-center justify-between">
           <div>
-            <h1 class="text-2xl font-bold text-gray-900">Superadmin Reports</h1>
+            <h1 class="text-2xl font-bold text-gray-900">Reports Management</h1>
             <p class="text-gray-600 mt-1">
-              Download temple reports across all tenants
+              Select tenants to generate cross-organization reports
             </p>
           </div>
           <div class="flex items-center space-x-4">
             <div class="bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-200">
-              <span class="text-indigo-800 font-medium">{{ userStore.user?.name || 'System Administrator' }}</span>
-              <span class="text-indigo-600 text-sm ml-2">(Superadmin)</span>
+              <span class="text-indigo-800 font-medium">Super Admin</span>
             </div>
           </div>
         </div>
@@ -22,574 +21,414 @@
 
     <!-- Main Content -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <!-- Error Display -->
-      <div v-if="errorMessage" class="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
-        <div class="flex">
-          <div class="flex-shrink-0">
-            <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-            </svg>
-          </div>
-          <div class="ml-3">
-            <h3 class="text-sm font-medium text-red-800">Error</h3>
-            <div class="mt-2 text-sm text-red-700">
-              {{ errorMessage }}
-            </div>
-            <div class="mt-4">
-              <button 
-                @click="clearError"
-                class="text-sm bg-red-100 text-red-800 px-3 py-1 rounded hover:bg-red-200"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Filter & Download Card -->
+      <!-- Tenants Selection Card -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-8">
         <div class="p-6 border-b border-gray-200">
-          <h3 class="text-xl font-bold text-gray-900">Generate Reports</h3>
-          <p class="text-gray-600 mt-1">Select a tenant, temple, and report type</p>
+          <h3 class="text-xl font-bold text-gray-900">Select Tenants</h3>
+          <p class="text-gray-600 mt-1">Choose which tenants to include in your report</p>
         </div>
 
         <div class="p-6">
-          <!-- Tenant and Temple Selection - Two-step process -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <!-- Step 1: Tenant Selection -->
-            <div>
-              <label class="block text-gray-700 font-medium mb-2">Select Tenant</label>
-              <div class="relative">
-                <select 
-                  v-model="selectedTenantId" 
-                  @change="handleTenantChange"
-                  :disabled="isLoading"
-                  class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                >
-                  <option value="">Select a tenant</option>
-                  <option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">
-                    {{ tenant.name }}
-                  </option>
-                </select>
-                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                  <!-- Dropdown indicator -->
-                </div>
+          <div class="mb-6">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h4 class="text-lg font-medium text-gray-900">Tenant Selection</h4>
+                <p class="text-sm text-gray-500">Select multiple tenants for combined reporting</p>
               </div>
-              <p v-if="loadingTenants" class="mt-1 text-sm text-gray-500">Loading tenants...</p>
+              <div class="flex space-x-3">
+                <button 
+                  @click="selectAllTenants" 
+                  class="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                >
+                  Select All
+                </button>
+                <button 
+                  @click="clearTenantSelection"
+                  class="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                >
+                  Clear
+                </button>
+              </div>
             </div>
 
-            <!-- Step 2: Temple Selection (Only enabled after tenant is selected) -->
-            <div>
-              <label class="block text-gray-700 font-medium mb-2">Select Temple</label>
-              <div class="relative">
-                <select 
-                  v-model="selectedTempleId" 
-                  :disabled="!selectedTenantId || isLoading || loadingTemples"
-                  class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                >
-                  <option value="">Select a temple</option>
-                  <option value="all" v-if="temples.length > 0">All Temples</option>
-                  <option v-for="temple in temples" :key="temple.id" :value="temple.id">
-                    {{ temple.name }}
-                  </option>
-                </select>
-                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                  <!-- Dropdown indicator -->
+            <!-- Filters -->
+            <div class="flex flex-wrap items-center gap-4 mb-4">
+              <div class="relative flex-1 min-w-[250px]">
+                <input
+                  v-model="searchQuery"
+                  placeholder="Search tenants..."
+                  type="search"
+                  class="w-full border border-gray-300 rounded-lg py-2 px-4 pl-10 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
                 </div>
               </div>
-              <p v-if="loadingTemples" class="mt-1 text-sm text-gray-500">Loading temples...</p>
-              <p v-else-if="selectedTenantId && temples.length === 0 && !loadingTemples" class="mt-1 text-sm text-red-500">
-                No temples found for this tenant
-              </p>
+              
+              <div class="relative">
+                <select 
+                  v-model="statusFilter" 
+                  class="border border-gray-300 rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                >
+                  <option value="all">All Status</option>
+                  <option value="approved">Approved</option>
+                  <option value="pending">Pending</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Tenant List -->
+            <div v-if="loading" class="py-10 flex justify-center">
+              <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+            </div>
+
+            <div v-else-if="filteredTenants.length === 0" class="text-center py-8">
+              <p class="text-gray-500">No tenants found matching your filters</p>
+            </div>
+
+            <div v-else class="overflow-x-auto border border-gray-200 rounded-lg">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <div class="flex items-center">
+                        <input
+                          type="checkbox"
+                          :checked="allSelected"
+                          @change="toggleSelectAll"
+                          :indeterminate="someSelected && !allSelected"
+                          class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        />
+                      </div>
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tenant Name</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Temple Name</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <tr v-for="tenant in filteredTenants" :key="tenant.id" :class="{ 'bg-indigo-50': isSelected(tenant.id) }">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        :checked="isSelected(tenant.id)"
+                        @change="toggleSelect(tenant.id)"
+                        class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                      />
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ tenant.name }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ tenant.temple?.name || 'N/A' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {{ tenant.temple?.city ? `${tenant.temple.city}, ${tenant.temple.state}` : 'N/A' }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full" 
+                            :class="getStatusClass(tenant.status)">
+                        {{ tenant.status }}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
           <!-- Report Type Selection -->
-          <div class="mb-6">
-            <label class="block text-gray-700 font-medium mb-2">Report Type</label>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <button 
-                v-for="type in reportTypes" 
-                :key="type.value"
-                @click="selectReportType(type.value)"
-                :disabled="!selectedTempleId || isLoading"
+          <div class="mt-8 border-t border-gray-200 pt-6">
+            <h4 class="text-lg font-medium text-gray-900 mb-4">Select Report Type</h4>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div 
+                v-for="report in reportTypes" 
+                :key="report.id"
+                @click="selectReport(report.id)"
                 :class="[
-                  'px-4 py-3 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center',
-                  selectedReportType === type.value 
-                    ? 'bg-indigo-600 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
-                  (!selectedTempleId || isLoading) ? 'opacity-50 cursor-not-allowed' : ''
+                  'border p-4 rounded-lg cursor-pointer transition-colors',
+                  selectedReport === report.id 
+                    ? 'border-indigo-500 bg-indigo-50' 
+                    : 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50'
                 ]"
               >
-                <span class="mr-2">
-                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" v-html="type.icon"></svg>
-                </span>
-                {{ type.label }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Date Range Selection -->
-          <div v-if="selectedReportType" class="mb-6">
-            <label class="block text-gray-700 font-medium mb-2">Date Range</label>
-            <div class="flex flex-wrap gap-2">
-              <button 
-                v-for="filter in timeFilters" 
-                :key="filter.value"
-                @click="setActiveFilter(filter.value)"
-                :disabled="isLoading"
-                class="px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                :class="activeFilter === filter.value ? 
-                  'bg-indigo-600 text-white' : 
-                  'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-              >
-                {{ filter.label }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Custom Date Range (shown only when custom date range is selected) -->
-          <div v-if="activeFilter === 'custom'" class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-gray-700 text-sm font-medium mb-2">Start Date</label>
-                <input 
-                  type="date" 
-                  v-model="startDate"
-                  :disabled="isLoading"
-                  class="w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                />
-              </div>
-              <div>
-                <label class="block text-gray-700 text-sm font-medium mb-2">End Date</label>
-                <input 
-                  type="date" 
-                  v-model="endDate"
-                  :disabled="isLoading"
-                  class="w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                />
-              </div>
-            </div>
-          </div>
-
-          <!-- Download Section -->
-          <div class="border-t border-gray-200 pt-6">
-            <div class="flex flex-col md:flex-row md:items-center md:justify-between">
-              <div class="mb-4 md:mb-0">
-                <h4 class="text-lg font-medium text-gray-900">Download Report</h4>
-                <p class="text-sm text-gray-600">Select a format and click download</p>
-              </div>
-              <div class="flex items-center space-x-3">
-                <!-- Format Selection -->
-                <div class="relative">
-                  <select 
-                    v-model="selectedFormat" 
-                    :disabled="isLoading"
-                    class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option v-for="format in formats" :key="format.value" :value="format.value">
-                      {{ format.label }}
-                    </option>
-                  </select>
+                <div class="flex items-start">
+                  <div class="flex-shrink-0">
+                    <div class="h-10 w-10 flex items-center justify-center rounded-lg" :class="report.bgColor">
+                      <svg class="h-6 w-6" :class="report.iconColor" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="report.icon" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div class="ml-4">
+                    <h5 class="text-base font-medium text-gray-900">{{ report.name }}</h5>
+                    <p class="mt-1 text-sm text-gray-500">{{ report.description }}</p>
+                  </div>
                 </div>
-
-                <!-- Download Button -->
-                <button 
-                  @click="downloadReport"
-                  :disabled="!canDownload || isLoading"
-                  class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <svg v-if="isLoading" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <svg v-else class="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  {{ isLoading ? 'Downloading...' : 'Download' }}
-                </button>
               </div>
             </div>
+          </div>
+
+          <!-- Proceed Button -->
+          <div class="mt-8 flex justify-end">
+            <button 
+              @click="proceedToReport"
+              :disabled="!canProceed"
+              class="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Proceed to Report
+            </button>
           </div>
         </div>
       </div>
 
-      <!-- Current Applied Filters -->
-      <div v-if="selectedTenantId && selectedTempleId && selectedReportType" class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+      <!-- Selection Summary -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
         <div class="p-6">
-          <h3 class="text-lg font-medium text-gray-900 mb-4">Applied Filters</h3>
+          <h3 class="text-lg font-medium text-gray-900 mb-4">Selection Summary</h3>
           
-          <div class="flex flex-wrap gap-2">
-            <!-- Tenant Filter -->
+          <div class="flex flex-wrap gap-2 mb-4">
             <div class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
-              <span class="font-medium mr-1">Tenant:</span>
-              {{ getTenantName(selectedTenantId) }}
+              <span class="font-medium mr-1">Selected Tenants:</span>
+              {{ selectedTenants.length }}
             </div>
             
-            <!-- Temple Filter -->
             <div class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
-              <span class="font-medium mr-1">Temple:</span>
-              {{ selectedTempleId === 'all' ? 'All Temples' : getTempleName(selectedTempleId) }}
+              <span class="font-medium mr-1">Report Type:</span>
+              {{ getReportName() }}
             </div>
-            
-            <!-- Report Type Filter -->
-            <div class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
-              <span class="font-medium mr-1">Report:</span>
-              {{ getReportTypeLabel(selectedReportType) }}
-            </div>
-            
-            <!-- Date Range Filter -->
-            <div class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
-              <span class="font-medium mr-1">Period:</span>
-              {{ getTimeFilterLabel(activeFilter) }}
-              <span v-if="activeFilter === 'custom'">
-                ({{ formatDate(startDate) }} - {{ formatDate(endDate) }})
+          </div>
+          
+          <div v-if="selectedTenants.length > 0" class="mt-4">
+            <h4 class="text-sm font-medium text-gray-700 mb-2">Selected Tenant Names:</h4>
+            <div class="flex flex-wrap gap-2">
+              <span 
+                v-for="tenantId in selectedTenants" 
+                :key="tenantId"
+                class="inline-flex items-center px-2.5 py-0.5 rounded-md text-sm bg-gray-100 text-gray-800"
+              >
+                {{ getTenantName(tenantId) }}
+                <button 
+                  @click="toggleSelect(tenantId)" 
+                  class="ml-1.5 text-gray-500 hover:text-gray-700"
+                >
+                  <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </span>
-            </div>
-            
-            <!-- Format -->
-            <div class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
-              <span class="font-medium mr-1">Format:</span>
-              {{ getFormatLabel(selectedFormat) }}
             </div>
           </div>
           
           <p class="mt-4 text-sm text-gray-600">
-            Your report will include data based on the filters above. Click Download to generate and download the report.
+            Select tenants and a report type above, then click "Proceed to Report" to generate a combined report.
           </p>
         </div>
       </div>
     </div>
-
-    <!-- Download Format Modal -->
-    <DownloadFormatModal
-      v-if="showDownloadModal"
-      :show="showDownloadModal"
-      :title="'Report'"
-      v-model="selectedFormat"
-      @close="showDownloadModal = false"
-      @download="handleModalDownload"
-    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
-import { useAuthStore } from '@/stores/auth';
+import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { useSuperAdminStore } from '@/stores/superadmin';
 import { useToast } from '@/composables/useToast';
-import superadminService from '@/services/superadmin.service';
-import ReportsService from '@/services/reports.service';
-import DownloadFormatModal from '@/components/common/DownloadFormatModal.vue';
 
-// Store and composables
-const userStore = useAuthStore();
-const { showToast } = useToast();
+// Router and stores
+const router = useRouter();
+const superAdminStore = useSuperAdminStore();
+const toast = useToast();
 
 // Reactive state
-const tenants = ref([]);
-const temples = ref([]);
-const selectedTenantId = ref('');
-const selectedTempleId = ref('');
-const selectedReportType = ref('');
-const activeFilter = ref('monthly');
-const selectedFormat = ref('pdf');
-const startDate = ref('');
-const endDate = ref('');
-const isLoading = ref(false);
-const loadingTenants = ref(false);
-const loadingTemples = ref(false);
-const errorMessage = ref('');
-const showDownloadModal = ref(false);
+const loading = ref(false);
+const searchQuery = ref('');
+const statusFilter = ref('all');
+const selectedTenants = ref([]);
+const selectedReport = ref('');
 
-// Initialize dates
-const initializeDates = () => {
-  const today = new Date();
-  const monthAgo = new Date();
-  monthAgo.setDate(today.getDate() - 30);
-  
-  endDate.value = today.toISOString().split('T')[0];
-  startDate.value = monthAgo.toISOString().split('T')[0];
-};
-
-// Filter options
+// Report types - UPDATED to use superadmin routes
 const reportTypes = [
-  { 
-    label: 'Temple Register', 
-    value: 'temple-register',
-    icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />'
+  {
+    id: 'temple-register',
+    name: 'Temple Register Report',
+    description: 'View temple registration data across all selected tenants',
+    icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+    bgColor: 'bg-blue-100',
+    iconColor: 'text-blue-600',
+    route: '/superadmin/reports/temple-register'
   },
-  { 
-    label: 'Temple Activities', 
-    value: 'temple-activities',
-    icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />'
+  {
+    id: 'temple-activities',
+    name: 'Temple Activities Report',
+    description: 'Track events, seva, and other temple activities',
+    icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2',
+    bgColor: 'bg-green-100',
+    iconColor: 'text-green-600',
+    route: '/superadmin/reports/temple-activities'
   },
-  { 
-    label: 'Devotee Birthdays', 
-    value: 'devotee-birthdays',
-    icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />'
+  {
+    id: 'birthdays',
+    name: 'Devotee Birthdays Report',
+    description: 'View upcoming birthdays of devotees across temples',
+    icon: 'M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.701 2.701 0 00-1.5-.454M9 6v2m3-2v2m3-2v2M9 3h.01M12 3h.01M15 3h.01M21 21v-7a2 2 0 00-2-2H5a2 2 0 00-2 2v7h18zm-3-9v-2a2 2 0 00-2-2H8a2 2 0 00-2 2v2h12z',
+    bgColor: 'bg-purple-100',
+    iconColor: 'text-purple-600',
+    route: '/superadmin/reports/birthdays'
   },
-  { 
-    label: 'Donation Summary', 
-    value: 'donations',
-    icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z" />'
+  // NEW: User Details Report
+  {
+    id: 'user-details',
+    name: 'User Details Report',
+    description: 'Comprehensive user information and activity statistics',
+    icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+    bgColor: 'bg-amber-100',
+    iconColor: 'text-amber-600',
+    route: '/superadmin/reports/user-details'
   },
-  { 
-    label: 'Seva Bookings', 
-    value: 'sevas',
-    icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />'
+  // NEW: Tenant and Temple Approval Report
+  {
+    id: 'approval-status',
+    name: 'Approval Status Report',
+    description: 'Track tenant and temple approval workflows and statuses',
+    icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+    bgColor: 'bg-teal-100',
+    iconColor: 'text-teal-600',
+    route: '/superadmin/reports/approval-status'
   }
-];
-
-const timeFilters = [
-  { label: 'Weekly', value: 'weekly' },
-  { label: 'Monthly', value: 'monthly' },
-  { label: 'Yearly', value: 'yearly' },
-  { label: 'Custom Range', value: 'custom' },
-];
-
-const formats = [
-  { label: 'PDF', value: 'pdf' },
-  { label: 'CSV', value: 'csv' },
-  { label: 'Excel', value: 'excel' },
 ];
 
 // Computed properties
-const canDownload = computed(() => {
-  return selectedTenantId.value && 
-         selectedTempleId.value && 
-         selectedReportType.value && 
-         selectedFormat.value &&
-         (activeFilter.value !== 'custom' || (startDate.value && endDate.value));
+const filteredTenants = computed(() => {
+  let tenants = superAdminStore.tenants;
+  
+  // Filter by search query
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase();
+    tenants = tenants.filter(tenant => 
+      tenant.name?.toLowerCase().includes(query) || 
+      tenant.temple?.name?.toLowerCase().includes(query) ||
+      tenant.temple?.city?.toLowerCase().includes(query) ||
+      tenant.temple?.state?.toLowerCase().includes(query)
+    );
+  }
+  
+  // Filter by status
+  if (statusFilter.value !== 'all') {
+    tenants = tenants.filter(tenant => 
+      tenant.status?.toLowerCase() === statusFilter.value.toLowerCase()
+    );
+  }
+  
+  return tenants;
+});
+
+const allSelected = computed(() => {
+  return filteredTenants.value.length > 0 && 
+         filteredTenants.value.every(tenant => selectedTenants.value.includes(tenant.id));
+});
+
+const someSelected = computed(() => {
+  return selectedTenants.value.length > 0 && !allSelected.value;
+});
+
+const canProceed = computed(() => {
+  return selectedTenants.value.length > 0 && selectedReport.value;
 });
 
 // Methods
-const loadTenants = async () => {
+const fetchTenants = async () => {
+  loading.value = true;
   try {
-    loadingTenants.value = true;
-    clearError();
-    
-    const response = await superadminService.getAllTenants();
-    
-    if (response.success && response.data) {
-      tenants.value = response.data.map(tenant => ({
-        id: tenant.ID || tenant.id,
-        name: tenant.FullName || tenant.name || tenant.Name || `Tenant ${tenant.ID || tenant.id}`,
-        email: tenant.Email || tenant.email,
-        status: tenant.Status || tenant.status
-      }));
-    } else {
-      errorMessage.value = 'Failed to load tenants. Please try again.';
-    }
+    await superAdminStore.fetchTenants();
   } catch (error) {
-    console.error('Error loading tenants:', error);
-    errorMessage.value = error.message || 'Failed to load tenants. Please try again.';
+    console.error('Error fetching tenants:', error);
+    toast.error('Failed to load tenants. Please try again.');
   } finally {
-    loadingTenants.value = false;
+    loading.value = false;
   }
 };
 
-const handleTenantChange = async () => {
-  selectedTempleId.value = '';
-  temples.value = [];
-  
-  if (!selectedTenantId.value) return;
-  
-  try {
-    loadingTemples.value = true;
-    clearError();
+const isSelected = (tenantId) => {
+  return selectedTenants.value.includes(tenantId);
+};
+
+const toggleSelect = (tenantId) => {
+  const index = selectedTenants.value.indexOf(tenantId);
+  if (index === -1) {
+    selectedTenants.value.push(tenantId);
+  } else {
+    selectedTenants.value.splice(index, 1);
+  }
+};
+
+const toggleSelectAll = () => {
+  if (allSelected.value) {
+    selectedTenants.value = selectedTenants.value.filter(
+      id => !filteredTenants.value.some(tenant => tenant.id === id)
+    );
+  } else {
+    const newSelectedIds = filteredTenants.value
+      .filter(tenant => !selectedTenants.value.includes(tenant.id))
+      .map(tenant => tenant.id);
     
-    const response = await superadminService.getTemplesByTenant(selectedTenantId.value);
-    
-    if (response.success && response.data) {
-      temples.value = response.data.map(temple => ({
-        id: temple.ID || temple.id,
-        name: temple.Name || temple.name,
-        status: temple.Status || temple.status
-      }));
-    } else {
-      errorMessage.value = 'Failed to load temples. Please try again.';
-    }
-  } catch (error) {
-    console.error('Error loading temples:', error);
-    errorMessage.value = error.message || 'Failed to load temples. Please try again.';
-  } finally {
-    loadingTemples.value = false;
+    selectedTenants.value = [...selectedTenants.value, ...newSelectedIds];
   }
 };
 
-const selectReportType = (type) => {
-  selectedReportType.value = type;
-  // Depending on report type, we might want to set specific default filters
-  switch (type) {
-    case 'devotee-birthdays':
-      activeFilter.value = 'monthly';
-      break;
-    case 'temple-activities':
-      activeFilter.value = 'monthly';
-      break;
-    case 'temple-register':
-      activeFilter.value = 'yearly';
-      break;
-    default:
-      activeFilter.value = 'monthly';
-  }
+const selectAllTenants = () => {
+  const allIds = filteredTenants.value.map(tenant => tenant.id);
+  selectedTenants.value = allIds;
+};
+
+const clearTenantSelection = () => {
+  selectedTenants.value = [];
+};
+
+const selectReport = (reportId) => {
+  selectedReport.value = reportId;
+};
+
+const getStatusClass = (status) => {
+  const statusMap = {
+    'approved': 'bg-green-100 text-green-800',
+    'pending': 'bg-yellow-100 text-yellow-800',
+    'rejected': 'bg-red-100 text-red-800'
+  };
   
-  // Update date range based on the active filter
-  updateDateRange();
-};
-
-const setActiveFilter = (filter) => {
-  activeFilter.value = filter;
-  updateDateRange();
-};
-
-const updateDateRange = () => {
-  // Set appropriate date range based on filter
-  const today = new Date();
-  
-  if (activeFilter.value === 'weekly') {
-    // Past week
-    const weekAgo = new Date();
-    weekAgo.setDate(today.getDate() - 7);
-    startDate.value = weekAgo.toISOString().split('T')[0];
-    endDate.value = today.toISOString().split('T')[0];
-  } else if (activeFilter.value === 'monthly') {
-    // Past month
-    const monthAgo = new Date();
-    monthAgo.setDate(today.getDate() - 30);
-    startDate.value = monthAgo.toISOString().split('T')[0];
-    endDate.value = today.toISOString().split('T')[0];
-  } else if (activeFilter.value === 'yearly') {
-    // Current year
-    const currentYear = today.getFullYear();
-    startDate.value = new Date(currentYear, 0, 1).toISOString().split('T')[0]; // January 1st
-    endDate.value = today.toISOString().split('T')[0];
-  }
-  // For custom, we leave the dates as they are
-};
-
-const clearError = () => {
-  errorMessage.value = '';
+  return statusMap[status?.toLowerCase()] || 'bg-gray-100 text-gray-800';
 };
 
 const getTenantName = (tenantId) => {
-  const tenant = tenants.value.find(t => t.id.toString() === tenantId.toString());
-  return tenant ? tenant.name : 'Unknown Tenant';
+  const tenant = superAdminStore.tenants.find(t => t.id === tenantId);
+  return tenant ? tenant.name : `Tenant #${tenantId}`;
 };
 
-const getTempleName = (templeId) => {
-  if (templeId === 'all') return 'All Temples';
-  const temple = temples.value.find(t => t.id.toString() === templeId.toString());
-  return temple ? temple.name : 'Unknown Temple';
+const getReportName = () => {
+  const report = reportTypes.find(r => r.id === selectedReport.value);
+  return report ? report.name : 'None Selected';
 };
 
-const getReportTypeLabel = (type) => {
-  const found = reportTypes.find(t => t.value === type);
-  return found ? found.label : 'Unknown Report';
-};
-
-const getTimeFilterLabel = (filter) => {
-  const found = timeFilters.find(f => f.value === filter);
-  return found ? found.label : 'Unknown';
-};
-
-const getFormatLabel = (format) => {
-  const found = formats.find(f => f.value === format);
-  return found ? found.label : 'Unknown';
-};
-
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
+const proceedToReport = () => {
+  if (!canProceed.value) return;
+  
+  const report = reportTypes.find(r => r.id === selectedReport.value);
+  if (!report) return;
+  
+  // Encode the selected tenants as a URL-friendly string
+  const tenantsParam = selectedTenants.value.join(',');
+  
+  // Navigate to the superadmin report route with tenants parameter
+  router.push({
+    path: report.route,
+    query: {
+      tenants: tenantsParam
+    }
   });
-};
-
-const buildReportParams = () => {
-  const params = {
-    entityId: selectedTempleId.value,
-    format: selectedFormat.value,
-    dateRange: activeFilter.value,
-    tenantId: selectedTenantId.value // Add tenantId for superadmin reports
-  };
-
-  // Add custom date range if needed
-  if (activeFilter.value === 'custom') {
-    params.startDate = startDate.value;
-    params.endDate = endDate.value;
-  }
-
-  return params;
-};
-
-const downloadReport = async () => {
-  if (!canDownload.value || isLoading.value) return;
-
-  try {
-    isLoading.value = true;
-    clearError();
-    
-    const params = buildReportParams();
-    
-    // Add specific parameters based on report type
-    let result;
-    
-    switch (selectedReportType.value) {
-      case 'temple-register':
-        result = await ReportsService.downloadTempleRegisteredReport(params);
-        break;
-      case 'temple-activities':
-        result = await ReportsService.downloadActivitiesReport({
-          ...params, 
-          type: 'events' // Default to events, but could be configurable
-        });
-        break;
-      case 'devotee-birthdays':
-        result = await ReportsService.downloadDevoteeBirthdaysReport(params);
-        break;
-      case 'donations':
-        result = await ReportsService.downloadActivitiesReport({
-          ...params, 
-          type: 'donations'
-        });
-        break;
-      case 'sevas':
-        result = await ReportsService.downloadActivitiesReport({
-          ...params, 
-          type: 'sevas'
-        });
-        break;
-      default:
-        throw new Error('Invalid report type selected');
-    }
-    
-    if (result.success) {
-      showToast(`Report downloaded successfully in ${getFormatLabel(selectedFormat.value)} format`, 'success');
-    } else {
-      throw new Error(result.message || 'Download failed');
-    }
-    
-  } catch (error) {
-    console.error('Error downloading report:', error);
-    errorMessage.value = error.message || 'Failed to download report. Please try again.';
-    showToast(error.message || 'Failed to download report', 'error');
-  } finally {
-    isLoading.value = false;
-  }
-};
-
-const handleModalDownload = (data) => {
-  selectedFormat.value = data.format;
-  downloadReport();
 };
 
 // Lifecycle hooks
 onMounted(async () => {
-  initializeDates();
-  await loadTenants();
+  await fetchTenants();
 });
 </script>

@@ -1,5 +1,18 @@
 <template>
   <div class="min-h-screen bg-gray-50">
+    <!-- Back to SuperAdmin Reports button (when viewed from superadmin) -->
+    <div v-if="fromSuperadmin" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+      <router-link 
+        to="/superadmin/reports" 
+        class="inline-flex items-center px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+      >
+        <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        Back to SuperAdmin Reports
+      </router-link>
+    </div>
+
     <!-- Header Section -->
     <div class="bg-white shadow-sm border-b border-gray-200 rounded-2xl">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -8,13 +21,18 @@
             <h1 class="text-2xl font-bold text-gray-900">Devotee Reports</h1>
             <p class="text-gray-600 mt-1">
               Download devotee data for your temples
-              <span v-if="tenantId" class="text-indigo-600 font-medium"> (Tenant ID: {{ tenantId }})</span>
+              <span v-if="fromSuperadmin && tenantIds.length > 1" class="text-indigo-600 font-medium">
+                (Multiple Tenants Selected)
+              </span>
+              <span v-else-if="tenantId" class="text-indigo-600 font-medium">
+                (Tenant ID: {{ tenantId }})
+              </span>
             </p>
           </div>
           <div class="flex items-center space-x-4">
             <div class="bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-200">
               <span class="text-indigo-800 font-medium">{{ userStore.user?.name || 'Tenant User' }}</span>
-              <span class="text-indigo-600 text-sm ml-2">(Tenant)</span>
+              <span class="text-indigo-600 text-sm ml-2">{{ fromSuperadmin ? '(Super Admin)' : '(Tenant)' }}</span>
             </div>
           </div>
         </div>
@@ -253,6 +271,12 @@
               {{ activeReportType === 'birthdays' ? 'Devotee Birthdays' : 'Devotee List' }}
             </div>
             
+            <!-- Tenant Filter (only in superadmin view with multiple tenants) -->
+            <div v-if="fromSuperadmin && tenantIds.length > 1" class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
+              <span class="font-medium mr-1">Tenants:</span>
+              {{ tenantIds.length }} selected
+            </div>
+            
             <!-- Temple Filter -->
             <div class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
               <span class="font-medium mr-1">Temple:</span>
@@ -336,7 +360,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useTempleStore } from '@/stores/temple';
 import { useAuthStore } from '@/stores/auth';
 import { useReportsStore } from '@/stores/reports';
@@ -344,6 +368,7 @@ import { useToast } from '@/composables/useToast';
 
 // Composables
 const route = useRoute();
+const router = useRouter();
 const templeStore = useTempleStore();
 const userStore = useAuthStore();
 const reportsStore = useReportsStore();
@@ -379,9 +404,18 @@ const devoteeStatusOptions = [
   { label: 'New Members', value: 'new' },
 ];
 
-// Computed
+// Computed properties
 const tenantId = computed(() => {
   return route.params.tenantId || userStore.user?.id || localStorage.getItem('current_tenant_id');
+});
+
+// Check for tenants parameter from superadmin
+const fromSuperadmin = computed(() => route.query.from === 'superadmin');
+const tenantIds = computed(() => {
+  if (route.query.tenants) {
+    return route.query.tenants.split(',');
+  }
+  return [tenantId.value]; // Default to current tenant only
 });
 
 // Methods
@@ -448,13 +482,22 @@ const formatDate = (dateString) => {
 };
 
 const buildReportParams = () => {
-  const params = {
-    entityId: selectedTemple.value === 'all' ? 'all' : selectedTemple.value.toString(),
-    dateRange: activeFilter.value,
-    startDate: startDate.value,
-    endDate: endDate.value,
-    format: selectedFormat.value
-  };
+  // When in superadmin view with multiple tenants, use entityIds instead of entityId
+  const params = fromSuperadmin.value && tenantIds.value.length > 1
+    ? { 
+        entityIds: tenantIds.value, 
+        dateRange: activeFilter.value,
+        startDate: startDate.value,
+        endDate: endDate.value,
+        format: selectedFormat.value
+      }
+    : {
+        entityId: selectedTemple.value === 'all' ? 'all' : selectedTemple.value.toString(),
+        dateRange: activeFilter.value,
+        startDate: startDate.value,
+        endDate: endDate.value,
+        format: selectedFormat.value
+      };
   
   // Add devotee status for Devotee List report
   if (activeReportType.value === 'devotees') {

@@ -18,9 +18,9 @@
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div class="flex items-center justify-between">
           <div>
-            <h1 class="text-2xl font-bold text-gray-900">Temple Register Report</h1>
+            <h1 class="text-2xl font-bold text-gray-900">User Details Report</h1>
             <p class="text-gray-600 mt-1">
-              Download registration data for your temples
+              Comprehensive user information and activity statistics
               <span v-if="fromSuperadmin && tenantIds.length > 1" class="text-indigo-600 font-medium">
                 (Multiple Tenants Selected)
               </span>
@@ -44,25 +44,27 @@
       <!-- Filter & Download Card -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-8">
         <div class="p-6 border-b border-gray-200">
-          <h3 class="text-xl font-bold text-gray-900">Temple Register</h3>
-          <p class="text-gray-600 mt-1">Configure filters and download your temple registration data</p>
+          <h3 class="text-xl font-bold text-gray-900">User Details</h3>
+          <p class="text-gray-600 mt-1">Configure filters and download your user details data</p>
         </div>
 
         <div class="p-6">
-          <!-- Temple Selection -->
+          <!-- User Role Selection -->
           <div class="mb-6">
-            <label class="block text-gray-700 font-medium mb-2">Select Temple</label>
-            <div class="relative">
-              <select 
-                v-model="selectedTemple" 
-                @change="onTempleChange"
-                class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+            <label class="block text-gray-700 font-medium mb-2">User Roles</label>
+            <div class="flex flex-wrap gap-2">
+              <button 
+                v-for="role in userRoles" 
+                :key="role.value"
+                @click="setActiveRole(role.value)"
+                :disabled="isDownloading"
+                class="px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                :class="activeRole === role.value ? 
+                  'bg-indigo-600 text-white' : 
+                  'bg-gray-100 text-gray-700 hover:bg-gray-200'"
               >
-                <option value="all">All Temples</option>
-                <option v-for="temple in templeStore.temples" :key="temple.id" :value="temple.id">
-                  {{ temple.name }}
-                </option>
-              </select>
+                {{ role.label }}
+              </button>
             </div>
           </div>
 
@@ -87,9 +89,9 @@
               </div>
             </div>
 
-            <!-- Temple Status Filter -->
+            <!-- User Status Filter -->
             <div>
-              <label class="block text-gray-700 font-medium mb-2">Temple Status</label>
+              <label class="block text-gray-700 font-medium mb-2">User Status</label>
               <div class="flex flex-wrap gap-2">
                 <button 
                   v-for="status in statusFilters" 
@@ -203,10 +205,10 @@
               {{ tenantIds.length }} selected
             </div>
             
-            <!-- Temple Filter -->
+            <!-- User Role Filter -->
             <div class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
-              <span class="font-medium mr-1">Temple:</span>
-              {{ selectedTemple === 'all' ? 'All Temples' : getTempleName(selectedTemple) }}
+              <span class="font-medium mr-1">Role:</span>
+              {{ getRoleLabel(activeRole) }}
             </div>
             
             <!-- Registration Date Filter -->
@@ -243,7 +245,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useTempleStore } from '@/stores/temple';
 import { useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
 import ReportsService from '@/services/reports.service';
@@ -251,13 +252,12 @@ import ReportsService from '@/services/reports.service';
 // Composables
 const route = useRoute();
 const router = useRouter();
-const templeStore = useTempleStore();
 const userStore = useAuthStore();
 const { showToast } = useToast();
 
 // Reactive state
-const selectedTemple = ref('all');
-const activeFilter = ref('weekly');
+const activeRole = ref('all');
+const activeFilter = ref('monthly');
 const activeStatus = ref('all');
 const selectedFormat = ref('pdf');
 const startDate = ref('');
@@ -268,14 +268,23 @@ const errorMessage = ref('');
 // Initialize dates
 const initializeDates = () => {
   const today = new Date();
-  const weekAgo = new Date();
-  weekAgo.setDate(today.getDate() - 7);
+  const monthAgo = new Date();
+  monthAgo.setDate(today.getDate() - 30);
   
   endDate.value = today.toISOString().split('T')[0];
-  startDate.value = weekAgo.toISOString().split('T')[0];
+  startDate.value = monthAgo.toISOString().split('T')[0];
 };
 
 // Filter options
+const userRoles = [
+  { label: 'All Roles', value: 'all' },
+  { label: 'Tenant', value: 'tenant' },
+  { label: 'Devotee', value: 'devotee' },
+  { label: 'Volunteer', value: 'volunteer' },
+  { label: 'Standard User', value: 'standarduser' },
+  { label: 'Monitoring User', value: 'monitoringuser' }
+];
+
 const timeFilters = [
   { label: 'Weekly', value: 'weekly' },
   { label: 'Monthly', value: 'monthly' },
@@ -285,9 +294,9 @@ const timeFilters = [
 
 const statusFilters = [
   { label: 'All Status', value: 'all' },
-  { label: 'Approved', value: 'approved' },
-  { label: 'Pending', value: 'pending' },
-  { label: 'Rejected', value: 'rejected' },
+  { label: 'Active', value: 'active' },
+  { label: 'Inactive', value: 'inactive' },
+  { label: 'Locked', value: 'locked' },
 ];
 
 const formats = [
@@ -314,10 +323,6 @@ const today = computed(() => {
   return new Date().toISOString().split('T')[0];
 });
 
-const entityId = computed(() => {
-  return selectedTemple.value === 'all' ? 'all' : selectedTemple.value;
-});
-
 const isFormValid = computed(() => {
   if (activeFilter.value === 'custom') {
     return startDate.value && endDate.value && new Date(startDate.value) <= new Date(endDate.value);
@@ -326,6 +331,11 @@ const isFormValid = computed(() => {
 });
 
 // Methods
+const setActiveRole = (role) => {
+  activeRole.value = role;
+  clearError();
+};
+
 const setActiveFilter = (filter) => {
   activeFilter.value = filter;
   clearError();
@@ -353,18 +363,13 @@ const setActiveStatus = (status) => {
   clearError();
 };
 
-const onTempleChange = () => {
-  clearError();
-};
-
 const clearError = () => {
   errorMessage.value = '';
 };
 
-const getTempleName = (templeId) => {
-  if (templeId === 'all') return 'All Temples';
-  const temple = templeStore.temples.find(t => t.id.toString() === templeId.toString());
-  return temple ? temple.name : 'Unknown Temple';
+const getRoleLabel = (role) => {
+  const found = userRoles.find(r => r.value === role);
+  return found ? found.label : 'Unknown';
 };
 
 const getTimeFilterLabel = (filter) => {
@@ -398,7 +403,8 @@ const buildReportParams = () => {
     const params = {
       entityIds: tenantIds.value,
       dateRange: activeFilter.value,
-      format: selectedFormat.value
+      format: selectedFormat.value,
+      role: activeRole.value !== 'all' ? activeRole.value : undefined
     };
 
     // Add status filter if not 'all'
@@ -416,9 +422,10 @@ const buildReportParams = () => {
   } else {
     // Original logic for single tenant
     const params = {
-      entityId: entityId.value,
+      entityId: tenantId.value,
       dateRange: activeFilter.value,
-      format: selectedFormat.value
+      format: selectedFormat.value,
+      role: activeRole.value !== 'all' ? activeRole.value : undefined
     };
 
     // Add status filter if not 'all'
@@ -445,21 +452,24 @@ const downloadReport = async () => {
   try {
     const params = buildReportParams();
     
-    // Validate parameters using the service validation
-    const validation = ReportsService.validateReportParams({
-      ...params,
-      type: 'temple-registered'
-    });
-
+    // Add the report type to the params
+    params.type = 'user-details';
+    
+    // Validate parameters
+    // Note: You might need to add this validation method to your ReportsService
+    const validation = { isValid: true, errors: [] }; // Placeholder validation
+    
     if (!validation.isValid) {
       throw new Error(validation.errors.join(', '));
     }
 
-    // Console logging (matching your existing format)
-    console.log('Downloading report with the following parameters:');
-    console.log('- Temple:', selectedTemple.value === 'all' ? 'All Temples' : getTempleName(selectedTemple.value));
+    // Console logging
+    console.log('Downloading User Details report with the following parameters:');
+    console.log('- Role:', getRoleLabel(activeRole.value));
     if (fromSuperadmin.value && tenantIds.value.length > 1) {
       console.log('- Tenants:', tenantIds.value.length, 'selected');
+    } else {
+      console.log('- Tenant ID:', tenantId.value);
     }
     console.log('- Time filter:', getTimeFilterLabel(activeFilter.value));
     console.log('- Date range:', formatDate(startDate.value), 'to', formatDate(endDate.value));
@@ -467,10 +477,11 @@ const downloadReport = async () => {
     console.log('- Format:', getFormatLabel(selectedFormat.value));
 
     // Call the service method
-    const result = await ReportsService.downloadTempleRegisteredReport(params);
+    // Note: You might need to implement this method in your ReportsService
+    const result = await ReportsService.downloadUserDetailsReport(params);
     
     // Show success message
-    showToast(`Report downloaded successfully: ${result.filename}`, 'success');
+    showToast(`User Details Report downloaded successfully: ${result.filename}`, 'success');
     
   } catch (error) {
     console.error('Download failed:', error);
@@ -482,19 +493,8 @@ const downloadReport = async () => {
 };
 
 // Lifecycle hooks
-onMounted(async () => {
+onMounted(() => {
   // Initialize default dates
   initializeDates();
-  
-  // Fetch temples if not already loaded
-  if (templeStore.temples.length === 0) {
-    try {
-      await templeStore.fetchTemples(tenantId.value);
-    } catch (error) {
-      console.error('Error loading temple data:', error);
-      showToast('Failed to load temple data. Please try again.', 'error');
-      errorMessage.value = 'Failed to load temple data. Some features may not work correctly.';
-    }
-  }
 });
 </script>

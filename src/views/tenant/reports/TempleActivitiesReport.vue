@@ -1,7 +1,18 @@
-//TempleActivities.vue
-
 <template>
   <div class="min-h-screen bg-gray-50">
+    <!-- Back to SuperAdmin Reports button (when viewed from superadmin) -->
+    <div v-if="fromSuperadmin" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+      <router-link 
+        to="/superadmin/reports" 
+        class="inline-flex items-center px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+      >
+        <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        Back to SuperAdmin Reports
+      </router-link>
+    </div>
+
     <!-- Header Section -->
     <div class="bg-white shadow-sm border-b border-gray-200 rounded-2xl">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -10,13 +21,18 @@
             <h1 class="text-2xl font-bold text-gray-900">Temple Activities Report</h1>
             <p class="text-gray-600 mt-1">
               Download event, seva, and booking activity data for your temples
-              <span v-if="tenantId" class="text-indigo-600 font-medium"> (Tenant ID: {{ tenantId }})</span>
+              <span v-if="fromSuperadmin && tenantIds.length > 1" class="text-indigo-600 font-medium">
+                (Multiple Tenants Selected)
+              </span>
+              <span v-else-if="tenantId" class="text-indigo-600 font-medium">
+                (Tenant ID: {{ tenantId }})
+              </span>
             </p>
           </div>
           <div class="flex items-center space-x-4">
             <div class="bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-200">
               <span class="text-indigo-800 font-medium">{{ userStore.user?.name || 'Tenant User' }}</span>
-              <span class="text-indigo-600 text-sm ml-2">(Tenant)</span>
+              <span class="text-indigo-600 text-sm ml-2">{{ fromSuperadmin ? '(Super Admin)' : '(Tenant)' }}</span>
             </div>
           </div>
         </div>
@@ -144,68 +160,6 @@
             </div>
           </div>
 
-          <!-- Preview Section -->
-          <!-- <div class="mb-6">
-            <div class="flex items-center justify-between mb-4">
-              <h4 class="text-lg font-medium text-gray-900">Report Preview</h4>
-              <button 
-                @click="loadReportPreview"
-                :disabled="reportsStore.loading"
-                class="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-indigo-600 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-              >
-                <svg class="mr-1 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Refresh Preview
-              </button>
-            </div>
-            
-            Preview Data
-            <div v-if="reportsStore.hasReportData" class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <div class="flex items-center justify-between mb-3">
-                <span class="text-sm font-medium text-gray-900">
-                  {{ reportsStore.reportSummary?.totalRecords || 0 }} records found
-                </span>
-                <span class="text-xs text-gray-600">
-                  {{ getActivityTypeLabel(activityType) }} | {{ getTimeFilterLabel(activeFilter) }}
-                </span>
-              </div>
-              
-              Preview Table
-              <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                  <thead class="bg-gray-100">
-                    <tr>
-                      <th v-for="column in reportsStore.reportPreview?.columns" :key="column.key" 
-                          class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        {{ column.label }}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody class="bg-white divide-y divide-gray-200">
-                    <tr v-for="(row, index) in previewRows" :key="index">
-                      <td v-for="column in reportsStore.reportPreview?.columns" :key="column.key"
-                          class="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                        {{ row[column.key] || '-' }}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              
-              <p v-if="reportsStore.reportPreview?.data.length > 5" class="text-xs text-gray-500 mt-2 text-center">
-                Showing first 5 rows. Download full report to see all {{ reportsStore.reportSummary?.totalRecords }} records.
-              </p>
-            </div>
-            
-            <div v-else-if="!reportsStore.loading" class="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
-              <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p class="mt-2 text-sm text-gray-600">No data available. Click "Refresh Preview" to load data.</p>
-            </div>
-          </div> -->
-
           <!-- Download Section -->
           <div class="border-t border-gray-200 pt-6">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between">
@@ -253,6 +207,12 @@
           <h3 class="text-lg font-medium text-gray-900 mb-4">Applied Filters</h3>
           
           <div class="flex flex-wrap gap-2">
+            <!-- Tenant Filter (only in superadmin view with multiple tenants) -->
+            <div v-if="fromSuperadmin && tenantIds.length > 1" class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
+              <span class="font-medium mr-1">Tenants:</span>
+              {{ tenantIds.length }} selected
+            </div>
+            
             <!-- Temple Filter -->
             <div class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
               <span class="font-medium mr-1">Temple:</span>
@@ -292,7 +252,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useTempleStore } from '@/stores/temple';
 import { useAuthStore } from '@/stores/auth';
 import { useReportsStore } from '@/stores/reports';
@@ -300,6 +260,7 @@ import { useToast } from '@/composables/useToast';
 
 // Composables
 const route = useRoute();
+const router = useRouter();
 const templeStore = useTempleStore();
 const userStore = useAuthStore();
 const reportsStore = useReportsStore();
@@ -334,9 +295,18 @@ const formats = [
   { label: 'Excel', value: 'excel' },
 ];
 
-// Computed
+// Computed properties
 const tenantId = computed(() => {
   return route.params.tenantId || userStore.user?.id || localStorage.getItem('current_tenant_id');
+});
+
+// Check for tenants parameter from superadmin
+const fromSuperadmin = computed(() => route.query.from === 'superadmin');
+const tenantIds = computed(() => {
+  if (route.query.tenants) {
+    return route.query.tenants.split(',');
+  }
+  return [tenantId.value]; // Default to current tenant only
 });
 
 const previewRows = computed(() => {
@@ -411,14 +381,27 @@ const formatDate = (dateString) => {
 
 const loadReportPreview = async () => {
   try {
-    const params = reportsStore.buildReportParams({
-      selectedTemple: selectedTemple.value,
-      activityType: activityType.value,
-      activeFilter: activeFilter.value,
-      selectedFormat: '', // No format for preview
-      startDate: startDate.value,
-      endDate: endDate.value
-    });
+    // Create parameters object using either entityId or entityIds based on context
+    let params;
+    if (fromSuperadmin.value && tenantIds.value.length > 1) {
+      params = {
+        entityIds: tenantIds.value,
+        type: activityType.value,
+        dateRange: activeFilter.value,
+        selectedFormat: '', // No format for preview
+        startDate: startDate.value,
+        endDate: endDate.value
+      };
+    } else {
+      params = {
+        selectedTemple: selectedTemple.value,
+        activityType: activityType.value,
+        activeFilter: activeFilter.value,
+        selectedFormat: '', // No format for preview
+        startDate: startDate.value,
+        endDate: endDate.value
+      };
+    }
 
     await reportsStore.getReportPreview(params);
   } catch (error) {
@@ -429,14 +412,27 @@ const loadReportPreview = async () => {
 
 const downloadReport = async () => {
   try {
-    const params = reportsStore.buildReportParams({
-      selectedTemple: selectedTemple.value,
-      activityType: activityType.value,
-      activeFilter: activeFilter.value,
-      selectedFormat: selectedFormat.value,
-      startDate: startDate.value,
-      endDate: endDate.value
-    });
+    // Create parameters object using either entityId or entityIds based on context
+    let params;
+    if (fromSuperadmin.value && tenantIds.value.length > 1) {
+      params = {
+        entityIds: tenantIds.value,
+        type: activityType.value,
+        dateRange: activeFilter.value,
+        format: selectedFormat.value,
+        startDate: startDate.value,
+        endDate: endDate.value
+      };
+    } else {
+      params = reportsStore.buildReportParams({
+        selectedTemple: selectedTemple.value,
+        activityType: activityType.value,
+        activeFilter: activeFilter.value,
+        selectedFormat: selectedFormat.value,
+        startDate: startDate.value,
+        endDate: endDate.value
+      });
+    }
 
     const result = await reportsStore.downloadActivitiesReport(params);
     

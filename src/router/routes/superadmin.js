@@ -1,5 +1,5 @@
-import SuperAdminDashboard from '@/views/superadmin/SuperAdminDashboard.vue'
-import TenantApprovals from '@/components/superadmin/TenantApprovals.vue' // Direct import from components
+import SuperAdminDashboard from '@/views/superadmin/SuperAdminDashboard.vue';
+import TenantApprovals from '@/components/superadmin/TenantApprovals.vue'; // Direct import from components
 
 export default [
   {
@@ -43,8 +43,8 @@ export default [
     path: 'users/:userId/assign-tenants',
     name: 'AssignTenants',
     component: () => import('@/views/superadmin/AssignTenantsView.vue'),
-    meta: { 
-      requiresAuth: true, 
+    meta: {
+      requiresAuth: true,
       role: 'superadmin',
       title: 'Assign Tenants to User'
     }
@@ -54,22 +54,72 @@ export default [
     path: 'audit-logs',
     name: 'AuditLogs',
     component: () => import('@/views/superadmin/AuditLogsView.vue'),
-    meta: { 
-      requiresAuth: true, 
+    meta: {
+      requiresAuth: true,
       role: 'superadmin',
-      title: 'Audit Logs', 
+      title: 'Audit Logs',
       breadcrumb: 'Audit Logs'
     }
   },
-
+  // Reports management routes
   {
-  path: 'reports',
-  name: 'superadmin-reports',
-  component: () => import('@/views/superadmin/SuperadminReportsView.vue'),
-  meta: {
-    requiresAuth: true,
-    role: 'superadmin',
-    title: 'Reports Management'
+    path: 'reports',
+    name: 'superadmin-reports',
+    component: () => import('@/views/superadmin/SuperadminReportsView.vue'),
+    meta: {
+      requiresAuth: true,
+      role: 'superadmin',
+      title: 'Reports Management'
+    }
+  },
+  {
+    path: 'reports/temple-register',
+    name: 'SuperadminTempleRegister',
+    component: () => import('@/views/tenant/reports/TempleRegisterReport.vue'),
+    meta: {
+      requiresAuth: true,
+      role: 'superadmin',
+      title: 'Temple Register Report'
+    }
+  },
+  {
+    path: 'reports/temple-activities',
+    name: 'SuperadminTempleActivities',
+    component: () => import('@/views/tenant/reports/TempleActivitiesReport.vue'),
+    meta: {
+      requiresAuth: true,
+      role: 'superadmin',
+      title: 'Temple Activities Report'
+    }
+  },
+  {
+    path: 'reports/birthdays',
+    name: 'SuperadminBirthdays',
+    component: () => import('@/views/tenant/reports/BirthdaysReport.vue'),
+    meta: {
+      requiresAuth: true,
+      role: 'superadmin',
+      title: 'Devotee Birthdays Report'
+    }
+  },
+  {
+    path: 'reports/user-details',
+    name: 'SuperadminUserDetails',
+    component: () => import('@/views/tenant/reports/UserDetailsReport.vue'),
+    meta: {
+      requiresAuth: true,
+      role: 'superadmin',
+      title: 'User Details Report'
+    }
+  },
+  {
+    path: 'reports/approval-status',
+    name: 'SuperadminApprovalStatus',
+    component: () => import('@/views/tenant/reports/ApprovalStatusReport.vue'),
+    meta: {
+      requiresAuth: true,
+      role: 'superadmin',
+      title: 'Approval Status Report'
+    }
   }
-}
 ];
