@@ -78,17 +78,19 @@ type UpdateUserRequest struct {
 }
 
 type UserResponse struct {
-	ID        uint      `json:"id"`
-	FullName  string    `json:"full_name"`
-	Email     string    `json:"email"`
-	Phone     string    `json:"phone"`
-	Role      UserRole  `json:"role"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	
-	// Temple details for templeadmin users
-	TempleDetails *TenantTempleDetails `json:"temple_details,omitempty"`
+    ID        uint      `json:"id"`
+    FullName  string    `json:"full_name"`
+    Email     string    `json:"email"`
+    Phone     string    `json:"phone"`
+    Role      UserRole  `json:"role"`
+    Status    string    `json:"status"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+
+    // Temple details for templeadmin users
+    TempleDetails           *TenantTempleDetails    `json:"temple_details,omitempty"`
+    // Add backticks here
+    TenantAssignmentDetails *TenantAssignmentDetails `json:"tenant_assignment_details,omitempty"`
 }
 
 type UserRole struct {
@@ -96,4 +98,40 @@ type UserRole struct {
 	RoleName            string `json:"role_name"`
 	Description         string `json:"description"`
 	CanRegisterPublicly bool   `json:"can_register_publicly"`
+}
+
+// AssignableTenant represents a single tenant for the assignment list.
+type AssignableTenant struct {
+	UserID        uint   `json:"userID"`
+	TenantName    string `json:"tenantName"`
+	Email         string `json:"email"`
+	TempleAddress string `json:"templeAddress"`
+	TempleName    string `json:"templeName"`
+}
+
+// AssignRequest holds the user IDs and the single tenant ID for assignment.
+// Corrected backend struct definition
+type AssignRequest struct {
+    UserID   uint `json:"userId" binding:"required"`
+    TenantID uint `json:"tenantId" binding:"required"`
+}
+
+// AssignTenantsRequest holds the tenant IDs to be assigned to a user.
+type AssignTenantsRequest struct {
+	TenantIDs []uint `json:"tenant_ids" binding:"required"`
+}
+
+
+// TenantListResponse holds the details of a single tenant for the list view.
+type TenantListResponse struct {
+	ID            uint   `json:"id"`
+	UserID        uint   `json:"user_id"`
+	TempleName    string `json:"temple_name"`
+	TempleAddress string `json:"temple_address"`
+}
+
+type TenantAssignmentDetails struct {
+	TenantName  string    `json:"tenant_name"`
+	AssignedOn  time.Time `json:"assigned_on"`
+	UpdatedOn   time.Time `json:"updated_on"`
 }

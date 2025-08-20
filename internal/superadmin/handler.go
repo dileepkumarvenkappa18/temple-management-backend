@@ -526,3 +526,69 @@ func (h *Handler) ResetUserPassword(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully"})
 }
+
+
+// GET /superadmin/tenants/assignable
+func (h *Handler) GetTenantsForAssignment(c *gin.Context) {
+    // 🎯 Add these lines to parse pagination parameters
+    limitStr := c.DefaultQuery("limit", "10")
+    pageStr := c.DefaultQuery("page", "1")
+
+    limit, err := strconv.Atoi(limitStr)
+    if err != nil || limit <= 0 {
+        limit = 10
+    }
+    page, err := strconv.Atoi(pageStr)
+    if err != nil || page <= 0 {
+        page = 1
+    }
+
+    // 🎯 Pass the pagination parameters to the service layer
+    tenants, total, err := h.service.GetTenantsForAssignment(c.Request.Context(), limit, page)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch assignable tenants"})
+        return
+    }
+
+    // 🎯 Return pagination metadata in the response
+    c.JSON(http.StatusOK, gin.H{
+        "data": tenants,
+        "total": total,
+        "page": page,
+        "limit": limit,
+    })
+}
+// POST /superadmin/users/assign
+func (h *Handler) AssignUsersToTenant(c *gin.Context) {
+    var req AssignRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        // Corrected error message to reflect the JSON struct fields.
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload. 'userId' and 'tenantId' are required"})
+        return
+    }
+
+    // 🎯 Step 1: Get the user object from the context using the correct key "user".
+    user, exists := c.Get("user")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+        return
+    }
+
+    // 🎯 Step 2: Type-assert the user object to your `auth.User` struct.
+    authenticatedUser, ok := user.(auth.User)
+    if !ok {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error: user context type mismatch"})
+        return
+    }
+
+    // 🎯 Step 3: Use the ID from the authenticated user object.
+    adminID := authenticatedUser.ID
+
+    err := h.service.AssignUsersToTenant(c.Request.Context(), req.UserID, req.TenantID, adminID)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "User assigned successfully"})
+}

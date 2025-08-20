@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 	"errors"
+	
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/entity"
@@ -657,3 +658,48 @@ func (r *Repository) UpdateUserPassword(ctx context.Context, userID uint, newPas
     
     return nil
 }
+
+
+func (r *Repository) GetAssignableTenants(ctx context.Context, limit, page int) ([]AssignableTenant, int64, error) {
+    var tenants []AssignableTenant
+    var total int64
+
+    // Calculate the offset based on the requested page and limit
+    offset := (page - 1) * limit
+
+    // First, count the total number of records that match the WHERE clause.
+    // This is done without applying limit or offset.
+    countQuery := r.db.WithContext(ctx).
+        Table("users").
+        Joins("JOIN user_roles ON users.role_id = user_roles.id").
+        Where("user_roles.role_name = ? AND users.status = ?", "templeadmin", "active").
+        Count(&total)
+
+    if countQuery.Error != nil {
+        return nil, 0, countQuery.Error
+    }
+
+    // Now, fetch the paginated data.
+    // The same query is used, but with Select, Joins, Limit, and Offset.
+    err := r.db.WithContext(ctx).
+        Table("users").
+        Select("users.id as user_id, users.full_name as tenant_name, users.email, COALESCE(entities.name, tenant_details.temple_name) AS temple_name, COALESCE(entities.street_address, tenant_details.temple_address) AS temple_address, COALESCE(entities.phone, tenant_details.temple_phone_no) AS temple_phone, COALESCE(entities.description, tenant_details.temple_description) AS temple_description").
+        Joins("JOIN user_roles ON users.role_id = user_roles.id").
+        Joins("LEFT JOIN entities ON users.id = entities.created_by").
+        Joins("LEFT JOIN tenant_details ON users.id = tenant_details.user_id").
+        Where("user_roles.role_name = ? AND users.status = ?", "templeadmin", "active").
+        Limit(limit).
+        Offset(offset).
+        Scan(&tenants).Error
+
+    if err != nil {
+        return nil, 0, err
+    }
+
+    return tenants, total, nil
+}
+
+
+
+
+

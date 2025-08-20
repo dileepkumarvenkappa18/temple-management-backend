@@ -1,23 +1,23 @@
 package routes
 
 import (
-	"net/http"
-	"strings"
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/database"
-	"github.com/sharath018/temple-management-backend/internal/auditlog"  // NEW IMPORT
+	"github.com/sharath018/temple-management-backend/internal/auditlog" // NEW IMPORT
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/donation"
 	"github.com/sharath018/temple-management-backend/internal/entity"
 	"github.com/sharath018/temple-management-backend/internal/event"
 	"github.com/sharath018/temple-management-backend/internal/eventrsvp"
 	"github.com/sharath018/temple-management-backend/internal/notification"
+	"github.com/sharath018/temple-management-backend/internal/reports"
 	"github.com/sharath018/temple-management-backend/internal/seva"
 	"github.com/sharath018/temple-management-backend/internal/superadmin"
 	"github.com/sharath018/temple-management-backend/internal/userprofile"
-	"github.com/sharath018/temple-management-backend/internal/reports"
 	"github.com/sharath018/temple-management-backend/middleware"
+	"net/http"
+	"strings"
 
 	_ "github.com/sharath018/temple-management-backend/docs"
 	swaggerFiles "github.com/swaggo/files"
@@ -25,14 +25,14 @@ import (
 )
 
 func Setup(r *gin.Engine, cfg *config.Config) {
-		// Add static file serving for the public directory
+	// Add static file serving for the public directory
 	r.Static("/public", "./public")
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "OK"})
 	})
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-		// NEW: Add a direct route for reset password
+	// NEW: Add a direct route for reset password
 	r.GET("/auth-pages/reset-password", func(c *gin.Context) {
 		token := c.Query("token")
 		if token == "" {
@@ -66,9 +66,9 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		authGroup.POST("/login", authHandler.Login)
 		authGroup.POST("/refresh", authHandler.Refresh)
 
-// ✅ NEW: Forgot/Reset/Logout
-authGroup.POST("/forgot-password", authHandler.ForgotPassword)
-authGroup.POST("/reset-password", authHandler.ResetPassword)
+		// ✅ NEW: Forgot/Reset/Logout
+		authGroup.POST("/forgot-password", authHandler.ForgotPassword)
+		authGroup.POST("/reset-password", authHandler.ResetPassword)
 
 		// ✅ NEW: Public roles endpoint for registration (no auth required)
 		authGroup.GET("/public-roles", authHandler.GetPublicRoles)
@@ -127,40 +127,43 @@ authGroup.POST("/reset-password", authHandler.ResetPassword)
 		// ================ USER MANAGEMENT ================
 		// Create new user (admin-created users)
 		superadminRoutes.POST("/users", superadminHandler.CreateUser)
-		
+
 		// Get all users with pagination and filters (excluding devotee and volunteer)
 		// Query params: ?limit=10&page=1&search=john&role=templeadmin&status=active
 		superadminRoutes.GET("/users", superadminHandler.GetUsers)
-		
+
 		// Get user by ID
 		superadminRoutes.GET("/users/:id", superadminHandler.GetUserByID)
-		
+
 		// Update user
 		superadminRoutes.PUT("/users/:id", superadminHandler.UpdateUser)
-		
+
 		// Delete user (soft delete)
 		superadminRoutes.DELETE("/users/:id", superadminHandler.DeleteUser)
-		
+
 		// Activate/Deactivate user
 		superadminRoutes.PATCH("/users/:id/status", superadminHandler.UpdateUserStatus)
-		
+
 		// Get all available user roles
 		superadminRoutes.GET("/user-roles", superadminHandler.GetUserRoles)
 
 		// Role management routes
-        superadminRoutes.GET("/roles", superadminHandler.GetRoles)
-        superadminRoutes.POST("/roles", superadminHandler.CreateRole)
-        superadminRoutes.PUT("/roles/:id", superadminHandler.UpdateRole)
-        superadminRoutes.PATCH("/roles/:id/status", superadminHandler.ToggleRoleStatus)
+		superadminRoutes.GET("/roles", superadminHandler.GetRoles)
+		superadminRoutes.POST("/roles", superadminHandler.CreateRole)
+		superadminRoutes.PUT("/roles/:id", superadminHandler.UpdateRole)
+		superadminRoutes.PATCH("/roles/:id/status", superadminHandler.ToggleRoleStatus)
 
 		// Reset user password (superadmin resets any user’s password)
-superadminRoutes.POST("/users/:id/reset-password", superadminHandler.ResetUserPassword)
-superadminRoutes.GET("/users/search", superadminHandler.SearchUserByEmail)
+		superadminRoutes.POST("/users/:id/reset-password", superadminHandler.ResetUserPassword)
+		superadminRoutes.GET("/users/search", superadminHandler.SearchUserByEmail)
+		superadminRoutes.GET("/tenants/assignable", superadminHandler.GetTenantsForAssignment)
+		// Assigns a list of users to a selected temple/tenant
+		superadminRoutes.POST("/users/assign", superadminHandler.AssignUsersToTenant)
 	}
 
-// ========== Seva ==========
+	// ========== Seva ==========
 	sevaRepo := seva.NewRepository(database.DB)
-	sevaService := seva.NewService(sevaRepo, auditSvc) // ✅ INJECT AUDIT SERVICE
+	sevaService := seva.NewService(sevaRepo, auditSvc)    // ✅ INJECT AUDIT SERVICE
 	sevaHandler := seva.NewHandler(sevaService, auditSvc) // ✅ INJECT AUDIT SERVICE
 
 	sevaRoutes := protected.Group("/sevas")
@@ -170,7 +173,6 @@ superadminRoutes.GET("/users/search", superadminHandler.SearchUserByEmail)
 	sevaRoutes.GET("/entity-bookings", middleware.RBACMiddleware("templeadmin"), sevaHandler.GetEntityBookings)
 	sevaRoutes.PATCH("/bookings/:id/status", middleware.RBACMiddleware("templeadmin"), sevaHandler.UpdateBookingStatus)
 	sevaRoutes.GET("/bookings/:id", middleware.RBACMiddleware("templeadmin"), sevaHandler.GetBookingByID)
-	
 
 	// 🔐 Devotee Only (Booking Seva + Filters)
 	sevaRoutes.POST("/bookings", middleware.RBACMiddleware("devotee"), sevaHandler.BookSeva)
@@ -188,7 +190,7 @@ superadminRoutes.GET("/users/search", superadminHandler.SearchUserByEmail)
 		// donationRepo := donation.NewRepository(database.DB)
 		profileRepo := userprofile.NewRepository(database.DB)
 		profileService := userprofile.NewService(profileRepo, authRepo, auditSvc)
-		
+
 		// ✅ INJECT AUDIT SERVICE INTO ENTITY SERVICE
 		entityService := entity.NewService(entityRepo, profileService, auditSvc)
 		entityHandler := entity.NewHandler(entityService)
@@ -207,30 +209,28 @@ superadminRoutes.GET("/users/search", superadminHandler.SearchUserByEmail)
 
 	}
 
-// ========== Event & RSVP ==========
-eventRepo := event.NewRepository(database.DB)
-eventService := event.NewService(eventRepo, auditSvc) // ✅ INJECT AUDIT SERVICE
-eventHandler := event.NewHandler(eventService)
+	// ========== Event & RSVP ==========
+	eventRepo := event.NewRepository(database.DB)
+	eventService := event.NewService(eventRepo, auditSvc) // ✅ INJECT AUDIT SERVICE
+	eventHandler := event.NewHandler(eventService)
 
-// Templeadmin-only routes (write operations)
-eventRoutes := protected.Group("/events", middleware.RBACMiddleware("templeadmin"))
-{
-	eventRoutes.POST("/", eventHandler.CreateEvent)
-	eventRoutes.POST("", eventHandler.CreateEvent)
-	eventRoutes.PUT("/:id", eventHandler.UpdateEvent)
-	eventRoutes.DELETE("/:id", eventHandler.DeleteEvent)
-}
+	// Templeadmin-only routes (write operations)
+	eventRoutes := protected.Group("/events", middleware.RBACMiddleware("templeadmin"))
+	{
+		eventRoutes.POST("/", eventHandler.CreateEvent)
+		eventRoutes.POST("", eventHandler.CreateEvent)
+		eventRoutes.PUT("/:id", eventHandler.UpdateEvent)
+		eventRoutes.DELETE("/:id", eventHandler.DeleteEvent)
+	}
 
-// Shared routes for templeadmin and devotee (read operations)
-// protected.GET("/events", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.ListEvents)
-protected.GET("/events/", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.ListEvents)
-protected.GET("/events/:id", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.GetEventByID)
-protected.GET("/events/upcoming", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.GetUpcomingEvents)
-// Shared stats route (templeadmin + devotee)
+	// Shared routes for templeadmin and devotee (read operations)
+	// protected.GET("/events", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.ListEvents)
+	protected.GET("/events/", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.ListEvents)
+	protected.GET("/events/:id", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.GetEventByID)
+	protected.GET("/events/upcoming", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.GetUpcomingEvents)
+	// Shared stats route (templeadmin + devotee)
 
-protected.GET("/events/stats", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.GetEventStats)
-
-	
+	protected.GET("/events/stats", middleware.RBACMiddleware("templeadmin", "devotee"), eventHandler.GetEventStats)
 
 	{
 		rsvpRepo := eventrsvp.NewRepository(database.DB)
@@ -269,7 +269,7 @@ protected.GET("/events/stats", middleware.RBACMiddleware("templeadmin", "devotee
 		templeSearchRoutes.GET("/recent", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.GetRecentTemples)
 	}
 
-// ========== Donations with Audit Logging ==========
+	// ========== Donations with Audit Logging ==========
 	{
 		donationRepo := donation.NewRepository(database.DB)
 		donationService := donation.NewService(donationRepo, cfg, auditSvc) // ✅ INJECT AUDIT SERVICE
@@ -297,29 +297,29 @@ protected.GET("/events/stats", middleware.RBACMiddleware("templeadmin", "devotee
 	}
 
 	// ========== Notifications ==========
-// ========== Notifications with Audit Logging ==========
-{
-	notificationRepo := notification.NewRepository(database.DB)
-	notificationService := notification.NewService(notificationRepo, authRepo, cfg, auditSvc) // ✅ INJECT AUDIT SERVICE
+	// ========== Notifications with Audit Logging ==========
+	{
+		notificationRepo := notification.NewRepository(database.DB)
+		notificationService := notification.NewService(notificationRepo, authRepo, cfg, auditSvc) // ✅ INJECT AUDIT SERVICE
 
-	notificationHandler := notification.NewHandler(notificationService, auditSvc) // ✅ INJECT AUDIT SERVICE
+		notificationHandler := notification.NewHandler(notificationService, auditSvc) // ✅ INJECT AUDIT SERVICE
 
-	notificationRoutes := protected.Group("/notifications")
-	notificationRoutes.Use(middleware.RBACMiddleware("templeadmin"))
+		notificationRoutes := protected.Group("/notifications")
+		notificationRoutes.Use(middleware.RBACMiddleware("templeadmin"))
 
-	// 🧩 Templates
-	notificationRoutes.POST("/templates", notificationHandler.CreateTemplate)
-	notificationRoutes.GET("/templates", notificationHandler.GetTemplates)
-	notificationRoutes.GET("/templates/:id", notificationHandler.GetTemplateByID)
-	notificationRoutes.PUT("/templates/:id", notificationHandler.UpdateTemplate)
-	notificationRoutes.DELETE("/templates/:id", notificationHandler.DeleteTemplate)
+		// 🧩 Templates
+		notificationRoutes.POST("/templates", notificationHandler.CreateTemplate)
+		notificationRoutes.GET("/templates", notificationHandler.GetTemplates)
+		notificationRoutes.GET("/templates/:id", notificationHandler.GetTemplateByID)
+		notificationRoutes.PUT("/templates/:id", notificationHandler.UpdateTemplate)
+		notificationRoutes.DELETE("/templates/:id", notificationHandler.DeleteTemplate)
 
-	// 📬 Send Notification
-	notificationRoutes.POST("/send", notificationHandler.SendNotification)
+		// 📬 Send Notification
+		notificationRoutes.POST("/send", notificationHandler.SendNotification)
 
-	// 📜 View Logs
-	notificationRoutes.GET("/logs", notificationHandler.GetMyNotifications)
-}
+		// 📜 View Logs
+		notificationRoutes.GET("/logs", notificationHandler.GetMyNotifications)
+	}
 
 	// ========== Reports ==========
 	// ========== Reports ==========
@@ -327,7 +327,7 @@ protected.GET("/events/stats", middleware.RBACMiddleware("templeadmin", "devotee
 		reportsRepo := reports.NewRepository(database.DB)
 		reportsExporter := reports.NewReportExporter()
 		reportsService := reports.NewReportService(reportsRepo, reportsExporter, auditSvc) // ✅ INJECT AUDIT SERVICE
-		reportsHandler := reports.NewHandler(reportsService, reportsRepo, auditSvc) // ✅ INJECT AUDIT SERVICE
+		reportsHandler := reports.NewHandler(reportsService, reportsRepo, auditSvc)        // ✅ INJECT AUDIT SERVICE
 
 		reportsRoutes := protected.Group("/entities/:id/reports")
 		reportsRoutes.Use(middleware.RBACMiddleware("templeadmin"))

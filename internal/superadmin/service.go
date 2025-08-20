@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"fmt"
+	"gorm.io/gorm"
 
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
@@ -971,4 +973,103 @@ func (s *Service) ResetUserPassword(ctx context.Context, userID uint, newPasswor
 	}
 
 	return nil
+}
+
+
+// ================== NEW: USER ASSIGNMENT ==================
+
+// GetTenantsForAssignment fetches a list of approved temple admins and their temple details
+// suitable for displaying in the "Assign" feature's tenant selection.
+func (s *Service) GetTenantsForAssignment(ctx context.Context, limit, page int) ([]AssignableTenant, int64, error) {
+    // Check for valid pagination parameters
+    if limit <= 0 {
+        limit = 10 // Default limit if not provided or invalid
+    }
+    if page <= 0 {
+        page = 1 // Default page if not provided or invalid
+    }
+
+    // Call the repository with the new parameters.
+    // The repository should now handle the actual pagination query.
+    tenants, total, err := s.repo.GetAssignableTenants(ctx, limit, page)
+    if err != nil {
+        // Return a generic error to the handler for security and consistency
+        return nil, 0, errors.New("failed to fetch assignable tenants")
+    }
+
+    return tenants, total, nil
+}
+
+// AssignUsersToTenant assigns a batch of users (Standard/Monitoring) to a specific temple (entity).
+// This operation is wrapped in a database transaction to ensure atomicity.
+// This operation is wrapped in a database transaction to ensure atomicity.
+// (Note: This function assumes the handler now passes `userID`, `tenantID`, and `adminID`.)
+func (s *Service) AssignUsersToTenant(ctx context.Context, userID uint, tenantID uint, adminID uint) error {
+	tx := s.repo.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return errors.New("failed to start database transaction")
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 1. Validate the user to be assigned
+	var userToAssign auth.User
+	err := tx.WithContext(ctx).Model(&auth.User{}).Preload("Role").Where("id = ?", userID).First(&userToAssign).Error
+	if err != nil {
+		tx.Rollback()
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("user with ID %d not found", userID)
+		}
+		return fmt.Errorf("failed to retrieve user with ID %d", userID)
+	}
+
+	roleNameLower := strings.ToLower(userToAssign.Role.RoleName)
+	if roleNameLower != "standarduser" && roleNameLower != "monitoringuser" {
+		tx.Rollback()
+		return fmt.Errorf("user with ID %d has an unassignable role ('%s')", userID, userToAssign.Role.RoleName)
+	}
+
+	// 2. Clear all existing assignments for the user.
+	if err := tx.WithContext(ctx).Where("user_id = ?", userID).Delete(&auth.TenantUserAssignment{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete existing assignments for user %d: %w", userID, err)
+	}
+
+	// 3. Validate the selected tenant (which is now the temple admin user).
+	// We still need to confirm the provided tenantID belongs to an active 'templeadmin' role.
+	var tenantUser auth.User
+	err = tx.WithContext(ctx).Model(&auth.User{}).Preload("Role").Where("id = ?", tenantID).First(&tenantUser).Error
+	if err != nil {
+		tx.Rollback()
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("selected tenant user (temple admin) not found")
+		}
+		return errors.New("failed to retrieve selected tenant user details")
+	}
+	if strings.ToLower(tenantUser.Role.RoleName) != "templeadmin" || tenantUser.Status != "active" {
+		tx.Rollback()
+		return errors.New("the selected user (temple admin) is not an active temple admin and cannot be a tenant")
+	}
+
+	// ⚠️ MAJOR CHANGE: Removed the 'entity' lookup.
+	// The TenantID in tenant_user_assignments will now directly be the User ID of the temple admin.
+	newAssignment := auth.TenantUserAssignment{
+		UserID:    userID,
+		TenantID:  tenantID, // This now explicitly uses the User ID of the temple admin as the TenantID
+		CreatedBy: adminID,  // The admin who performed this assignment
+	}
+
+	// 4. Create and insert a new record into the tenant_user_assignments table.
+	if err := tx.WithContext(ctx).Create(&newAssignment).Error; err != nil {
+		// Log the specific database error to diagnose unique constraint violations or other issues.
+		fmt.Printf("Database error during CREATE tenant assignment: %v\n", err)
+		tx.Rollback()
+		return fmt.Errorf("failed to create user assignment: %w", err)
+	}
+
+	// 5. Commit the transaction
+	return tx.Commit().Error
 }

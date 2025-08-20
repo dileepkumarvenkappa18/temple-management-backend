@@ -122,3 +122,22 @@ type UpdateRoleRequest struct {
 type UpdateRoleStatusRequest struct {
 	Status string `json:"status" binding:"required"`
 }
+
+type TenantUserAssignment struct {
+	ID        uint `gorm:"primarykey"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+
+	UserID    uint `gorm:"uniqueIndex:idx_user_tenant;not null"`
+	TenantID  uint `gorm:"uniqueIndex:idx_user_tenant;not null"`
+	CreatedBy uint `gorm:"not null"`
+
+	// New Status field
+	Status string `gorm:"type:varchar(20);not null;default:'active'"`
+}
+
+// TableName overrides the default table name for GORM.
+func (TenantUserAssignment) TableName() string {
+	return "tenant_user_assignments"
+}
+
