@@ -37,7 +37,7 @@ func (r *repository) GetByFilter(ctx context.Context, filter AuditLogFilter) ([]
 			al.id, al.user_id, al.entity_id, al.action, 
 			al.details, al.ip_address, al.status, al.created_at,
 			u.full_name as user_name,
-			e.entity_name as entity_name
+			e.name as entity_name
 		`).
 		Joins("LEFT JOIN users u ON al.user_id = u.id").
 		Joins("LEFT JOIN entities e ON al.entity_id = e.id")
@@ -99,7 +99,7 @@ func (r *repository) GetByID(ctx context.Context, id uint) (*AuditLogResponse, e
 			al.id, al.user_id, al.entity_id, al.action, 
 			al.details, al.ip_address, al.status, al.created_at,
 			u.full_name as user_name,
-			e.entity_name as entity_name
+			e.name as entity_name
 		`).
 		Joins("LEFT JOIN users u ON al.user_id = u.id").
 		Joins("LEFT JOIN entities e ON al.entity_id = e.id").

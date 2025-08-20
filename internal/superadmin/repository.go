@@ -327,7 +327,7 @@ func (r *Repository) GetUsers(ctx context.Context, limit, page int, search, role
 
 	offset := (page - 1) * limit
 
-	// Build base query excluding devotee and volunteer roles
+	// Build base query for total count
 	baseQuery := r.db.WithContext(ctx).
 		Table("users").
 		Joins("JOIN user_roles ON users.role_id = user_roles.id").
@@ -357,30 +357,35 @@ func (r *Repository) GetUsers(ctx context.Context, limit, page int, search, role
 		return nil, 0, err
 	}
 
-	// Build main query with temple details for templeadmin users
+	// Build main query with all necessary joins and select fields
 	query := r.db.WithContext(ctx).
 		Table("users").
 		Select(`
-			users.id,
-			users.full_name,
-			users.email,
-			users.phone,
-			users.status,
-			users.created_at,
-			users.updated_at,
-			user_roles.id as role_id,
-			user_roles.role_name,
-			td.id as temple_id,
-			td.temple_name,
-			td.temple_place,
-			td.temple_address,
-			td.temple_phone_no,
-			td.temple_description,
-			td.created_at as temple_created_at,
-			td.updated_at as temple_updated_at
-		`).
+            users.id,
+            users.full_name,
+            users.email,
+            users.phone,
+            users.status,
+            users.created_at,
+            users.updated_at,
+            user_roles.id as role_id,
+            user_roles.role_name,
+            td.id as temple_id,
+            td.temple_name,
+            td.temple_place,
+            td.temple_address,
+            td.temple_phone_no,
+            td.temple_description,
+            td.created_at as temple_created_at,
+            td.updated_at as temple_updated_at,
+            tenant_user.full_name as tenant_name,
+            tua.created_at as assignment_created_at,
+            tua.updated_at as assignment_updated_at
+        `).
 		Joins("JOIN user_roles ON users.role_id = user_roles.id").
 		Joins("LEFT JOIN tenant_details td ON users.id = td.user_id AND user_roles.role_name = 'templeadmin'").
+		Joins("LEFT JOIN tenant_user_assignments tua ON users.id = tua.user_id AND user_roles.role_name IN ('standarduser', 'monitoringuser') AND tua.status = 'active'").
+		Joins("LEFT JOIN users tenant_user ON tua.tenant_id = tenant_user.id").
 		Where("user_roles.role_name NOT IN (?)", []string{"devotee", "volunteer"})
 
 	// Apply same filters to main query
@@ -400,7 +405,7 @@ func (r *Repository) GetUsers(ctx context.Context, limit, page int, search, role
 		query = query.Where("LOWER(users.status) = LOWER(?)", statusFilter)
 	}
 
-	// Execute query with pagination
+	// Execute query with pagination and ordering
 	rows, err := query.Limit(limit).Offset(offset).Order("users.created_at DESC").Rows()
 	if err != nil {
 		return nil, 0, err
@@ -410,35 +415,26 @@ func (r *Repository) GetUsers(ctx context.Context, limit, page int, search, role
 	// Scan results
 	for rows.Next() {
 		var user UserResponse
+		// Temple details
 		var templeID *uint
 		var templeName, templePlace, templeAddress, templePhoneNo, templeDescription *string
 		var templeCreatedAt, templeUpdatedAt *time.Time
+		// Tenant assignment details
+		var tenantName *string
+		var assignmentCreatedAt, assignmentUpdatedAt *time.Time
 
 		err := rows.Scan(
-			&user.ID,
-			&user.FullName,
-			&user.Email,
-			&user.Phone,
-			&user.Status,
-			&user.CreatedAt,
-			&user.UpdatedAt,
-			&user.Role.ID,
-			&user.Role.RoleName,
-			&templeID,
-			&templeName,
-			&templePlace,
-			&templeAddress,
-			&templePhoneNo,
-			&templeDescription,
-			&templeCreatedAt,
-			&templeUpdatedAt,
+			&user.ID, &user.FullName, &user.Email, &user.Phone, &user.Status, &user.CreatedAt, &user.UpdatedAt,
+			&user.Role.ID, &user.Role.RoleName,
+			&templeID, &templeName, &templePlace, &templeAddress, &templePhoneNo, &templeDescription, &templeCreatedAt, &templeUpdatedAt,
+			&tenantName, &assignmentCreatedAt, &assignmentUpdatedAt,
 		)
 		if err != nil {
 			return nil, 0, err
 		}
 
-		// If temple details exist, populate them
-		if templeID != nil && templeName != nil {
+		// Conditionally populate TempleDetails
+		if templeID != nil {
 			user.TempleDetails = &TenantTempleDetails{
 				ID:                *templeID,
 				TempleName:        *templeName,
@@ -451,6 +447,14 @@ func (r *Repository) GetUsers(ctx context.Context, limit, page int, search, role
 			}
 		}
 
+		// Conditionally populate TenantAssignmentDetails
+if tenantName != nil {
+    user.TenantAssignmentDetails = &TenantAssignmentDetails{
+        TenantName: *tenantName,
+        AssignedOn: *assignmentCreatedAt, // This matches the struct field
+        UpdatedOn:  *assignmentUpdatedAt,  // This also matches the struct field
+    }
+}
 		users = append(users, user)
 	}
 
@@ -463,30 +467,37 @@ func (r *Repository) GetUserWithDetails(ctx context.Context, userID uint) (*User
 	var templeID *uint
 	var templeName, templePlace, templeAddress, templePhoneNo, templeDescription *string
 	var templeCreatedAt, templeUpdatedAt *time.Time
+	var tenantName *string
+	var assignmentCreatedAt, assignmentUpdatedAt *time.Time
 
 	query := r.db.WithContext(ctx).
 		Table("users").
 		Select(`
-			users.id,
-			users.full_name,
-			users.email,
-			users.phone,
-			users.status,
-			users.created_at,
-			users.updated_at,
-			user_roles.id as role_id,
-			user_roles.role_name,
-			td.id as temple_id,
-			td.temple_name,
-			td.temple_place,
-			td.temple_address,
-			td.temple_phone_no,
-			td.temple_description,
-			td.created_at as temple_created_at,
-			td.updated_at as temple_updated_at
-		`).
+            users.id,
+            users.full_name,
+            users.email,
+            users.phone,
+            users.status,
+            users.created_at,
+            users.updated_at,
+            user_roles.id as role_id,
+            user_roles.role_name,
+            td.id as temple_id,
+            td.temple_name,
+            td.temple_place,
+            td.temple_address,
+            td.temple_phone_no,
+            td.temple_description,
+            td.created_at as temple_created_at,
+            td.updated_at as temple_updated_at,
+            tenant_user.full_name as tenant_name,
+            tua.created_at as assignment_created_at,
+            tua.updated_at as assignment_updated_at
+        `).
 		Joins("JOIN user_roles ON users.role_id = user_roles.id").
 		Joins("LEFT JOIN tenant_details td ON users.id = td.user_id AND user_roles.role_name = 'templeadmin'").
+		Joins("LEFT JOIN tenant_user_assignments tua ON users.id = tua.user_id AND user_roles.role_name IN ('standarduser', 'monitoringuser') AND tua.status = 'active'").
+		Joins("LEFT JOIN users tenant_user ON tua.tenant_id = tenant_user.id").
 		Where("users.id = ?", userID)
 
 	row := query.Row()
@@ -508,14 +519,16 @@ func (r *Repository) GetUserWithDetails(ctx context.Context, userID uint) (*User
 		&templeDescription,
 		&templeCreatedAt,
 		&templeUpdatedAt,
+		&tenantName,
+		&assignmentCreatedAt,
+		&assignmentUpdatedAt,
 	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	// If temple details exist, populate them
-	if templeID != nil && templeName != nil {
+	if templeID != nil {
 		user.TempleDetails = &TenantTempleDetails{
 			ID:                *templeID,
 			TempleName:        *templeName,
@@ -528,8 +541,17 @@ func (r *Repository) GetUserWithDetails(ctx context.Context, userID uint) (*User
 		}
 	}
 
+	// Conditionally populate TenantAssignmentDetails
+if tenantName != nil {
+    user.TenantAssignmentDetails = &TenantAssignmentDetails{
+        TenantName: *tenantName,
+        AssignedOn: *assignmentCreatedAt,
+        UpdatedOn:  *assignmentUpdatedAt,
+    }
+}
 	return &user, nil
 }
+
 
 // Update user
 func (r *Repository) UpdateUser(ctx context.Context, userID uint, user *auth.User) error {
