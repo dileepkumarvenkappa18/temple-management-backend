@@ -1,8 +1,9 @@
-// src/router/index.js
+// src/router/index.js - Updated version with fixes for standarduser and monitoringuser
 import { createRouter, createWebHistory } from 'vue-router'
 import { checkProfileCompleted, requireAuth } from './guards'
 import superadminRoutes from './routes/superadmin'
 import MessageComposer from '@/components/communication/MessageComposer.vue'
+import { useAuthStore } from '@/stores/auth'
 
 // Layouts
 import PublicLayout from '@/layouts/PublicLayout.vue'
@@ -18,14 +19,15 @@ import PrivacyPage from '@/views/public/PrivacyPage.vue'
 import LoginView from '@/views/auth/LoginView.vue'
 import RegisterView from '@/views/auth/RegisterView.vue'
 import ForgotPasswordView from '@/views/auth/ForgotPasswordView.vue'
-import ResetPasswordView from '@/views/auth/ResetPasswordView.vue' // Ensure this is correctly imported
+import ResetPasswordView from '@/views/auth/ResetPasswordView.vue'
 
 // Tenant Views
 import TenantDashboard from '@/views/tenant/TenantDashboard.vue'
 import CreateTemple from '@/views/tenant/CreateTemple.vue'
 import ManageTemples from '@/views/tenant/ManageTemples.vue'
 import EditTemple from '@/views/tenant/EditTemple.vue'
-import TempleDetails from '@/views/tenant/TempleDetails.vue'  // Add import for TempleDetails
+import TempleDetails from '@/views/tenant/TempleDetails.vue'
+import TenantSelectionView from '@/views/tenant/TenantSelectionView.vue'
 
 // Report Views
 import TempleRegisterReport from '@/views/tenant/reports/TempleRegisterReport.vue'
@@ -61,9 +63,9 @@ import SuperAdminDashboard from '@/views/superadmin/SuperAdminDashboard.vue'
 
 // User Views
 import NotificationsView from '@/views/user/NotificationsView.vue'
-import UserProfileView from '@/views/user/UserProfileView.vue' // Updated import path
-import SettingsView from '@/views/settings/SettingsView.vue' // New import for Settings
-import SupportView from '@/views/user/SupportView.vue' // Added import for Support
+import UserProfileView from '@/views/user/UserProfileView.vue'
+import SettingsView from '@/views/settings/SettingsView.vue'
+import SupportView from '@/views/user/SupportView.vue'
 
 // Error Views
 import NotFound from '@/views/error/NotFound.vue'
@@ -132,17 +134,17 @@ const routes = [
   },
 
   // UPDATED Reset Password Route - This is directly imported
-{
-  path: '/auth-pages/reset-password',
-  name: 'BackendResetPassword',
-  component: ResetPasswordView,
-  props: route => ({ token: route.query.token }),
-  meta: { 
-    title: 'Reset Password',
-    layout: 'AuthLayout',
-    requiresAuth: false
-  }
-},
+  {
+    path: '/auth-pages/reset-password',
+    name: 'BackendResetPassword',
+    component: ResetPasswordView,
+    props: route => ({ token: route.query.token }),
+    meta: { 
+      title: 'Reset Password',
+      layout: 'AuthLayout',
+      requiresAuth: false
+    }
+  },
 
   // Debug Reset Password Route - For testing
   {
@@ -202,13 +204,27 @@ const routes = [
     }
   },
 
+  // CRITICAL FIX: Add the Tenant Selection route at the root level with correct meta
+  // UPDATED to include both role formats
+  {
+    path: '/tenant-selection',
+    name: 'TenantSelection',
+    component: TenantSelectionView,
+    meta: { 
+      requiresAuth: true,
+      allowedRoles: ['superadmin', 'super_admin', 'standard_user', 'standarduser', 'monitoring_user', 'monitoringuser'],
+      title: 'Temple Selection',
+      layout: 'DashboardLayout'
+    }
+  },
+
   // Tenant Routes
   {
     path: '/tenant',
     component: DashboardLayout,
     meta: { 
       requiresAuth: true,
-      allowedRoles: ['tenant']
+      allowedRoles: ['tenant', 'templeadmin']
     },
     children: [
       {
@@ -229,20 +245,11 @@ const routes = [
           breadcrumb: 'Create Temple'
         }
       },
-      // {
-      //   path: 'entities',
-      //   name: 'ManageTemples',
-      //   component: ManageTemples,
-      //   meta: { 
-      //     title: 'Manage Temples',
-      //     breadcrumb: 'Manage Temples'
-      //   }
-      // },
       {
         path: 'entities/:id',
         name: 'TempleDetails',
         component: TempleDetails,
-        props: true,  // Enable props passing
+        props: true,
         meta: { 
           title: 'Temple Details',
           breadcrumb: 'Temple Details'
@@ -252,7 +259,7 @@ const routes = [
         path: 'entities/:id/edit',
         name: 'EditTemple',
         component: EditTemple,
-        props: true,  // Enable props passing
+        props: true,
         meta: { 
           title: 'Edit Temple',
           breadcrumb: 'Edit Temple'
@@ -263,7 +270,7 @@ const routes = [
         path: ':tenantId/dashboard',
         name: 'TenantSpecificDashboard',
         component: TenantDashboard,
-        props: true, // Enable props passing for tenantId
+        props: true,
         meta: { 
           title: 'Tenant Dashboard',
           breadcrumb: 'Dashboard'
@@ -315,7 +322,7 @@ const routes = [
     props: true,
     meta: { 
       requiresAuth: true,
-      allowedRoles: ['tenant'],
+      allowedRoles: ['tenant', 'templeadmin'],
       title: 'Tenant Dashboard',
       breadcrumb: 'Dashboard',
       layout: 'DashboardLayout'
@@ -329,77 +336,83 @@ const routes = [
     props: true, // Enable props passing for the layout
     meta: { 
       requiresAuth: true,
-      allowedRoles: ['tenant', 'entity_admin']
+      allowedRoles: ['tenant', 'entity_admin', 'templeadmin', 'standard_user', 'standarduser', 'monitoring_user', 'monitoringuser']
     },
     children: [
       {
         path: '/entity/:id/dashboard',
-        name: 'EntityDirectDashboard',  // <-- Changed to a unique name
+        name: 'EntityDirectDashboard',
         component: () => import('@/views/entity/EntityDashboard.vue'),
         meta: {
           title: 'Entity Dashboard',
           requiresAuth: true,
-          role: 'tenant'
+          allowedRoles: ['tenant', 'entity_admin', 'templeadmin', 'standard_user', 'standarduser', 'monitoring_user', 'monitoringuser']
         }
       },
       {
         path: 'dashboard',
         name: 'EntityDashboard',
         component: EntityDashboard,
-        props: true, // Enable props passing
+        props: true,
         meta: { 
           title: 'Temple Dashboard',
-          breadcrumb: 'Dashboard'
+          breadcrumb: 'Dashboard',
+          allowedRoles: ['tenant', 'entity_admin', 'templeadmin', 'standard_user', 'standarduser', 'monitoring_user', 'monitoringuser']
         }
       },
       {
         path: 'devotees',
         name: 'DevoteeManagement',
         component: DevoteeManagement,
-        props: true, // Enable props passing
+        props: true,
         meta: { 
           title: 'Devotee Management',
-          breadcrumb: 'Devotees'
+          breadcrumb: 'Devotees',
+          allowedRoles: ['tenant', 'entity_admin', 'templeadmin', 'standard_user', 'standarduser', 'monitoring_user', 'monitoringuser']
         }
       },
       {
         path: 'sevas',
         name: 'SevaManagement',
         component: SevaManagement,
-        props: true, // Enable props passing
+        props: true,
         meta: { 
           title: 'Seva Management',
-          breadcrumb: 'Sevas'
+          breadcrumb: 'Sevas',
+          allowedRoles: ['tenant', 'entity_admin', 'templeadmin', 'standard_user', 'standarduser']
         }
       },
       {
         path: 'donations',
         name: 'DonationManagement',
         component: DonationManagement,
-        props: true, // Enable props passing
+        props: true,
         meta: { 
           title: 'Donation Management',
-          breadcrumb: 'Donations'
+          breadcrumb: 'Donations',
+          allowedRoles: ['tenant', 'entity_admin', 'templeadmin', 'standard_user', 'standarduser']
         }
       },
       {
         path: 'events',
         name: 'EventManagement',
         component: EventManagement,
-        props: true, // Enable props passing
+        props: true,
         meta: { 
           title: 'Event Management',
-          breadcrumb: 'Events'
+          breadcrumb: 'Events',
+          allowedRoles: ['tenant', 'entity_admin', 'templeadmin', 'standard_user', 'standarduser']
         }
       },
       {
         path: 'communication',
         name: 'CommunicationCenter',
         component: CommunicationCenter,
-        props: true, // Enable props passing
+        props: true,
         meta: { 
           title: 'Communication Center',
-          breadcrumb: 'Communication'
+          breadcrumb: 'Communication',
+          allowedRoles: ['tenant', 'entity_admin', 'templeadmin', 'standard_user', 'standarduser']
         }
       },
 
@@ -410,7 +423,8 @@ const routes = [
         props: true,
         meta: {
           title: 'Compose Message',
-          breadcrumb: 'Message Composer'
+          breadcrumb: 'Message Composer',
+          allowedRoles: ['tenant', 'entity_admin', 'templeadmin', 'standard_user', 'standarduser']
         }
       },
 
@@ -418,10 +432,11 @@ const routes = [
         path: 'volunteers',
         name: 'VolunteerManagement',
         component: VolunteerManagement,
-        props: true, // Enable props passing
+        props: true,
         meta: { 
           title: 'Volunteer Management',
-          breadcrumb: 'Volunteers'
+          breadcrumb: 'Volunteers',
+          allowedRoles: ['tenant', 'entity_admin', 'templeadmin', 'standard_user', 'standarduser']
         }
       }
     ]
@@ -471,7 +486,7 @@ const routes = [
   {
     path: '/entity/:id/devotee',
     component: DashboardLayout,
-    props: true, // Enable props passing for the layout
+    props: true,
     meta: { 
       requiresAuth: true,
       allowedRoles: ['devotee']
@@ -492,9 +507,7 @@ const routes = [
         path: 'dashboard',
         name: 'DevoteeDashboard',
         component: DevoteeDashboard,
-        props: true, // Enable props passing
-        // Remove the beforeEnter guard temporarily for debugging
-        // beforeEnter: checkProfileCompleted,
+        props: true,
         meta: { 
           title: 'My Dashboard',
           breadcrumb: 'Dashboard'
@@ -514,8 +527,7 @@ const routes = [
         path: 'seva-booking',
         name: 'SevaBooking',
         component: SevaBooking,
-        props: true, // Enable props passing
-        // beforeEnter: checkProfileCompleted,
+        props: true,
         meta: { 
           title: 'Book Seva',
           breadcrumb: 'Seva Booking'
@@ -525,8 +537,7 @@ const routes = [
         path: 'donations',
         name: 'DevoteeDonationHistory',
         component: DonationHistory,
-        props: true, // Enable props passing
-        // beforeEnter: checkProfileCompleted,
+        props: true,
         meta: { 
           title: 'My Donations',
           breadcrumb: 'Donation History'
@@ -536,8 +547,7 @@ const routes = [
         path: 'events',
         name: 'DevoteeMyEvents',
         component: MyEvents,
-        props: true, // Enable props passing
-        // beforeEnter: checkProfileCompleted,
+        props: true,
         meta: { 
           title: 'Temple Events',
           breadcrumb: 'My Events'
@@ -582,7 +592,7 @@ const routes = [
   {
     path: '/entity/:id/volunteer',
     component: DashboardLayout,
-    props: true, // Enable props passing for the layout
+    props: true,
     meta: { 
       requiresAuth: true,
       allowedRoles: ['volunteer']
@@ -592,7 +602,7 @@ const routes = [
         path: 'dashboard',
         name: 'VolunteerDashboard',
         component: VolunteerDashboard,
-        props: true, // Enable props passing
+        props: true,
         meta: { 
           title: 'Volunteer Dashboard',
           breadcrumb: 'Dashboard'
@@ -602,7 +612,7 @@ const routes = [
         path: 'assignments',
         name: 'MyAssignments',
         component: MyAssignments,
-        props: true, // Enable props passing
+        props: true,
         meta: { 
           title: 'My Assignments',
           breadcrumb: 'Assignments'
@@ -612,7 +622,7 @@ const routes = [
         path: 'schedule',
         name: 'MySchedule',
         component: MySchedule,
-        props: true, // Enable props passing
+        props: true,
         meta: { 
           title: 'My Schedule',
           breadcrumb: 'Schedule'
@@ -627,7 +637,7 @@ const routes = [
     component: DashboardLayout,
     meta: { 
       requiresAuth: true,
-      allowedRoles: ['superadmin']
+      allowedRoles: ['superadmin', 'super_admin']
     },
     children: superadminRoutes // Use the imported superadmin routes here
   },
@@ -675,24 +685,73 @@ const router = createRouter({
   }
 })
 
-// Route Guards (Basic implementation - enhanced with debugging)
+// Route Guards (Enhanced implementation with proper auth checks)
 router.beforeEach((to, from, next) => {
   // Set page title
   if (to.meta.title) {
     document.title = to.meta.title
   }
 
-  // Debug info for routing
+  // Debug info for routing - ENHANCED for more visibility
   console.log('🚀 Route navigation: ', {
     to: to.path,
+    name: to.name,
     query: to.query,
     matched: to.matched.length > 0 ? 'Yes' : 'No - 404 will occur',
-    layout: to.meta.layout || 'DefaultLayout'
+    layout: to.meta.layout || 'DefaultLayout',
+    meta: to.meta
   })
 
-  // For now, temporarily disable auth checks to test route access
+  // Check if route requires authentication
+  if (to.meta.requiresAuth) {
+    return requireAuth(to, from, next)
+  }
+  
+  // For all other routes, proceed normally
   next()
 })
+
+// CRITICAL FIX: Add a special guard specifically for standard_user and monitoring_user roles
+router.beforeResolve((to, from, next) => {
+  // Special handling for standarduser and monitoringuser
+  const authStore = useAuthStore();
+  
+  // Check if user is authenticated
+  if (!authStore.isAuthenticated) {
+    next();
+    return;
+  }
+  
+  const user = authStore.user;
+  if (!user || !user.role) {
+    next();
+    return;
+  }
+  
+  // Normalize role for case-insensitive comparison
+  const role = user.role.toLowerCase();
+  
+  // Create a console log for debugging
+  console.log('🛡️ SPECIAL GUARD CHECK:', {
+    role,
+    path: to.path,
+    isRedirecting: (role === 'standard_user' || role === 'standarduser' || 
+                   role === 'monitoring_user' || role === 'monitoringuser') &&
+                   to.path !== '/tenant-selection'
+  });
+  
+  // Force standarduser and monitoringuser to tenant selection
+  if ((role === 'standard_user' || role === 'standarduser' || 
+       role === 'monitoring_user' || role === 'monitoringuser') && 
+      to.path !== '/tenant-selection') {
+    
+    console.log('⚠️ CRITICAL REDIRECT: Forcing standard/monitoring user to tenant selection');
+    next('/tenant-selection');
+    return;
+  }
+  
+  next();
+});
 
 // Route helpers for components (Updated with Phase 7)
 export function useRouteHelpers() {
@@ -718,7 +777,7 @@ export function useRouteHelpers() {
         name: 'DevoteeDashboard', 
         path: `/entity/${entityId}/devotee/dashboard`, 
         label: 'Dashboard',
-        params: { id: entityId } // Add params to ensure it's passed when using router-link
+        params: { id: entityId }
       },
       { 
         name: 'DevoteeProfileEdit', 
@@ -788,10 +847,13 @@ export function useRouteHelpers() {
       { name: 'Support', path: '/support', label: 'Support' }
     ],
 
-    // UPDATED: Get role-specific post-login redirect paths 
+    // FIXED: Get role-specific post-login redirect paths - Handle both standarduser and standard_user 
     getPostLoginRedirect: (userRole, entityId = null) => {
-      switch (userRole) {
+      const role = (userRole || '').toLowerCase();
+      
+      switch (role) {
         case 'tenant':
+        case 'templeadmin':
           // Add tenantId to the dashboard path if available
           const tenantId = localStorage.getItem('current_tenant_id')
           return tenantId ? `/tenant/${tenantId}/dashboard` : '/tenant/dashboard'
@@ -802,12 +864,37 @@ export function useRouteHelpers() {
         case 'entity_admin':
           return entityId ? `/entity/${entityId}/dashboard` : '/tenant/dashboard'
         case 'superadmin':
+        case 'super_admin':
           return '/superadmin/dashboard'
+        case 'standard_user':
+        case 'standarduser': 
+        case 'monitoring_user':
+        case 'monitoringuser':
+          return '/tenant-selection'
         default:
           return '/'
       }
     }
   }
+}
+
+// NUCLEAR OPTION: Check for role in localStorage and force redirect if needed
+// This executes immediately when the router is loaded
+try {
+  setTimeout(() => {
+    const userData = JSON.parse(localStorage.getItem('user_data'));
+    if (userData && userData.role) {
+      const role = userData.role.toLowerCase();
+      if ((role === 'standard_user' || role === 'standarduser' || 
+           role === 'monitoring_user' || role === 'monitoringuser') && 
+          window.location.pathname !== '/tenant-selection') {
+        console.log('NUCLEAR OPTION: Forcing redirect to tenant selection');
+        window.location.href = window.location.origin + '/tenant-selection';
+      }
+    }
+  }, 500); // Small delay to ensure router is initialized
+} catch (e) {
+  console.error('Error in nuclear option:', e);
 }
 
 export default router

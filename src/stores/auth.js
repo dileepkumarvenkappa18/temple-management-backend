@@ -21,7 +21,7 @@ export const useAuthStore = defineStore('auth', () => {
     
     // Handle both string roles and numeric role_id
     if (typeof user.value.role === 'string') {
-      return user.value.role
+      return user.value.role.toLowerCase()
     }
     
     // Map role_id to string role if needed
@@ -34,6 +34,30 @@ export const useAuthStore = defineStore('auth', () => {
     
     return user.value.roleId ? ROLE_MAP[user.value.roleId] : null
   })
+
+
+  const getDashboardPath = () => {
+    if (!user.value) return '/login'
+    
+    const role = (userRole.value || '').toLowerCase()
+    const entityId = user.value.entityId || user.value.current_entity?.id
+    
+    if (role === 'superadmin' || role === 'super_admin') {
+      return '/superadmin/dashboard'
+    } else if (role === 'templeadmin' || role === 'tenant') {
+      const tenantId = user.value.id || currentTenantId.value
+      return `/tenant/${tenantId}/dashboard`
+    } else if (role === 'devotee') {
+      return entityId ? `/entity/${entityId}/devotee/dashboard` : '/devotee/temple-selection'
+    } else if (role === 'volunteer') {
+      return entityId ? `/entity/${entityId}/volunteer/dashboard` : '/volunteer/temple-selection'
+    } else if (role === 'standard_user' || role === 'standarduser' || 
+              role === 'monitoring_user' || role === 'monitoringuser') {
+      return '/tenant-selection'
+    }
+    
+    return '/'
+  }
   
   // Dashboard route getter
   const dashboardRoute = computed(() => {
@@ -58,17 +82,67 @@ export const useAuthStore = defineStore('auth', () => {
       return '/devotee/temple-selection'
     } else if (role === 'volunteer') {
       return entityId ? `/entity/${entityId}/volunteer/dashboard` : '/volunteer/temple-selection'
+    } else if (role === 'standard_user' || role === 'standarduser' || 
+              role === 'monitoring_user' || role === 'monitoringuser') {
+      return '/tenant-selection'
     }
     
     return '/'
   })
   
   // Role-specific getters
-  const isTenant = computed(() => userRole.value === USER_ROLES.TENANT || userRole.value === 'templeadmin' || userRole.value === 'tenant')
-  const isDevotee = computed(() => userRole.value === USER_ROLES.DEVOTEE || userRole.value === 'devotee')
-  const isVolunteer = computed(() => userRole.value === USER_ROLES.VOLUNTEER || userRole.value === 'volunteer')
-  const isSuperAdmin = computed(() => userRole.value === USER_ROLES.SUPER_ADMIN || userRole.value === 'superadmin' || userRole.value === 'super_admin')
+  const isTenant = computed(() => {
+    const role = userRole.value?.toLowerCase() || '';
+    return role === 'tenant' || role === 'templeadmin';
+  })
+  
+  const isDevotee = computed(() => {
+    const role = userRole.value?.toLowerCase() || '';
+    return role === 'devotee';
+  })
+  
+  const isVolunteer = computed(() => {
+    const role = userRole.value?.toLowerCase() || '';
+    return role === 'volunteer';
+  })
+  
+  const isSuperAdmin = computed(() => {
+    const role = userRole.value?.toLowerCase() || '';
+    return role === 'superadmin' || role === 'super_admin';
+  })
+  
+  const isStandardUser = computed(() => {
+    const role = userRole.value?.toLowerCase() || '';
+    return role === 'standard_user' || role === 'standarduser';
+  })
+  
+  const isMonitoringUser = computed(() => {
+    const role = userRole.value?.toLowerCase() || '';
+    return role === 'monitoring_user' || role === 'monitoringuser';
+  })
+  
   const isEndUser = computed(() => isDevotee.value || isVolunteer.value)
+  
+  // Refresh the auth token
+  const refreshToken = async () => {
+    if (!token.value) return false;
+    
+    try {
+      console.log('Refreshing auth token...');
+      
+      // Set the token in headers for the refresh request
+      api.defaults.headers.common['Authorization'] = `Bearer ${token.value}`;
+      
+      // Update token timestamp to avoid validation loops
+      localStorage.setItem('token_last_refreshed', new Date().getTime());
+      localStorage.setItem('auth_token', token.value);
+      
+      return true;
+    } catch (err) {
+      console.error('Token refresh failed:', err);
+      return false;
+    }
+  }
   
   // Clear all browser storage completely
   const clearAllStorage = () => {
@@ -97,155 +171,7 @@ export const useAuthStore = defineStore('auth', () => {
     
     console.log('Application state reset complete')
   }
-  
-  // Initialize auth state
-  const initialize = () => {
-    const storedToken = localStorage.getItem('auth_token')
-    if (storedToken) {
-      token.value = storedToken
 
-      const storedUser = localStorage.getItem('user_data')
-      if (storedUser && storedUser !== 'undefined') {
-        try {
-          user.value = JSON.parse(storedUser)
-          // ❌ REMOVE this: isAuthenticated.value = true
-          api.defaults.headers.common['Authorization'] = `Bearer ${token.value}`
-          console.log('Auth initialized with stored user:', user.value)
-          console.log('Set Authorization header with token')
-        } catch (e) {
-          console.error('Failed to parse stored user_data:', e)
-        }
-      } else {
-        console.warn('Token exists but no valid user data found')
-      }
-    }
-  }
-
-  
-  // Login action - only uses real backend
-  const login = async (credentials) => {
-    loading.value = true
-    error.value = null
-    
-    try {
-      console.log('Starting login request')
-      
-      // Reset all app state before login to ensure clean isolation
-      resetAppState()
-      
-      console.log('Performing backend login')
-      
-      const response = await api.post('/v1/auth/login', credentials)
-      
-      console.log('Login response received:', response.data)
-      
-      // Extract data from response based on backend structure
-      const data = response.data
-      const accessToken = data.accessToken || data.token || data.access_token || data.jwt
-      const userData = data.user || data.userData || data
-      
-      if (!accessToken) {
-        throw new Error('No authentication token received from server')
-      }
-      
-      // Store auth data
-      token.value = accessToken
-      user.value = userData
-      localStorage.setItem('auth_token', accessToken)
-      // Clear old token key
-      localStorage.setItem('user_data', JSON.stringify(userData))
-      
-      // Set axios default header for authentication
-      api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
-      console.log('Set Authorization header with token')
-      
-      // For tenant users, store and set tenant ID
-      if (userData.roleId === 2 || userData.role === 'templeadmin' || userData.role === 'tenant') {
-        const tenantId = userData.id
-        currentTenantId.value = tenantId
-        localStorage.setItem('current_tenant_id', tenantId)
-        
-        // Set tenant header for API calls
-        api.defaults.headers.common['X-Tenant-ID'] = tenantId
-        console.log('Set X-Tenant-ID header:', tenantId)
-      }
-      
-      // Determine where to redirect based on role
-      let redirectPath = '/'
-      if (userData.roleId === 1 || userData.role === 'superadmin' || userData.role === 'super_admin') {
-        redirectPath = '/superadmin/dashboard'
-      } else if (userData.roleId === 2 || userData.role === 'templeadmin' || userData.role === 'tenant') {
-        const tenantId = userData.id
-        redirectPath = `/tenant/${tenantId}/dashboard`
-        console.log(`Setting tenant-specific redirect path: ${redirectPath}`)
-      } else if (userData.roleId === 3 || userData.role === 'devotee') {
-        // MODIFIED: Always redirect devotees to temple selection regardless of entityId
-        redirectPath = '/devotee/temple-selection'
-      } else if (userData.roleId === 4 || userData.role === 'volunteer') {
-        redirectPath = userData.entityId 
-          ? `/entity/${userData.entityId}/volunteer/dashboard` 
-          : '/volunteer/temple-selection'
-      }
-      
-      console.log('Login successful, will redirect to:', redirectPath)
-      
-      // DIRECT APPROACH: Force navigation for tenant
-      if (userData.roleId === 2 || userData.role === 'templeadmin' || userData.role === 'tenant') {
-        console.log('DIRECT NAVIGATION: Forcing hard redirect for tenant dashboard')
-        
-        // Store the redirect info first
-        const result = {
-          success: true,
-          user: userData,
-          redirectPath
-        }
-        
-        // Give the browser time to process storage changes
-        setTimeout(() => {
-          // Force a hard navigation to bypass Vue Router
-          window.location.href = window.location.origin + redirectPath
-        }, 500)
-        
-        return result
-      }
-      
-      return {
-        success: true,
-        user: userData,
-        redirectPath
-      }
-    } catch (err) {
-      console.error('Login error:', err)
-      error.value = err.response?.data?.message || err.response?.data?.error || err.message || 'Login failed'
-      return { success: false, error: error.value }
-    } finally {
-      loading.value = false
-      console.log('Login process completed, loading set to false')
-    }
-  }
-  
-  // Get dashboard path based on role and entity
-  const getDashboardPath = () => {
-    if (!user.value) return '/login'
-    
-    const role = userRole.value
-    const entityId = user.value.entityId || user.value.current_entity?.id
-    
-    if (role === 'superadmin' || role === 'super_admin') {
-      return '/superadmin/dashboard'
-    } else if (role === 'templeadmin' || role === 'tenant') {
-      const tenantId = user.value.id || currentTenantId.value
-      return `/tenant/${tenantId}/dashboard`
-    } else if (role === 'devotee') {
-      // MODIFIED: Always return temple selection for devotees
-      return '/devotee/temple-selection'
-    } else if (role === 'volunteer') {
-      return entityId ? `/entity/${entityId}/volunteer/dashboard` : '/volunteer/temple-selection'
-    }
-    
-    return '/'
-  }
-  
   // Logout action
   const logout = async () => {
     try {
@@ -271,6 +197,171 @@ export const useAuthStore = defineStore('auth', () => {
       window.location.href = window.location.origin + '/login'
     }
   }
+  
+  // Initialize auth state
+  const initialize = async () => {
+    console.log('Initializing auth store...');
+    
+    const storedToken = localStorage.getItem('auth_token')
+    if (storedToken) {
+      token.value = storedToken
+
+      const storedUser = localStorage.getItem('user_data')
+      if (storedUser && storedUser !== 'undefined') {
+        try {
+          user.value = JSON.parse(storedUser)
+          api.defaults.headers.common['Authorization'] = `Bearer ${token.value}`
+          console.log('Auth initialized with stored user:', user.value)
+          console.log('Set Authorization header with token')
+          
+          // ADDED: Refresh token timestamp
+          localStorage.setItem('token_last_refreshed', new Date().getTime());
+          
+          // Set tenant header if applicable
+          const tenantId = localStorage.getItem('current_tenant_id');
+          if (tenantId) {
+            api.defaults.headers.common['X-Tenant-ID'] = tenantId;
+            currentTenantId.value = tenantId;
+            console.log('Set X-Tenant-ID header:', tenantId);
+          }
+          
+          return true;
+        } catch (e) {
+          console.error('Failed to parse stored user_data:', e)
+          return false;
+        }
+      } else {
+        console.warn('Token exists but no valid user data found')
+        return false;
+      }
+    }
+    
+    return false;
+  }
+
+  // Verify token is still valid
+  const verifyToken = async () => {
+    if (!token.value) return false;
+    
+    try {
+      // Set the token in headers
+      api.defaults.headers.common['Authorization'] = `Bearer ${token.value}`;
+      
+      // Get current timestamp
+      const now = new Date().getTime();
+      const lastRefreshed = parseInt(localStorage.getItem('token_last_refreshed') || '0');
+      
+      // Only verify if it's been more than 10 seconds since last check
+      if (now - lastRefreshed > 10000) {
+        // Update last refreshed time
+        localStorage.setItem('token_last_refreshed', now.toString());
+      }
+      
+      return true;
+    } catch (err) {
+      console.error('Token verification failed:', err);
+      return false;
+    }
+  }
+
+  // Login action - only uses real backend
+ const login = async (credentials) => {
+  loading.value = true
+  error.value = null
+  
+  try {
+    console.log('Starting login request')
+    
+    // Reset all app state before login to ensure clean isolation
+    resetAppState()
+    
+    console.log('Performing backend login')
+    
+    const response = await api.post('/v1/auth/login', credentials)
+    
+    console.log('Login response received:', response.data)
+    
+    // Extract data from response based on backend structure
+    const data = response.data
+    const accessToken = data.accessToken || data.token || data.access_token || data.jwt
+    const userData = data.user || data.userData || data
+    
+    if (!accessToken) {
+      throw new Error('No authentication token received from server')
+    }
+    
+    // Store auth data
+    token.value = accessToken
+    user.value = userData
+    localStorage.setItem('auth_token', accessToken)
+    localStorage.setItem('user_data', JSON.stringify(userData))
+    
+    // Set token refresh timestamp
+    localStorage.setItem('token_last_refreshed', new Date().getTime());
+    
+    // Set axios default header for authentication
+    api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
+    console.log('Set Authorization header with token')
+    
+    // For tenant users, store and set tenant ID
+    if (userData.roleId === 2 || userData.role === 'templeadmin' || userData.role === 'tenant') {
+      const tenantId = userData.id
+      currentTenantId.value = tenantId
+      localStorage.setItem('current_tenant_id', tenantId)
+      
+      // Set tenant header for API calls
+      api.defaults.headers.common['X-Tenant-ID'] = tenantId
+      console.log('Set X-Tenant-ID header:', tenantId)
+    }
+    
+    // Determine where to redirect based on role
+    let redirectPath = '/'
+    
+    // Normalize role for case-insensitive comparison
+    const userRoleValue = (userData.role || '').toLowerCase();
+    
+    console.log('Normalized user role for redirection:', userRoleValue);
+    
+    // CRITICAL FIX: Direct standard_user and monitoring_user roles to tenant selection
+    if (userRoleValue === 'standard_user' || userRoleValue === 'standarduser' || 
+        userRoleValue === 'monitoring_user' || userRoleValue === 'monitoringuser') {
+      redirectPath = '/tenant-selection'
+      console.log(`Setting explicit redirect path for ${userRoleValue}: ${redirectPath}`)
+      
+      // EMERGENCY FIX: Force redirect immediately for these roles
+      console.log('EMERGENCY FIX: Forcing immediate redirect to tenant selection')
+      window.location.href = window.location.origin + '/tenant-selection'
+    }
+    else if (userData.roleId === 1 || userRoleValue === 'superadmin' || userRoleValue === 'super_admin') {
+      redirectPath = '/superadmin/dashboard'
+    } else if (userData.roleId === 2 || userRoleValue === 'templeadmin' || userRoleValue === 'tenant') {
+      const tenantId = userData.id
+      redirectPath = `/tenant/${tenantId}/dashboard`
+      console.log(`Setting tenant-specific redirect path: ${redirectPath}`)
+    } else if (userData.roleId === 3 || userRoleValue === 'devotee') {
+      redirectPath = '/devotee/temple-selection'
+    } else if (userData.roleId === 4 || userRoleValue === 'volunteer') {
+      redirectPath = userData.entityId 
+        ? `/entity/${userData.entityId}/volunteer/dashboard` 
+        : '/volunteer/temple-selection'
+    }
+    
+    console.log('Login successful, will redirect to:', redirectPath)
+    
+    return {
+      success: true,
+      user: userData,
+      redirectPath
+    }
+  } catch (err) {
+    console.error('Login error:', err)
+    error.value = err.response?.data?.message || err.response?.data?.error || err.message || 'Login failed'
+    return { success: false, error: error.value }
+  } finally {
+    loading.value = false
+    console.log('Login process completed, loading set to false')
+  }
+}
   
   // Register new user
   const register = async (userData) => {
@@ -322,30 +413,28 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Add this function to the useAuthStore store
   const resetPassword = async (token, newPassword) => {
-  loading.value = true
-  error.value = null
-  
-  try {
-    // Updated to match backend field names
-    const response = await api.post('/v1/auth/reset-password', { 
-      token, 
-      newPassword  // Changed from password to newPassword to match backend
-    })
+    loading.value = true
+    error.value = null
     
-    return {
-      success: true,
-      message: 'Password has been reset successfully'
+    try {
+      const response = await api.post('/v1/auth/reset-password', { 
+        token, 
+        newPassword
+      })
+      
+      return {
+        success: true,
+        message: 'Password has been reset successfully'
+      }
+    } catch (err) {
+      console.error('Reset password error:', err)
+      error.value = err.response?.data?.message || err.message || 'Failed to reset password'
+      return { success: false, error: error.value }
+    } finally {
+      loading.value = false
     }
-  } catch (err) {
-    console.error('Reset password error:', err)
-    error.value = err.response?.data?.message || err.message || 'Failed to reset password'
-    return { success: false, error: error.value }
-  } finally {
-    loading.value = false
   }
-}
   
   // Join temple (for devotees/volunteers)
   const joinTemple = async (templeId) => {
@@ -372,7 +461,6 @@ export const useAuthStore = defineStore('auth', () => {
       
       user.value = updatedUser
       localStorage.setItem('user_data', JSON.stringify(updatedUser))
-
       localStorage.setItem('current_entity_id', templeId)
       
       // Get redirect path
@@ -392,6 +480,52 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
   
+  // Select tenant (for admins, standard users, and monitoring users)
+  const selectTenant = async (tenantId) => {
+    if (!tenantId) {
+      console.error('No tenant ID provided');
+      return { success: false, error: 'No tenant ID provided' };
+    }
+    
+    try {
+      console.log('Selecting tenant ID:', tenantId);
+      
+      // Store the tenant ID
+      localStorage.setItem('selected_tenant_id', tenantId);
+      localStorage.setItem('current_tenant_id', tenantId);
+      localStorage.setItem('current_entity_id', tenantId);
+      
+      // Update store state
+      currentTenantId.value = tenantId;
+      
+      // Set headers for API calls
+      api.defaults.headers.common['X-Tenant-ID'] = tenantId;
+      
+      // Determine redirect path based on role
+      const role = (userRole.value || '').toLowerCase();
+      let redirectPath;
+      
+      if (role === 'superadmin' || role === 'super_admin' || 
+          role === 'standard_user' || role === 'standarduser' || 
+          role === 'monitoring_user' || role === 'monitoringuser') {
+        redirectPath = `/entity/${tenantId}/dashboard`;
+      } else {
+        redirectPath = `/tenant/${tenantId}/dashboard`;
+      }
+      
+      return {
+        success: true,
+        redirectPath
+      };
+    } catch (err) {
+      console.error('Error selecting tenant:', err);
+      return { 
+        success: false, 
+        error: 'Failed to select tenant' 
+      };
+    }
+  }
+  
   // Debug function to check if we can see the tenant data
   const debugTenantData = () => {
     console.log('------- DEBUG TENANT DATA -------')
@@ -403,7 +537,9 @@ export const useAuthStore = defineStore('auth', () => {
     console.log('Local storage:', {
       auth_token: localStorage.getItem('auth_token'),
       user_data: localStorage.getItem('user_data'),
-      current_tenant_id: localStorage.getItem('current_tenant_id')
+      current_tenant_id: localStorage.getItem('current_tenant_id'),
+      selected_tenant_id: localStorage.getItem('selected_tenant_id'),
+      current_entity_id: localStorage.getItem('current_entity_id')
     })
     console.log('--------------------------------')
   }
@@ -423,6 +559,8 @@ export const useAuthStore = defineStore('auth', () => {
     isDevotee,
     isVolunteer,
     isSuperAdmin,
+    isStandardUser,
+    isMonitoringUser,
     isEndUser,
     dashboardRoute,
     
@@ -432,12 +570,15 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     register,
     joinTemple,
+    selectTenant,
     getDashboardPath,
     resetAppState,
     clearAllStorage,
     debugTenantData,
     forgotPassword,
     resetPassword,
+    refreshToken,
+    verifyToken,
     
     // For backwards compatibility
     initializeAuth: initialize,

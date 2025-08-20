@@ -6,6 +6,7 @@ import EditTemple from '@/views/tenant/EditTemple.vue'
 import TempleRegisterReport from '@/views/tenant/reports/TempleRegisterReport.vue'
 import TempleActivitiesReport from '@/views/tenant/reports/TempleActivitiesReport.vue'
 import BirthdaysReport from '@/views/tenant/reports/BirthdaysReport.vue'
+import TenantSelectionView from '@/views/tenant/TenantSelectionView.vue'
 
 export default [
   // Standard tenant dashboard route (kept for backward compatibility)
@@ -19,6 +20,7 @@ export default [
       role: 'tenant'
     }
   },
+
   // Tenant-specific dashboard with tenantId in path
   {
     path: ':tenantId/dashboard',
@@ -30,6 +32,7 @@ export default [
       role: 'tenant'
     }
   },
+
   // Standard routes
   {
     path: 'entities/create',
@@ -41,6 +44,7 @@ export default [
       role: 'tenant'
     }
   },
+
   {
     path: 'entities',
     name: 'ManageTemples',
@@ -51,6 +55,7 @@ export default [
       role: 'tenant'
     }
   },
+
   {
     path: 'entities/:id',
     name: 'TempleDetails',
@@ -61,6 +66,7 @@ export default [
       role: 'tenant'
     }
   },
+
   {
     path: 'entities/:id/edit',
     name: 'EditTemple',
@@ -71,6 +77,7 @@ export default [
       role: 'tenant'
     }
   },
+
   // NEW REPORT ROUTES
   {
     path: 'reports/temple-register',
@@ -82,6 +89,7 @@ export default [
       role: 'tenant'
     }
   },
+
   {
     path: 'reports/temple-activities',
     name: 'TempleActivitiesReport',
@@ -92,6 +100,7 @@ export default [
       role: 'tenant'
     }
   },
+
   {
     path: 'reports/birthdays',
     name: 'BirthdaysReport',

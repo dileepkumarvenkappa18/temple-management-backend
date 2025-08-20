@@ -9,13 +9,16 @@ import { useDevoteeStore } from '@/stores/devotee'
  */
 const roleMapping = {
   'templeadmin': 'tenant', // Backend returns 'templeadmin', but routes expect 'tenant'
+  'standarduser': 'standard_user',
+  'monitoringuser': 'monitoring_user' // Update to map standarduser to standard_user
 }
 
 /**
  * Get mapped role (or original if no mapping exists)
  */
 function getMappedRole(role) {
-  return roleMapping[role] || role
+  if (!role) return null;
+  return roleMapping[role.toLowerCase()] || role.toLowerCase();
 }
 
 /**
@@ -32,7 +35,19 @@ function isStatusEqual(status1, status2) {
 export function requireAuth(to, from, next) {
   const authStore = useAuthStore()
   
+  // Debug auth state
+  console.log('🔐 Auth Check:', {
+    isAuthenticated: authStore.isAuthenticated,
+    user: authStore.user,
+    role: authStore.user?.role,
+    mappedRole: getMappedRole(authStore.user?.role),
+    route: to.path,
+    toName: to.name,
+    toPath: to.path.includes('/tenant-selection')
+  })
+  
   if (!authStore.isAuthenticated) {
+    console.log('⚠️ Not authenticated, redirecting to login')
     next({
       name: 'Login',
       query: { 
@@ -43,8 +58,28 @@ export function requireAuth(to, from, next) {
     return false
   }
   
+  // Get user role for role-based checks
+  const userRole = authStore.user?.role || '';
+  const normalizedRole = userRole.toLowerCase();
+  
+  // CRITICAL FIX: Check for both formats of roles (with underscore and without)
+  const isStandardUser = normalizedRole === 'standard_user' || normalizedRole === 'standarduser';
+  const isMonitoringUser = normalizedRole === 'monitoring_user' || normalizedRole === 'monitoringuser';
+  
+  // Direct standard and monitoring users to tenant selection if not already there
+  if ((isStandardUser || isMonitoringUser) && 
+      to.name !== 'TenantSelection' && 
+      !to.path.includes('/tenant-selection')) {
+    
+    console.log(`📍 Role ${userRole} redirecting to tenant selection`);
+    
+    // Force redirect to tenant selection page
+    next({ path: '/tenant-selection' });
+    return false;
+  }
+  
   // Devotee role check for temple selection redirection
-  if (authStore.isDevotee && to.name !== 'DevoteeTempleSelection' && !to.path.includes('/temple-selection')) {
+  if (normalizedRole === 'devotee' && to.name !== 'DevoteeTempleSelection' && !to.path.includes('/temple-selection')) {
     const entityId = to.params.id
     // Only redirect if not accessing entity specific routes
     if (!entityId || !to.path.includes(`/entity/${entityId}/`)) {
@@ -74,66 +109,6 @@ export function requireGuest(to, from, next) {
   
   next()
   return true
-}
-
-/**
- * Role-based Access Guard
- * Checks if user has required role to access the route
- */
-export function requireRole(roles) {
-  return (to, from, next) => {
-    const authStore = useAuthStore()
-    const { showToast } = useToast()
-    
-    if (!authStore.isAuthenticated) {
-      next({
-        name: 'Login',
-        query: { redirect: to.fullPath }
-      })
-      return
-    }
-    
-    const userRole = authStore.user?.role
-    const mappedRole = getMappedRole(userRole)
-    
-    // Check if mapped role is included in required roles
-    if (!roles.includes(mappedRole)) {
-      showToast(`Access denied: User has role "${userRole}" but route requires one of: ${roles.join(', ')}`, 'error')
-      next({ name: 'Unauthorized' })
-      return
-    }
-    
-    next()
-  }
-}
-
-/**
- * SPECIFIC GUARD: Check Role (for route files)
- * This is the specific function your route files are importing
- */
-export function checkRole(to, from, next, requiredRole) {
-  const authStore = useAuthStore()
-  const { showToast } = useToast()
-  
-  if (!authStore.isAuthenticated) {
-    next({
-      name: 'Login',
-      query: { redirect: to.fullPath }
-    })
-    return
-  }
-  
-  const userRole = authStore.user?.role
-  const mappedRole = getMappedRole(userRole)
-  
-  // Compare mapped role with required role
-  if (mappedRole !== requiredRole) {
-    showToast(`Access denied: User has role "${userRole}" but route requires: ${requiredRole}`, 'error')
-    next({ name: 'Unauthorized' })
-    return
-  }
-  
-  next()
 }
 
 /**
@@ -175,122 +150,44 @@ export function checkProfileCompleted(to, from, next) {
 }
 
 /**
- * SPECIFIC GUARD: Check Temple Approved (for entity/temple features)
- * Ensures the temple is approved before accessing temple management features
+ * Role-based Access Guard
+ * Checks if user has required role to access the route
  */
-export function checkTempleApproved(to, from, next) {
-  const authStore = useAuthStore()
-  const { showToast } = useToast()
-  const templeId = to.params.id
-  
-  if (!authStore.isAuthenticated) {
-    next({ name: 'Login' })
-    return
-  }
-  
-  const mappedRole = getMappedRole(authStore.user?.role)
-  
-  // For tenant role
-  if (mappedRole === 'tenant') {
-    // Find the specific temple
-    const temple = authStore.user?.temples?.find(t => t.id === templeId)
-    
-    if (!temple) {
-      next({ name: 'Unauthorized' })
-      return
-    }
-    
-    // Case-insensitive status check
-    if (!isStatusEqual(temple.status, 'approved')) {
-      showToast('This temple is pending approval. Please wait for admin approval.', 'warning')
-      next({ name: 'EntityDashboard', params: { id: templeId } })
-      return
-    }
-  }
-  
-  next()
-}
-
-/**
- * Tenant Status Guard
- * Checks if tenant is approved before accessing tenant features
- */
-export function requireApprovedTenant(to, from, next) {
-  const authStore = useAuthStore()
-  const { showToast } = useToast()
-  
-  if (!authStore.isAuthenticated) {
-    next({ name: 'Login' })
-    return
-  }
-  
-  const mappedRole = getMappedRole(authStore.user?.role)
-  
-  if (mappedRole !== 'tenant') {
-    next({ name: 'Unauthorized' })
-    return
-  }
-  
-  // Case-insensitive status check
-  if (!isStatusEqual(authStore.user?.status, 'approved')) {
-    showToast('Your account is pending approval. Please wait for admin approval.', 'warning')
-    next({ name: 'TenantDashboard' })
-    return
-  }
-  
-  next()
-}
-
-/**
- * Temple Access Guard
- * Checks if user has access to specific temple
- */
-export function requireTempleAccess(to, from, next) {
-  const authStore = useAuthStore()
-  const templeId = to.params.id
-  
-  if (!authStore.isAuthenticated) {
-    next({ name: 'Login' })
-    return
-  }
-  
-  const mappedRole = getMappedRole(authStore.user?.role)
-  
-  // For tenant - check if they own the temple
-  if (mappedRole === 'tenant') {
-    // Remove development bypass and enforce temple ownership check for all tenants
-    const hasAccess = authStore.user?.temples?.some(temple => temple.id === templeId)
-    if (!hasAccess) {
-      next({ name: 'Unauthorized' })
-      return
-    }
-  }
-  
-  // For devotee/volunteer - check if they're associated with the temple
-  if (['devotee', 'volunteer'].includes(mappedRole)) {
-    if (authStore.user?.templeId !== templeId) {
-      next({ name: 'Unauthorized' })
-      return
-    }
-  }
-  
-  next()
-}
-
-/**
- * Permission Guard
- * Checks specific permissions for granular access control
- */
-export function requirePermission(permission) {
+export function requireRole(roles) {
   return (to, from, next) => {
     const authStore = useAuthStore()
+    const { showToast } = useToast()
     
     if (!authStore.isAuthenticated) {
-      next({ name: 'Login' })
+      next({
+        name: 'Login',
+        query: { redirect: to.fullPath }
+      })
       return
     }
     
-    if (!authStore.hasPermission(permission)) {
+    const userRole = authStore.user?.role || '';
+    const normalizedRole = userRole.toLowerCase();
+    
+    // IMPROVED: Check for both versions of role names
+    const userRoles = [normalizedRole];
+    
+    // Add mapped version of the role if it exists
+    if (roleMapping[normalizedRole]) {
+      userRoles.push(roleMapping[normalizedRole]);
+    }
+    
+    // For 'standard_user' or 'monitoring_user', also check the alternative format
+    if (normalizedRole === 'standard_user') userRoles.push('standarduser');
+    if (normalizedRole === 'monitoring_user') userRoles.push('monitoringuser');
+    if (normalizedRole === 'standarduser') userRoles.push('standard_user');
+    if (normalizedRole === 'monitoringuser') userRoles.push('monitoring_user');
+    
+    // Check if any of the user's roles are included in required roles
+    const hasRequiredRole = roles.some(role => userRoles.includes(role.toLowerCase()));
+    
+    if (!hasRequiredRole) {
+      showToast(`Access denied: User has role "${userRole}" but route requires one of: ${roles.join(', ')}`, 'error')
       next({ name: 'Unauthorized' })
       return
     }
@@ -300,139 +197,84 @@ export function requirePermission(permission) {
 }
 
 /**
+ * SPECIFIC GUARD: Check Role (for route files)
+ * This is the specific function your route files are importing
+ */
+export function checkRole(to, from, next, requiredRole) {
+  const authStore = useAuthStore()
+  const { showToast } = useToast()
+  
+  if (!authStore.isAuthenticated) {
+    next({
+      name: 'Login',
+      query: { redirect: to.fullPath }
+    })
+    return
+  }
+  
+  const userRole = authStore.user?.role || '';
+  const normalizedRole = userRole.toLowerCase();
+  
+  // IMPROVED: Check for both versions of role names
+  const userRoles = [normalizedRole];
+  
+  // Add mapped version of the role if it exists
+  if (roleMapping[normalizedRole]) {
+    userRoles.push(roleMapping[normalizedRole]);
+  }
+  
+  // For standard_user and monitoring_user, also check the alternative format
+  if (normalizedRole === 'standard_user') userRoles.push('standarduser');
+  if (normalizedRole === 'monitoring_user') userRoles.push('monitoringuser');
+  if (normalizedRole === 'standarduser') userRoles.push('standard_user');
+  if (normalizedRole === 'monitoringuser') userRoles.push('monitoring_user');
+  
+  // Compare user roles with required role
+  if (!userRoles.includes(requiredRole.toLowerCase())) {
+    showToast(`Access denied: User has role "${userRole}" but route requires: ${requiredRole}`, 'error')
+    next({ name: 'Unauthorized' })
+    return
+  }
+  
+  next()
+}
+
+/**
  * Get default route based on user role
  */
 export function getDefaultRoute(role) {
+  if (!role) return '/';
+  
+  const normalizedRole = role.toLowerCase();
+  
   const routes = {
-    tenant: '/tenant/dashboard',
-    templeadmin: '/tenant/dashboard', // Add mapping for templeadmin
-    devotee: '/devotee/temple-selection', // Always redirect devotees to temple selection
-    volunteer: '/volunteer/temple-selection',
-    superadmin: '/superadmin/dashboard',
-    super_admin: '/superadmin/dashboard'
+    'tenant': '/tenant/dashboard',
+    'templeadmin': '/tenant/dashboard', 
+    'devotee': '/devotee/temple-selection',
+    'volunteer': '/volunteer/temple-selection',
+    'superadmin': '/superadmin/dashboard',
+    'super_admin': '/superadmin/dashboard',
+    'standard_user': '/tenant-selection',
+    'standarduser': '/tenant-selection',
+    'monitoring_user': '/tenant-selection',
+    'monitoringuser': '/tenant-selection'
   }
   
-  return routes[role] || '/'
+  return routes[normalizedRole] || '/'
 }
 
-/**
- * Check if route is accessible to user
- */
-export function canAccessRoute(route, user) {
-  if (!route.meta) return true
-  
-  // Check authentication requirement
-  if (route.meta.requiresAuth && !user) {
-    return false
-  }
-  
-  // Get mapped role
-  const mappedRole = getMappedRole(user?.role)
-  
-  // Check role requirements - handles both 'roles' (plural) and 'role' (singular)
-  if (route.meta.roles && user) {
-    return route.meta.roles.includes(mappedRole) || 
-           (user.role === 'templeadmin' && route.meta.roles.includes('tenant'))
-  }
-  
-  // Also check for singular 'role' in meta (for backward compatibility)
-  if (route.meta.role && user) {
-    return route.meta.role === mappedRole || 
-           (user.role === 'templeadmin' && route.meta.role === 'tenant')
-  }
-  
-  // Check specific permissions
-  if (route.meta.permissions && user) {
-    return route.meta.permissions.every(permission => 
-      user.permissions?.includes(permission)
-    )
-  }
-  
-  return true
+// Export utility functions
+export {
+  getMappedRole,
+  isStatusEqual
 }
 
-/**
- * Get breadcrumb trail for current route
- */
-export function getBreadcrumbs(route, routes = []) {
-  const breadcrumbs = []
-  let currentRoute = route
-  
-  while (currentRoute) {
-    if (currentRoute.meta?.breadcrumb) {
-      breadcrumbs.unshift({
-        name: currentRoute.meta.breadcrumb,
-        path: currentRoute.path,
-        active: currentRoute === route
-      })
-    }
-    
-    // Find parent route
-    const pathSegments = currentRoute.path.split('/').filter(Boolean)
-    if (pathSegments.length > 1) {
-      pathSegments.pop()
-      const parentPath = '/' + pathSegments.join('/')
-      currentRoute = routes.find(r => r.path === parentPath)
-    } else {
-      currentRoute = null
-    }
-  }
-  
-  return breadcrumbs
-}
-
-/**
- * Route validation utilities
- */
-export const routeValidators = {
-  isPublicRoute: (route) => !route.meta?.requiresAuth,
-  isAuthRoute: (route) => route.path.startsWith('/auth'),
-  isTenantRoute: (route) => route.path.startsWith('/tenant'),
-  isDevoteeRoute: (route) => route.path.includes('/devotee'),
-  isVolunteerRoute: (route) => route.path.includes('/volunteer'),
-  isAdminRoute: (route) => route.path.startsWith('/admin')
-}
-
-/**
- * Navigation helpers
- */
-export const navigationHelpers = {
-  goToDefaultRoute: (router, user) => {
-    const mappedRole = getMappedRole(user?.role)
-    const defaultRoute = getDefaultRoute(mappedRole)
-    router.push(defaultRoute)
-  },
-  
-  goToLogin: (router, redirect = null) => {
-    router.push({
-      name: 'Login',
-      query: redirect ? { redirect } : {}
-    })
-  },
-  
-  goToPreviousOrDefault: (router, user, fallback = '/') => {
-    const previousRoute = router.options.history.state?.back
-    if (previousRoute && canAccessRoute({ path: previousRoute }, user)) {
-      router.go(-1)
-    } else {
-      router.push(fallback)
-    }
-  }
-}
-
+// Export the default object with all guard functions
 export default {
   requireAuth,
   requireGuest,
   requireRole,
   checkRole,
   checkProfileCompleted,
-  checkTempleApproved,
-  requireApprovedTenant,
-  requireTempleAccess,
-  requirePermission,
-  getDefaultRoute,
-  canAccessRoute,
-  getBreadcrumbs,
-  routeValidators,
-  navigationHelpers
+  getDefaultRoute
 }

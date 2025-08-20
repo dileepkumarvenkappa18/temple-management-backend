@@ -137,7 +137,23 @@ const handleLogin = async () => {
     })
     
     if (result.success) {
-      // Use router to navigate to the dashboard path after successful login
+      // CRITICAL FIX: Check for standard_user and monitoring_user roles
+      const userData = result.user;
+      const userRole = (userData.role || '').toLowerCase();
+      
+      // Log the user role for debugging
+      console.log('User logged in with role:', userRole);
+      
+      if (userRole === 'standard_user' || userRole === 'standarduser' || 
+          userRole === 'monitoring_user' || userRole === 'monitoringuser') {
+        console.log('CRITICAL FIX: Redirecting standard/monitoring user to tenant selection');
+        
+        // Force redirect to tenant selection
+        window.location.href = `${window.location.origin}/tenant-selection`;
+        return;
+      }
+      
+      // Use router to navigate to the dashboard path after successful login for other roles
       console.log('Login successful, navigating to:', result.redirectPath)
       router.push(redirectPath.value || result.redirectPath)
     } else {
@@ -194,6 +210,9 @@ const getDashboardPath = (user) => {
     path = entityId ? `/entity/${entityId}/devotee/dashboard` : '/devotee/temple-selection'
   } else if (role === 'volunteer') {
     path = entityId ? `/entity/${entityId}/volunteer/dashboard` : '/volunteer/temple-selection'
+  } else if (role === 'standard_user' || role === 'standarduser' || 
+             role === 'monitoring_user' || role === 'monitoringuser') {
+    path = '/tenant-selection'
   }
   
   return path
