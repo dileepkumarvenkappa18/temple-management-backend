@@ -146,6 +146,18 @@ class ReportsService {
           ]
           previewData = responseData.bookings || responseData.Bookings || []
           break
+          
+        case 'donations':
+          columns = [
+            { key: 'donor_name', label: 'Donor Name' },
+            { key: 'amount', label: 'Amount' },
+            { key: 'donation_type', label: 'Type' },
+            { key: 'payment_method', label: 'Payment Method' },
+            { key: 'status', label: 'Status' },
+            { key: 'donation_date', label: 'Donation Date' }
+          ]
+          previewData = responseData.donations || responseData.Donations || []
+          break
       }
 
       console.log('Extracted preview data:', previewData)
@@ -172,8 +184,8 @@ class ReportsService {
       errors.push('Entity ID is required')
     }
 
-    if (!params.type || !['events', 'sevas', 'bookings', 'temple-registered', 'devotee-birthdays'].includes(params.type)) {
-      errors.push('Valid report type is required (events, sevas, bookings, temple-registered, devotee-birthdays)')
+    if (!params.type || !['events', 'sevas', 'bookings', 'donations', 'temple-registered', 'devotee-birthdays'].includes(params.type)) {
+      errors.push('Valid report type is required (events, sevas, bookings, donations, temple-registered, devotee-birthdays)')
     }
 
     if (params.type === 'temple-registered') {
