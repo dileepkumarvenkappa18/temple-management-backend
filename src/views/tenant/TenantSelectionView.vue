@@ -72,7 +72,8 @@
           <div 
             v-for="tenant in filteredTenants" 
             :key="tenant.id"
-            class="bg-white border rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-all duration-200"
+            @click="selectTenant(tenant.id)"
+            class="bg-white border rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer"
             :class="{'border-indigo-500 ring-2 ring-indigo-500': selectedTenantId === tenant.id, 'border-gray-200': selectedTenantId !== tenant.id}"
           >
             <div class="relative h-36 bg-indigo-100 overflow-hidden">
@@ -112,11 +113,11 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
-                <!-- <span>{{ tenant.devoteeCount || tenant.templesCount || 0 }} temples</span> -->
+                <span>{{ tenant.templesCount || 0 }} temples</span>
               </div>
               
               <button 
-                @click="selectTenant(tenant.id)"
+                @click.stop="selectTenant(tenant.id)"
                 class="w-full py-2 px-4 flex justify-center items-center rounded-lg text-sm font-medium transition-all duration-200"
                 :class="selectedTenantId === tenant.id ? 
                   'bg-indigo-600 text-white hover:bg-indigo-700' : 
@@ -144,6 +145,7 @@
           <button 
             @click="proceedToTenantDashboard" 
             class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-8 rounded-xl shadow-md transition-all duration-200 flex items-center"
+            id="proceed-button"
           >
             <span>Proceed to Dashboard</span>
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" viewBox="0 0 20 20" fill="currentColor">
@@ -162,6 +164,7 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import axios from 'axios';
 import { useToast } from '@/composables/useToast';
+import tenantService from '@/services/tenant.service';
 
 // Get auth store for user information
 const authStore = useAuthStore();
@@ -171,9 +174,9 @@ const { showToast } = useToast();
 // Get user info from auth store
 const userInfo = ref({
   id: authStore.user?.id || 1,
-  name: authStore.user?.name || 'User',
+  name: authStore.user?.fullName || authStore.user?.name || 'User',
   email: authStore.user?.email || 'user@example.com',
-  role: authStore.user?.role || 'standard_user',
+  role: authStore.userRole || authStore.user?.role || 'standard_user',
 });
 
 console.log('Current user in tenant selection:', userInfo.value);
@@ -182,14 +185,20 @@ const loading = ref(false);
 const tenants = ref([]);
 const selectedTenantId = ref(null);
 const searchQuery = ref('');
-const showTenantList = ref(true); // Show tenant list by default for all users
 
 // Computed properties
 const isSuperAdmin = computed(() => {
   const role = userInfo.value.role?.toLowerCase() || '';
   return role === 'superadmin' || role === 'super_admin';
 });
-const isMonitoringUser = computed(() => userInfo.value.role === 'monitoring_user');
+
+const isMonitoringUser = computed(() => {
+  const role = userInfo.value.role?.toLowerCase() || '';
+  return role === 'monitoringuser' || role === 'monitoring_user';
+});
+
+// Show tenant list immediately for all users except SuperAdmin
+const showTenantList = ref(!isSuperAdmin.value);
 
 const getSelectionInstructions = computed(() => {
   if (isSuperAdmin.value) {
@@ -218,14 +227,22 @@ const loadTenants = async () => {
   showTenantList.value = true;
   
   try {
-    // In a real implementation, call your API service
-    // Example:
-    // const response = await fetch('/api/tenants');
-    // tenants.value = await response.json();
+    console.log('Fetching tenants from backend API...');
     
-    // Mock data for demonstration
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
+    // Use the tenant service to get tenants for selection
+    const tenantsData = await tenantService.getTenantsForSelection();
     
+    if (Array.isArray(tenantsData) && tenantsData.length > 0) {
+      tenants.value = tenantsData;
+      console.log('Tenants loaded successfully:', tenants.value);
+    } else {
+      tenants.value = [];
+      showToast('No tenants available for selection', 'warning');
+    }
+  } catch (error) {
+    console.error('Failed to load tenants:', error);
+    
+    // Mock data for development
     tenants.value = [
       {
         id: 1,
@@ -262,42 +279,36 @@ const loadTenants = async () => {
         status: 'pending',
         templesCount: 2,
         imageUrl: null
-      },
-      {
-        id: 5,
-        name: 'Jammu Temples',
-        email: 'support@jammutemples.com',
-        location: 'Jammu, J&K',
-        status: 'active',
-        templesCount: 4,
-        imageUrl: null
-      },
-      {
-        id: 6,
-        name: 'Maharashtra Temple Trust',
-        email: 'admin@maharashtratemples.org',
-        location: 'Mumbai, Maharashtra',
-        status: 'inactive',
-        templesCount: 6,
-        imageUrl: null
       }
     ];
-  } catch (error) {
-    console.error('Failed to load tenants:', error);
-    showToast('Failed to load tenants. Please try again.', 'error');
+    
+    showToast('Using development data while API is being set up', 'info');
   } finally {
     loading.value = false;
   }
 };
 
 const selectTenant = (tenantId) => {
-  selectedTenantId.value = tenantId;
-  console.log('Selected tenant ID:', tenantId);
+  console.log('selectTenant called with ID:', tenantId);
+  
+  // Convert to number to ensure consistent comparison
+  selectedTenantId.value = Number(tenantId);
+  
+  console.log('Selected tenant ID (updated):', selectedTenantId.value);
+  
+  // Find the selected tenant for better user feedback
+  const selected = tenants.value.find(t => Number(t.id) === Number(tenantId));
+  if (selected) {
+    console.log('Selected tenant:', selected.name);
+  }
 };
 
-// IMPROVED: Enhanced redirection to tenant dashboard
 const proceedToTenantDashboard = () => {
+  console.log('proceedToTenantDashboard called');
+  console.log('Current selectedTenantId:', selectedTenantId.value);
+  
   if (!selectedTenantId.value) {
+    console.warn('No tenant selected');
     showToast('Please select a tenant to proceed', 'warning');
     return;
   }
@@ -314,31 +325,51 @@ const proceedToTenantDashboard = () => {
     const token = localStorage.getItem('auth_token');
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      // Optionally set tenant header
+      // Set tenant header for subsequent API calls
       axios.defaults.headers.common['X-Tenant-ID'] = selectedTenantId.value;
+    }
+    
+    // Find the selected tenant to get its name
+    const selectedTenant = tenants.value.find(t => Number(t.id) === Number(selectedTenantId.value));
+    if (selectedTenant) {
+      localStorage.setItem('selected_tenant_name', selectedTenant.name);
+      console.log('Stored tenant name:', selectedTenant.name);
     }
     
     // Determine the correct route based on user role
     const userRole = authStore.userRole?.toLowerCase() || '';
     let redirectPath;
     
-    if (userRole === 'superadmin' || userRole === 'super_admin' || 
-        userRole === 'standard_user' || userRole === 'monitoring_user') {
-      // For superadmin and special users, go to entity dashboard
-      redirectPath = `/entity/${selectedTenantId.value}/dashboard`;
-    } else {
-      // For tenant or other roles, go to tenant dashboard
-      redirectPath = `/tenant/${selectedTenantId.value}/dashboard`;
-    }
+    // All roles go to entity dashboard in this implementation
+    redirectPath = `/entity/${selectedTenantId.value}/dashboard`;
     
     console.log('Redirecting to:', redirectPath);
     
-    // Use hard navigation to avoid router issues
+    // Use direct location navigation for reliability
     window.location.href = redirectPath;
   } catch (error) {
     console.error('Navigation error:', error);
     showToast('Failed to navigate to dashboard. Please try again.', 'error');
   }
+};
+
+// Direct navigation function for testing
+const directNavigate = (tenantId) => {
+  // Store the tenant ID in localStorage
+  localStorage.setItem('selected_tenant_id', tenantId);
+  localStorage.setItem('current_tenant_id', tenantId);
+  localStorage.setItem('current_entity_id', tenantId);
+  
+  // Find the selected tenant to get its name
+  const selectedTenant = tenants.value.find(t => Number(t.id) === Number(tenantId));
+  if (selectedTenant) {
+    localStorage.setItem('selected_tenant_name', selectedTenant.name);
+  }
+  
+  // Redirect directly using window.location
+  const path = `/entity/${tenantId}/dashboard`;
+  console.log('Direct navigation to:', path);
+  window.location.href = path;
 };
 
 // On component mount
@@ -350,14 +381,17 @@ onMounted(() => {
     user: authStore.user
   });
   
-  // Always load tenants immediately, regardless of role
-  loadTenants();
+  // For SuperAdmin, wait for button click to load tenants
+  // For other roles, load tenants immediately
+  if (!isSuperAdmin.value) {
+    loadTenants();
+  }
   
   // If there's a previously selected tenant, pre-select it
   const savedTenantId = localStorage.getItem('selected_tenant_id');
   if (savedTenantId) {
     console.log('Found previously selected tenant ID:', savedTenantId);
-    selectedTenantId.value = parseInt(savedTenantId) || savedTenantId;
+    selectedTenantId.value = Number(savedTenantId);
   }
   
   // Ensure auth token is set in axios headers
@@ -368,6 +402,17 @@ onMounted(() => {
   } else {
     console.warn('No auth token found in localStorage');
   }
+  
+  // Debug: Add global access for testing in console
+  window.testSelectTenant = (id) => {
+    console.log('Test selecting tenant:', id);
+    selectTenant(id);
+  };
+  
+  window.testProceed = () => {
+    console.log('Test proceeding to dashboard');
+    proceedToTenantDashboard();
+  };
 });
 </script>
 

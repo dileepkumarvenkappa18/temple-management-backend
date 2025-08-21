@@ -19,35 +19,40 @@ export const useAuthStore = defineStore('auth', () => {
   
   // ✅ FIXED: Complete role mapping including ALL backend roleIds
   const userRole = computed(() => {
-    if (!user.value) return null
-    
-    // Handle both string roles and numeric role_id
-    if (typeof user.value.role === 'string') {
-      return user.value.role.toLowerCase().trim()
-    }
-    
-    // ✅ COMPLETE role mapping for ALL backend roleIds
-    const ROLE_MAP = {
-      1: 'superadmin',
-      2: 'templeadmin', 
-      3: 'devotee',
-      4: 'volunteer',
-      5: 'standard_user',     // ✅ ADDED: Standard user
-      6: 'monitoring_user'    // ✅ ADDED: Monitoring user
-    }
-    
-    const mappedRole = user.value.roleId ? ROLE_MAP[user.value.roleId] : null
-    
-    // Debug logging
-    console.log('🎭 Role mapping:', {
-      roleId: user.value.roleId,
-      mappedRole,
-      userObject: user.value
-    })
-    
-    return mappedRole
+  if (!user.value) return null
+
+  // Handle both string roles and numeric role_id
+  if (typeof user.value.role === 'string') {
+    const roleStr = user.value.role.toLowerCase().trim()
+
+    // ✅ Normalize role string variations
+    if (roleStr === 'monitoringuser' || roleStr === 'monitoring_user') return 'monitoring_user'
+    if (roleStr === 'standarduser' || roleStr === 'standard_user') return 'standard_user'
+    if (roleStr === 'superadmin' || roleStr === 'super_admin') return 'superadmin'
+    if (roleStr === 'templeadmin' || roleStr === 'tenant') return 'templeadmin'
+    return roleStr
+  }
+
+  // ✅ COMPLETE role mapping for ALL backend roleIds
+  const ROLE_MAP = {
+    1: 'superadmin',
+    2: 'templeadmin',
+    3: 'devotee',
+    4: 'volunteer',
+    5: 'standard_user',
+    6: 'monitoring_user'
+  }
+
+  const mappedRole = user.value.roleId ? ROLE_MAP[user.value.roleId] : null
+
+  console.log('🎭 Role mapping:', {
+    roleId: user.value.roleId,
+    mappedRole,
+    userObject: user.value
   })
 
+  return mappedRole
+})
   // ✅ FIXED: Better dashboard path logic
   const getDashboardPath = (userRole) => {
     const role = (userRole || '').toLowerCase().trim()
@@ -152,6 +157,66 @@ export const useAuthStore = defineStore('auth', () => {
       return false;
     }
   }
+
+
+const checkAuth = () => {
+  const token = localStorage.getItem('auth_token');
+  
+  if (token) {
+    isAuthenticated.value = true;
+    
+    // Try to restore user data if available
+    const storedUserId = localStorage.getItem('user_id');
+    const storedUserRole = localStorage.getItem('user_role');
+    
+    if (!user.value && storedUserId) {
+      // If user data is missing but we have an ID, create minimal user object
+      user.value = {
+        id: storedUserId,
+        role: storedUserRole || 'unknown'
+      };
+    }
+    
+    // Set authorization header for API calls
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    console.log('Auth check: Authenticated with token');
+    return true;
+  } else {
+    isAuthenticated.value = false;
+    user.value = null;
+    console.log('Auth check: Not authenticated (no token)');
+    return false;
+  }
+};
+
+  const normalizedRole = computed(() => {
+  // If user has a role object with roleName property
+  if (user.value?.role?.roleName) {
+    return user.value.role.roleName.toLowerCase();
+  }
+  // If user has a direct role property
+  else if (user.value?.role) {
+    return user.value.role.toLowerCase();
+  }
+  // If the store tracks userRole directly
+  else if (userRole.value) {
+    return userRole.value.toLowerCase();
+  }
+  return '';
+});
+
+
+// Check if user has a specific role
+const hasRole = (roleToCheck) => {
+  if (!isAuthenticated.value) return false;
+  
+  const currentRole = normalizedRole.value;
+  if (!currentRole) return false;
+  
+  // Check if the role matches (normalizing the input)
+  return currentRole === roleToCheck.toLowerCase() ||
+    currentRole === roleToCheck.toLowerCase().replace('_', '');
+};
   
   // Clear all browser storage completely
   const clearAllStorage = () => {
@@ -540,6 +605,9 @@ export const useAuthStore = defineStore('auth', () => {
     loading,
     error,
     currentTenantId,
+    normalizedRole,
+    hasRole,
+    checkAuth,
     
     // Getters
     isAuthenticated,

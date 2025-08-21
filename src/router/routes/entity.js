@@ -10,6 +10,16 @@ import { checkRole, checkTempleApproved } from '../guards'
 
 export default [
   {
+    path: '/entity/:id/dashboard',
+    name: 'EntityDashboard',
+    component: () => import('@/views/entity/EntityDashboard.vue'),
+    meta: { 
+      requiresAuth: true,
+      allowedRoles: ['superadmin', 'standarduser', 'monitoringuser']
+    }
+  },
+  
+  {
     path: 'dashboard',
     name: 'EntityDashboard',
     component: EntityDashboard,

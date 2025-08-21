@@ -4,6 +4,8 @@ import { checkProfileCompleted, requireAuth } from './guards'
 import superadminRoutes from './routes/superadmin'
 import MessageComposer from '@/components/communication/MessageComposer.vue'
 import { useAuthStore } from '@/stores/auth'
+import { setupRouteGuards } from './guards';
+
 
 // Layouts
 import PublicLayout from '@/layouts/PublicLayout.vue'

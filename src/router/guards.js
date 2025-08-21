@@ -93,6 +93,16 @@ export function requireAuth(to, from, next) {
   return true
 }
 
+
+function normalizeRole(role) {
+  if (!role) return ''
+  const r = role.toLowerCase().trim()
+  if (r === 'monitoringuser' || r === 'monitoring_user') return 'monitoring_user'
+  if (r === 'standarduser' || r === 'standard_user') return 'standard_user'
+  if (r === 'superadmin' || r === 'super_admin') return 'superadmin'
+  return r
+}
+
 /**
  * Guest Guard - ✅ UPDATED
  * Redirects authenticated users away from guest-only pages (login, register)
@@ -146,6 +156,44 @@ export function checkProfileCompleted(to, from, next) {
   }
   
   next()
+}
+
+export function setupRouteGuards(router) {
+  router.beforeEach((to, from, next) => {
+    const authStore = useAuthStore();
+    const isAuthenticated = authStore.isAuthenticated;
+    const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
+    const userRole = authStore.userRole?.toLowerCase() || '';
+    
+    console.log('🔐 Auth Check:', {
+      isAuthenticated,
+      userRole,
+      route: to.path,
+      requiresAuth
+    });
+    
+    // Special check for entity routes with tenant ID
+    if (to.path.includes('/entity/') && to.params.id) {
+      console.log('🏛️ Entity access check for tenant ID:', to.params.id);
+      
+      // Store the current entity ID
+      localStorage.setItem('current_entity_id', to.params.id);
+      
+      // For superadmin, always allow access to any entity
+      if (userRole.includes('superadmin')) {
+        console.log('✅ SuperAdmin accessing entity - allowed');
+        return next();
+      }
+    }
+    
+    if (requiresAuth && !isAuthenticated) {
+      console.log('❌ Authentication required - redirecting to login');
+      return next('/auth/login');
+    }
+    
+    // If all checks pass, continue
+    next();
+  });
 }
 
 /**
