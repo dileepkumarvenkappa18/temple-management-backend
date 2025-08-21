@@ -1073,3 +1073,23 @@ func (s *Service) AssignUsersToTenant(ctx context.Context, userID uint, tenantID
 	// 5. Commit the transaction
 	return tx.Commit().Error
 }
+
+// Add these methods to the existing service.go file
+
+// NEW: Get tenants for selection based on user role
+func (s *Service) GetTenantsForSelection(ctx context.Context, userID uint, userRole string) ([]TenantSelectionResponse, error) {
+	roleNameLower := strings.ToLower(userRole)
+	
+	switch roleNameLower {
+	case "superadmin":
+		// SuperAdmin can see all active temple admins
+		return s.repo.GetTenantsForSelection(ctx)
+		
+	case "standarduser", "monitoringuser":
+		// StandardUser and MonitoringUser can only see assigned tenants
+		return s.repo.GetAssignedTenantsForUser(ctx, userID)
+		
+	default:
+		return nil, errors.New("unauthorized: invalid role for tenant selection")
+	}
+}

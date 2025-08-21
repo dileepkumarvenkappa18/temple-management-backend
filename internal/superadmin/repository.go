@@ -721,7 +721,112 @@ func (r *Repository) GetAssignableTenants(ctx context.Context, limit, page int) 
     return tenants, total, nil
 }
 
+// Add these methods to the existing repository.go file
 
+// NEW: Get tenants for selection (SuperAdmin sees all active temple admins)
+func (r *Repository) GetTenantsForSelection(ctx context.Context) ([]TenantSelectionResponse, error) {
+	var tenants []TenantSelectionResponse
+
+	query := `
+		SELECT 
+			users.id,
+			users.full_name as name,
+			users.email,
+			COALESCE(td.temple_place, '') as location,
+			users.status,
+			COALESCE(entity_count.count, 0) as temples_count
+		FROM users
+		JOIN user_roles ON users.role_id = user_roles.id
+		LEFT JOIN tenant_details td ON users.id = td.user_id
+		LEFT JOIN (
+			SELECT created_by, COUNT(*) as count 
+			FROM entities 
+			WHERE status = 'approved' 
+			GROUP BY created_by
+		) entity_count ON users.id = entity_count.created_by
+		WHERE user_roles.role_name = 'templeadmin' 
+		AND users.status = 'active'
+		ORDER BY users.full_name ASC
+	`
+
+	rows, err := r.db.WithContext(ctx).Raw(query).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tenant TenantSelectionResponse
+		err := rows.Scan(
+			&tenant.ID,
+			&tenant.Name,
+			&tenant.Email,
+			&tenant.Location,
+			&tenant.Status,
+			&tenant.TemplesCount,
+		)
+		if err != nil {
+			return nil, err
+		}
+		tenants = append(tenants, tenant)
+	}
+
+	return tenants, nil
+}
+
+// NEW: Get assigned tenants for StandardUser/MonitoringUser
+func (r *Repository) GetAssignedTenantsForUser(ctx context.Context, userID uint) ([]TenantSelectionResponse, error) {
+	var tenants []TenantSelectionResponse
+
+	query := `
+		SELECT 
+			tenant_user.id,
+			tenant_user.full_name as name,
+			tenant_user.email,
+			COALESCE(td.temple_place, '') as location,
+			tenant_user.status,
+			COALESCE(entity_count.count, 0) as temples_count
+		FROM tenant_user_assignments tua
+		JOIN users tenant_user ON tua.tenant_id = tenant_user.id
+		JOIN user_roles ON tenant_user.role_id = user_roles.id
+		LEFT JOIN tenant_details td ON tenant_user.id = td.user_id
+		LEFT JOIN (
+			SELECT created_by, COUNT(*) as count 
+			FROM entities 
+			WHERE status = 'approved' 
+			GROUP BY created_by
+		) entity_count ON tenant_user.id = entity_count.created_by
+		WHERE tua.user_id = ? 
+		AND tua.status = 'active'
+		AND user_roles.role_name = 'templeadmin'
+		AND tenant_user.status = 'active'
+		ORDER BY tenant_user.full_name ASC
+	`
+
+	rows, err := r.db.WithContext(ctx).Raw(query, userID).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tenant TenantSelectionResponse
+		err := rows.Scan(
+			&tenant.ID,
+			&tenant.Name,
+			&tenant.Email,
+			&tenant.Location,
+			&tenant.Status,
+			&tenant.TemplesCount,
+		)
+		if err != nil {
+			return nil, err
+		}
+		tenants = append(tenants, tenant)
+	}
+
+	return tenants, nil
+}
 
 
 

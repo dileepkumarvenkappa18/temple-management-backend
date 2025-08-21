@@ -153,13 +153,17 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		superadminRoutes.PUT("/roles/:id", superadminHandler.UpdateRole)
 		superadminRoutes.PATCH("/roles/:id/status", superadminHandler.ToggleRoleStatus)
 
-		// Reset user password (superadmin resets any user’s password)
+		// Reset user password (superadmin resets any user's password)
 		superadminRoutes.POST("/users/:id/reset-password", superadminHandler.ResetUserPassword)
 		superadminRoutes.GET("/users/search", superadminHandler.SearchUserByEmail)
 		superadminRoutes.GET("/tenants/assignable", superadminHandler.GetTenantsForAssignment)
 		// Assigns a list of users to a selected temple/tenant
 		superadminRoutes.POST("/users/assign", superadminHandler.AssignUsersToTenant)
 	}
+
+	protected.GET("/tenants/selection", 
+		middleware.RBACMiddleware("superadmin", "standarduser", "monitoringuser"), 
+		superadminHandler.GetTenantsForSelection)
 
 	// ========== Seva ==========
 	sevaRepo := seva.NewRepository(database.DB)
@@ -322,19 +326,25 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	}
 
 	// ========== Reports ==========
-	// ========== Reports ==========
 	{
 		reportsRepo := reports.NewRepository(database.DB)
 		reportsExporter := reports.NewReportExporter()
 		reportsService := reports.NewReportService(reportsRepo, reportsExporter, auditSvc) // ✅ INJECT AUDIT SERVICE
 		reportsHandler := reports.NewHandler(reportsService, reportsRepo, auditSvc)        // ✅ INJECT AUDIT SERVICE
 
-		reportsRoutes := protected.Group("/entities/:id/reports")
-		reportsRoutes.Use(middleware.RBACMiddleware("templeadmin"))
+		// Reports routes accessible by both templeadmin and superadmin
+		reportsRoutes := protected.Group("/reports")
+		reportsRoutes.Use(middleware.RBACMiddleware("templeadmin", "superadmin"))
 		{
-			reportsRoutes.GET("/activities", reportsHandler.GetActivities)
-			reportsRoutes.GET("/temple-registered", reportsHandler.GetTempleRegisteredReport)
-			reportsRoutes.GET("/devotee-birthdays", reportsHandler.GetDevoteeBirthdaysReport) // NEW ENDPOINT
+			// New route for superadmin to get list of templeadmins
+			reportsRoutes.GET("/templeadmins", reportsHandler.GetTempleadminsList)
+			
+			// Updated routes to support both entity ID and "all"
+			// :id can be "all" for aggregate reports or specific entity ID
+			reportsRoutes.GET("/:id/activities", reportsHandler.GetActivities)
+			reportsRoutes.GET("/:id/temple-registered", reportsHandler.GetTempleRegisteredReport)
+			reportsRoutes.GET("/:id/devotee-birthdays", reportsHandler.GetDevoteeBirthdaysReport)
+			reportsRoutes.GET("/debug/superadmin-data", reportsHandler.TestSuperadminData)
 		}
 	}
 

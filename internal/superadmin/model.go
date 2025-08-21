@@ -77,6 +77,17 @@ type UpdateUserRequest struct {
 	TempleDescription string `json:"templeDescription"`
 }
 
+// NEW: Struct for tenant selection (different from assignment)
+type TenantSelectionResponse struct {
+	ID           uint   `json:"id"`
+	Name         string `json:"name"`
+	Email        string `json:"email"`
+	Location     string `json:"location"`
+	Status       string `json:"status"`
+	TemplesCount int    `json:"templesCount"`
+	ImageUrl     string `json:"imageUrl,omitempty"`
+}
+
 type UserResponse struct {
     ID        uint      `json:"id"`
     FullName  string    `json:"full_name"`

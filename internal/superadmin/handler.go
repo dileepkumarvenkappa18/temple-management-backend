@@ -592,3 +592,42 @@ func (h *Handler) AssignUsersToTenant(c *gin.Context) {
 
     c.JSON(http.StatusOK, gin.H{"message": "User assigned successfully"})
 }
+
+// Alternative handler implementation if userRole is not available in context
+// Replace the previous handler method with this one:
+
+// NEW: GET /tenants/selection - Get tenants for selection based on user role
+// NEW: GET /tenants/selection - Get tenants for selection based on user role
+func (h *Handler) GetTenantsForSelection(c *gin.Context) {
+	// Get the user object from context (set by AuthMiddleware)
+	userVal, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
+	}
+
+	// Type assert to auth.User
+	user, ok := userVal.(auth.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user context type"})
+		return
+	}
+
+	userID := user.ID
+	userRole := user.Role.RoleName
+
+	tenants, err := h.service.GetTenantsForSelection(c.Request.Context(), userID, userRole)
+	if err != nil {
+		if strings.Contains(err.Error(), "unauthorized") {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tenants for selection"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": tenants,
+		"total": len(tenants),
+	})
+}
