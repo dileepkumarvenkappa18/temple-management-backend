@@ -1,124 +1,123 @@
 <template>
-  <BaseDrawer 
-    :open="!!selectedLog"
-    @close="closeDrawer"
-    class="max-w-2xl"
-  >
-    <template #header>
-      <div class="flex items-center justify-between bg-gray-50 px-4 py-3 border-b border-gray-200 rounded-t-lg">
-        <h3 class="text-lg font-bold leading-6 text-gray-900">
-          Audit Log Details
-        </h3>
-        <BaseBadge
-          v-if="selectedLog"
-          :variant="selectedLog.status === 'success' ? 'success' : 'error'"
-          class="ml-2"
-        >
-          {{ selectedLog.status }}
-        </BaseBadge>
-      </div>
-    </template>
-    
-    <div class="p-6 space-y-6">
-      <!-- Loading state -->
-      <div v-if="isLoading" class="flex justify-center items-center py-16">
-        <BaseLoader />
-      </div>
-
-      <!-- Error state -->
-      <div v-else-if="error" class="flex justify-center items-center py-8">
-        <BaseAlert variant="error">
-          {{ error }}
-        </BaseAlert>
-      </div>
-
-      <!-- Content -->
-      <div v-else-if="selectedLog" class="space-y-6">
-        <!-- Basic info section -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 p-5 bg-gray-50 rounded-lg border border-gray-200">
-          <div>
-            <label class="block text-sm font-medium text-gray-500">ID</label>
-            <div class="mt-1 text-sm text-gray-900 font-semibold">{{ selectedLog.id }}</div>
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-500">Action</label>
-            <div class="mt-1 text-sm font-semibold text-indigo-700">{{ selectedLog.action }}</div>
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-500">User</label>
-            <div class="mt-1 text-sm text-gray-900 font-semibold">{{ selectedLog.userName }}</div>
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-500">Entity</label>
-            <div class="mt-1 text-sm text-gray-900 font-semibold">{{ selectedLog.entityName || '-' }}</div>
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-500">IP Address</label>
-            <div class="mt-1 text-sm text-gray-900">{{ selectedLog.ipAddress }}</div>
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-500">Date & Time</label>
-            <div class="mt-1 text-sm text-gray-900">{{ selectedLog.formattedDate }}</div>
-          </div>
-        </div>
-        
-        <!-- Details -->
-        <div class="pt-4">
-          <label class="block text-sm font-medium text-gray-500 mb-3">Details</label>
-          
-          <div v-if="!selectedLog.details" class="text-sm text-gray-500 italic bg-gray-50 p-4 rounded-md border border-gray-200">
-            No additional details available
-          </div>
-          
-          <!-- JSON Viewer -->
-          <div 
-            v-else 
-            class="bg-gray-50 p-4 rounded-md border border-gray-200 font-mono text-sm overflow-auto max-h-96 shadow-inner"
+  <div>
+    <!-- Use wrapper div to handle props properly -->
+    <BaseModal v-if="!!selectedLog" @close="closeDrawer">
+      <template #header>
+        <div class="flex items-center justify-between bg-gray-50 px-4 py-3 border-b border-gray-200 rounded-t-lg">
+          <h3 class="text-lg font-bold leading-6 text-gray-900">
+            Audit Log Details
+          </h3>
+          <BaseBadge
+            v-if="selectedLog"
+            :variant="selectedLog.status === 'success' ? 'success' : 'error'"
+            class="ml-2"
           >
-            <pre class="json-formatter">{{ formattedDetails }}</pre>
-          </div>
+            {{ selectedLog.status }}
+          </BaseBadge>
         </div>
-        
-        <!-- Request/Response Info (if available) -->
-        <div v-if="selectedLog.request || selectedLog.response" class="border-t border-gray-200 pt-4 grid grid-cols-1 gap-4">
-          <div v-if="selectedLog.request">
-            <label class="block text-sm font-medium text-gray-500 mb-2">Request</label>
-            <div class="bg-gray-50 p-4 rounded-md border border-gray-200 font-mono text-sm overflow-auto max-h-48 shadow-inner">
-              <pre>{{ formatJSON(selectedLog.request) }}</pre>
+      </template>
+      
+      <div class="p-6 space-y-6">
+        <!-- Loading state -->
+        <div v-if="isLoading" class="flex justify-center items-center py-16">
+          <BaseLoader />
+        </div>
+
+        <!-- Error state -->
+        <div v-else-if="error" class="flex justify-center items-center py-8">
+          <BaseAlert variant="error">
+            {{ error }}
+          </BaseAlert>
+        </div>
+
+        <!-- Content -->
+        <div v-else-if="selectedLog" class="space-y-6">
+          <!-- Basic info section -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 p-5 bg-gray-50 rounded-lg border border-gray-200">
+            <div>
+              <label class="block text-sm font-medium text-gray-500">ID</label>
+              <div class="mt-1 text-sm text-gray-900 font-semibold">{{ selectedLog.id }}</div>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-500">Action</label>
+              <div class="mt-1 text-sm font-semibold text-indigo-700">{{ selectedLog.action }}</div>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-500">User</label>
+              <div class="mt-1 text-sm text-gray-900 font-semibold">{{ selectedLog.userName }}</div>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-500">Entity</label>
+              <div class="mt-1 text-sm text-gray-900 font-semibold">{{ selectedLog.entityName || '-' }}</div>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-500">IP Address</label>
+              <div class="mt-1 text-sm text-gray-900">{{ selectedLog.ipAddress }}</div>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-500">Date & Time</label>
+              <div class="mt-1 text-sm text-gray-900">{{ selectedLog.formattedDate }}</div>
             </div>
           </div>
           
-          <div v-if="selectedLog.response">
-            <label class="block text-sm font-medium text-gray-500 mb-2">Response</label>
-            <div class="bg-gray-50 p-4 rounded-md border border-gray-200 font-mono text-sm overflow-auto max-h-48 shadow-inner">
-              <pre>{{ formatJSON(selectedLog.response) }}</pre>
+          <!-- Details -->
+          <div class="pt-4">
+            <label class="block text-sm font-medium text-gray-500 mb-3">Details</label>
+            
+            <div v-if="!selectedLog.details" class="text-sm text-gray-500 italic bg-gray-50 p-4 rounded-md border border-gray-200">
+              No additional details available
+            </div>
+            
+            <!-- JSON Viewer -->
+            <div 
+              v-else 
+              class="bg-gray-50 p-4 rounded-md border border-gray-200 font-mono text-sm overflow-auto max-h-96 shadow-inner"
+            >
+              <pre class="json-formatter">{{ formattedDetails }}</pre>
             </div>
           </div>
+          
+          <!-- Request/Response Info (if available) -->
+          <div v-if="selectedLog.request || selectedLog.response" class="border-t border-gray-200 pt-4 grid grid-cols-1 gap-4">
+            <div v-if="selectedLog.request">
+              <label class="block text-sm font-medium text-gray-500 mb-2">Request</label>
+              <div class="bg-gray-50 p-4 rounded-md border border-gray-200 font-mono text-sm overflow-auto max-h-48 shadow-inner">
+                <pre>{{ formatJSON(selectedLog.request) }}</pre>
+              </div>
+            </div>
+            
+            <div v-if="selectedLog.response">
+              <label class="block text-sm font-medium text-gray-500 mb-2">Response</label>
+              <div class="bg-gray-50 p-4 rounded-md border border-gray-200 font-mono text-sm overflow-auto max-h-48 shadow-inner">
+                <pre>{{ formatJSON(selectedLog.response) }}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div v-else class="flex justify-center items-center py-8 text-gray-500">
+          No log selected
         </div>
       </div>
       
-      <div v-else class="flex justify-center items-center py-8 text-gray-500">
-        No log selected
-      </div>
-    </div>
-    
-    <template #footer>
-      <div class="flex justify-end gap-3 bg-gray-50 px-4 py-3 border-t border-gray-200 rounded-b-lg">
-        <BaseButton 
-          variant="outline" 
-          @click="closeDrawer"
-          class="w-full sm:w-auto"
-        >
-          Close
-        </BaseButton>
-      </div>
-    </template>
-  </BaseDrawer>
+      <template #footer>
+        <div class="flex justify-end gap-3 bg-gray-50 px-4 py-3 border-t border-gray-200 rounded-b-lg">
+          <BaseButton 
+            variant="outline" 
+            @click="closeDrawer"
+            class="w-full sm:w-auto"
+          >
+            Close
+          </BaseButton>
+        </div>
+      </template>
+    </BaseModal>
+  </div>
 </template>
 
 <script setup>
@@ -127,7 +126,7 @@ import { useAuditLogStore } from '@/stores/auditlog';
 import BaseAlert from '@/components/common/BaseAlert.vue';
 import BaseBadge from '@/components/common/BaseBadge.vue';
 import BaseButton from '@/components/common/BaseButton.vue';
-import BaseDrawer from '@/components/common/BaseModal.vue'; // Using BaseModal as drawer
+import BaseModal from '@/components/common/BaseModal.vue';
 import BaseLoader from '@/components/common/BaseLoader.vue';
 
 const props = defineProps({

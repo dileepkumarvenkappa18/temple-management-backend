@@ -12,23 +12,40 @@ export const auditLogService = {
    * @param {number} limit - Number of items per page
    * @returns {Promise} Promise with paginated audit logs
    */
-  getAuditLogs(filters = {}, page = 1, limit = 10) {
-    return api.get('/api/v1/auditlogs', {
-      params: {
-        ...filters,
-        page,
-        limit
-      }
-    });
+  async getAuditLogs(filters = {}, page = 1, limit = 10) {
+    console.log('Fetching audit logs with params:', { filters, page, limit });
+    
+    const params = {
+      ...filters,
+      page,
+      limit
+    };
+    
+    try {
+      const response = await api.get('/api/v1/auditlogs', { params });
+      console.log('Audit logs response:', response);
+      return response;
+    } catch (error) {
+      console.error('Error in auditLogService.getAuditLogs:', error);
+      throw error;
+    }
   },
 
   /**
    * Get details for a specific audit log
-   * @param {string} id - Audit log ID
+   * @param {string|number} id - Audit log ID
    * @returns {Promise} Promise with audit log details
    */
-  getAuditLogDetails(id) {
-    return api.get(`/api/v1/auditlogs/${id}`);
+  async getAuditLogDetails(id) {
+    console.log('Fetching audit log details:', id);
+    try {
+      const response = await api.get(`/api/v1/auditlogs/${id}`);
+      console.log('Audit log details response:', response);
+      return response;
+    } catch (error) {
+      console.error('Error in auditLogService.getAuditLogDetails:', error);
+      throw error;
+    }
   }
 };
 

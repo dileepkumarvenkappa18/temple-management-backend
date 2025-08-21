@@ -1,210 +1,236 @@
 import { defineStore } from 'pinia';
-import { auditLogService } from '@/services/auditlog.service';
 import { formatDate } from '@/utils/date';
-
-// Define all possible audit log actions from our system
-const auditLogActions = [
-  // Superadmin Module
-  'TENANT_APPROVED', 'TENANT_REJECTED', 'ENTITY_APPROVED', 'ENTITY_REJECTED',
-  'USER_CREATED', 'USER_UPDATED', 'USER_DELETED', 'USER_STATUS_UPDATED',
-  'ROLE_CREATED', 'ROLE_UPDATED', 'ROLE_STATUS_UPDATED',
-  
-  // Entity Module
-  'TEMPLE_CREATED', 'TEMPLE_UPDATED', 'TEMPLE_CREATE_FAILED', 'TEMPLE_UPDATE_FAILED',
-  
-  // Events Module
-  'EVENT_CREATED', 'EVENT_UPDATED', 'EVENT_DELETED',
-  
-  // Seva Module
-  'SEVA_CREATED', 'SEVA_UPDATED', 'SEVA_BOOKED', 'SEVA_BOOKING_APPROVED', 
-  'SEVA_BOOKING_REJECTED', 'SEVA_BOOKING_FAILED',
-  
-  // Donations Module
-  'DONATION_INITIATED', 'DONATION_SUCCESS', 'DONATION_FAILED', 
-  'DONATION_VERIFICATION_FAILED',
-  
-  // Notification Module
-  'TEMPLATE_CREATED', 'TEMPLATE_UPDATED', 'TEMPLATE_DELETED',
-  'EMAIL_SENT', 'SMS_SENT', 'WHATSAPP_SENT',
-  
-  // User Profile Module
-  'PROFILE_CREATED', 'PROFILE_UPDATED', 'DEVOTEE_JOINED_TEMPLE', 
-  'VOLUNTEER_JOINED_TEMPLE',
-  
-  // Reports Module
-  'DEVOTEE_BIRTHDAYS_REPORT_VIEWED', 'DEVOTEE_BIRTHDAYS_REPORT_DOWNLOADED',
-  'DEVOTEE_BIRTHDAYS_REPORT_DOWNLOAD_FAILED', 'TEMPLE_REGISTER_REPORT_VIEWED',
-  'TEMPLE_REGISTER_REPORT_DOWNLOADED', 'TEMPLE_REGISTER_REPORT_DOWNLOAD_FAILED',
-  'TEMPLE_ACTIVITIES_REPORT_VIEWED', 'TEMPLE_ACTIVITIES_REPORT_DOWNLOADED',
-  'TEMPLE_ACTIVITIES_REPORT_DOWNLOAD_FAILED',
-  
-  // System Actions
-  'LOGIN_SUCCESS', 'LOGIN_FAILED', 'LOGOUT',
-  'PASSWORD_RESET_REQUESTED', 'PASSWORD_RESET_SUCCESS', 'PASSWORD_RESET_FAILED'
-];
+import axios from 'axios'; // Import axios directly
 
 export const useAuditLogStore = defineStore('auditLog', {
   state: () => ({
     logs: [],
     selectedLog: null,
     isLoading: false,
-    isDetailLoading: false,
     error: null,
-    
-    // Pagination
+    fetchError: null, // Additional error field for detailed debugging
     currentPage: 1,
     totalPages: 1,
     limit: 10,
     total: 0,
-    
-    // Filters
-    filters: {
-      action: '',
-      status: '',
-      from_date: '',
-      to_date: ''
-    },
-    
-    // Available actions for filtering
-    availableActions: auditLogActions
+    rawResponse: null, // For debugging
+    lastFetchMethod: null // Track which method was used
   }),
   
-  getters: {
-    // Format logs for display
-    formattedLogs: (state) => {
-      return state.logs.map(log => ({
-        ...log,
-        formattedDate: formatDate(log.createdAt, 'DD MMM YYYY, HH:mm:ss')
-      }));
-    },
-    
-    // Group actions by module for better organization in dropdown
-    groupedActions: (state) => {
-      const grouped = {
-        'Superadmin': state.availableActions.filter(a => 
-          a.includes('TENANT_') || a.includes('ENTITY_') || 
-          a.includes('USER_') || a.includes('ROLE_')),
-          
-        'Entity': state.availableActions.filter(a => a.includes('TEMPLE_')),
-        
-        'Events': state.availableActions.filter(a => a.includes('EVENT_')),
-        
-        'Seva': state.availableActions.filter(a => a.includes('SEVA_')),
-        
-        'Donations': state.availableActions.filter(a => a.includes('DONATION_')),
-        
-        'Notifications': state.availableActions.filter(a => 
-          a.includes('TEMPLATE_') || a.includes('_SENT')),
-          
-        'User Profile': state.availableActions.filter(a => 
-          a.includes('PROFILE_') || a.includes('_JOINED_')),
-          
-        'Reports': state.availableActions.filter(a => a.includes('REPORT_')),
-        
-        'System': state.availableActions.filter(a => 
-          a.includes('LOGIN_') || a.includes('LOGOUT') || a.includes('PASSWORD_RESET_'))
-      };
-      
-      return grouped;
-    }
-  },
-  
   actions: {
-    /**
-     * Fetch audit logs with current filters and pagination
-     */
     async fetchAuditLogs() {
       this.isLoading = true;
       this.error = null;
+      this.fetchError = null;
       
+      // Try multiple approaches to get the data
+      await this.fetchWithFetch();
+      
+      // If first approach failed, try with axios
+      if (this.logs.length === 0 && !this.error) {
+        await this.fetchWithAxios();
+      }
+      
+      // If both approaches failed, try with hardcoded URL
+      if (this.logs.length === 0 && !this.error) {
+        await this.fetchWithHardcodedUrl();
+      }
+      
+      this.isLoading = false;
+    },
+    
+    // Approach 1: Using fetch
+    async fetchWithFetch() {
       try {
-        const response = await auditLogService.getAuditLogs(
-          this.filters,
-          this.currentPage,
-          this.limit
-        );
+        console.log('Fetching audit logs with native fetch...');
         
-        this.logs = response.data.logs;
-        this.totalPages = response.data.total_pages;
-        this.total = response.data.total;
+        const response = await fetch(`/api/v1/auditlogs?page=${this.currentPage}&limit=${this.limit}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include' // Include cookies for authentication
+        });
         
+        console.log('Fetch response status:', response.status);
+        
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        this.rawResponse = data;
+        
+        console.log('Fetch API Response:', data);
+        
+        if (data && Array.isArray(data.data)) {
+          console.log('Setting logs from fetch data.data:', data.data);
+          this.logs = data.data;
+          this.totalPages = data.total_pages || 1;
+          this.total = data.total || 0;
+          this.lastFetchMethod = 'fetch';
+          return true; // Successfully fetched data
+        } else {
+          console.warn('Invalid response format from fetch:', data);
+          return false;
+        }
       } catch (error) {
-        this.error = error.message || 'Failed to fetch audit logs';
-        console.error('Error fetching audit logs:', error);
-      } finally {
-        this.isLoading = false;
+        console.error('Error in fetchWithFetch:', error);
+        this.fetchError = `Fetch error: ${error.message}`;
+        return false;
       }
     },
     
-    /**
-     * Fetch details for a specific audit log
-     * @param {string} id - Audit log ID
-     */
+    // Approach 2: Using axios
+    async fetchWithAxios() {
+      try {
+        console.log('Fetching audit logs with axios...');
+        
+        const response = await axios.get('/api/v1/auditlogs', {
+          params: {
+            page: this.currentPage,
+            limit: this.limit
+          }
+        });
+        
+        console.log('Axios response:', response);
+        
+        const data = response.data;
+        this.rawResponse = data;
+        
+        if (data && Array.isArray(data.data)) {
+          console.log('Setting logs from axios data.data:', data.data);
+          this.logs = data.data;
+          this.totalPages = data.total_pages || 1;
+          this.total = data.total || 0;
+          this.lastFetchMethod = 'axios';
+          return true;
+        } else {
+          console.warn('Invalid response format from axios:', data);
+          return false;
+        }
+      } catch (error) {
+        console.error('Error in fetchWithAxios:', error);
+        this.fetchError = `${this.fetchError || ''}\nAxios error: ${error.message}`;
+        return false;
+      }
+    },
+    
+    // Approach 3: Try with hardcoded full URL
+    async fetchWithHardcodedUrl() {
+      try {
+        console.log('Fetching audit logs with hardcoded URL...');
+        
+        // Determine the base URL from the current location
+        const baseUrl = window.location.origin;
+        const url = `${baseUrl}/api/v1/auditlogs?page=${this.currentPage}&limit=${this.limit}`;
+        
+        console.log('Attempting with URL:', url);
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        this.rawResponse = data;
+        
+        if (data && Array.isArray(data.data)) {
+          console.log('Setting logs from hardcoded URL data.data:', data.data);
+          this.logs = data.data;
+          this.totalPages = data.total_pages || 1;
+          this.total = data.total || 0;
+          this.lastFetchMethod = 'hardcoded URL';
+          return true;
+        } else {
+          console.warn('Invalid response format from hardcoded URL:', data);
+          return false;
+        }
+      } catch (error) {
+        console.error('Error in fetchWithHardcodedUrl:', error);
+        this.fetchError = `${this.fetchError || ''}\nHardcoded URL error: ${error.message}`;
+        this.error = `Failed to fetch audit logs after multiple attempts. Please check the console for details.`;
+        return false;
+      }
+    },
+    
     async fetchAuditLogDetails(id) {
       this.isDetailLoading = true;
-      this.error = null;
       
       try {
-        const response = await auditLogService.getAuditLogDetails(id);
-        this.selectedLog = response.data;
+        const response = await fetch(`/api/v1/auditlogs/${id}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+        
+        const logData = await response.json();
+        
+        // Try to parse details if it's a string
+        let parsedDetails = {};
+        if (typeof logData.details === 'string' && logData.details) {
+          try {
+            parsedDetails = JSON.parse(logData.details);
+          } catch (e) {
+            parsedDetails = { raw: logData.details };
+          }
+        }
+        
+        // Extract user information
+        let userName = 'System';
+        if (parsedDetails && parsedDetails.target_user_name) {
+          userName = parsedDetails.target_user_name;
+        }
+        
+        this.selectedLog = {
+          id: logData.id,
+          userName: userName,
+          entityName: logData.entity_id ? `Entity ${logData.entity_id}` : '-',
+          action: logData.action || '',
+          status: logData.status || 'unknown',
+          ipAddress: logData.ip_address || '-',
+          details: parsedDetails,
+          createdAt: logData.created_at || new Date().toISOString(),
+          formattedDate: formatDate(logData.created_at || new Date(), 'DD MMM YYYY, HH:mm:ss')
+        };
       } catch (error) {
-        this.error = error.message || 'Failed to fetch audit log details';
-        console.error('Error fetching audit log details:', error);
+        console.error('Error fetching log details:', error);
+        this.error = error.message;
+        this.selectedLog = null;
       } finally {
         this.isDetailLoading = false;
       }
     },
     
-    /**
-     * Set filter values
-     * @param {Object} filterValues - New filter values
-     */
-    setFilters(filterValues) {
-      this.filters = { ...this.filters, ...filterValues };
-      this.currentPage = 1; // Reset to first page when filters change
-      this.fetchAuditLogs();
-    },
-    
-    /**
-     * Reset all filters to default values
-     */
-    resetFilters() {
-      this.filters = {
-        action: '',
-        status: '',
-        from_date: '',
-        to_date: ''
-      };
-      this.currentPage = 1;
-      this.fetchAuditLogs();
-    },
-    
-    /**
-     * Change pagination page
-     * @param {number} page - New page number
-     */
     setPage(page) {
       this.currentPage = page;
       this.fetchAuditLogs();
     },
     
-    /**
-     * Change items per page
-     * @param {number} limit - New limit value
-     */
     setLimit(limit) {
       this.limit = limit;
-      this.currentPage = 1; // Reset to first page when limit changes
+      this.currentPage = 1;
       this.fetchAuditLogs();
     },
     
-    /**
-     * Clear selected log detail
-     */
     clearSelectedLog() {
       this.selectedLog = null;
     }
   }
 });
-
-export default useAuditLogStore;
