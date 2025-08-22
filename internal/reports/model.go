@@ -1,50 +1,68 @@
 package reports
 
-import "time"
-
-// ===== Report Types =====
-const (
-	ReportTypeEvents   = "events"
-	ReportTypeSevas    = "sevas"
-	ReportTypeBookings = "bookings"
-	ReportTypeTempleRegistered = "temple_registered"
-	ReportTypeDevoteeBirthdays = "devotee_birthdays"
-	 // ... existing report types
-    ReportTypeTempleRegisteredPDF   = "temples_registered_pdf"
-    ReportTypeTempleRegisteredExcel = "temples_registered_excel"
-    ReportTypeDevoteeBirthdaysPDF   = "devotee_birthdays_pdf"
-    ReportTypeDevoteeBirthdaysExcel = "devotee_birthdays_excel"
+import (
+	"time"
 )
 
-// ===== Date Range Presets =====
+// Add to existing constants
 const (
-	DateRangeDaily   = "daily"
-	DateRangeWeekly  = "weekly"
-	DateRangeMonthly = "monthly"
-	DateRangeYearly  = "yearly"
-	DateRangeCustom  = "custom"
+	// Existing report types
+	ReportTypeEvents     = "events"
+	ReportTypeSevas      = "sevas"
+	ReportTypeBookings   = "bookings"
+	
+	// New donation report type
+	ReportTypeDonations  = "donations"
+	
+	// Date range constants
+	DateRangeDaily       = "daily"     // Added this line
+	DateRangeWeekly      = "weekly"
+	DateRangeMonthly     = "monthly"
+	DateRangeYearly      = "yearly"
+	DateRangeCustom      = "custom"
+	
+	// Report format constants
+	FormatCSV            = "csv"
+	FormatExcel          = "excel"
+	FormatPDF            = "pdf"
+	
+	// Temple registered report types
+	ReportTypeTempleRegistered      = "temple-registered"
+	ReportTypeTempleRegisteredExcel = "temple-registered-excel"
+	ReportTypeTempleRegisteredPDF   = "temple-registered-pdf"
+	
+	// Devotee birthdays report types
+	ReportTypeDevoteeBirthdays      = "devotee-birthdays"
+	ReportTypeDevoteeBirthdaysExcel = "devotee-birthdays-excel"
+	ReportTypeDevoteeBirthdaysPDF   = "devotee-birthdays-pdf"
+	
+	// Donation report types
+	ReportTypeDonationsExcel = "donations-excel"
+	ReportTypeDonationsPDF   = "donations-pdf"
 )
 
-// ===== Export Formats =====
-const (
-	FormatExcel = "excel"
-	FormatCSV   = "csv"
-	FormatPDF   = "pdf"
-)
-
-// ===== Request Struct =====
+// ActivitiesReportRequest represents request parameters for temple activities report
 type ActivitiesReportRequest struct {
-	EntityID   string    `form:"entity_id" json:"entity_id"`     // "all" or specific UUID
-	Type       string    `form:"type" json:"type"`               // events, sevas, bookings
-	DateRange  string    `form:"date_range" json:"date_range"`   // daily, weekly, monthly, yearly, custom
-	StartDate  time.Time `form:"start_date" json:"start_date"`   // required if date_range=custom
-	EndDate    time.Time `form:"end_date" json:"end_date"`       // required if date_range=custom
-	Format     string    `form:"format" json:"format"`           // excel, csv, pdf
-	TenantID   string    `json:"-"`                              // extracted from auth context
-	EntityIDs  []string  `json:"-"`                              // resolved entity IDs from DB
+	EntityID  string    `json:"entity_id"`
+	EntityIDs []string  `json:"entity_ids"`
+	Type      string    `json:"type"`
+	DateRange string    `json:"date_range"`
+	StartDate time.Time `json:"start_date"`
+	EndDate   time.Time `json:"end_date"`
+	Format    string    `json:"format"`
 }
 
-// ===== Events Report Row =====
+// ReportData combines all report data types into a single response structure
+type ReportData struct {
+    Events           []EventReportRow           `json:"events,omitempty"`
+    Sevas            []SevaReportRow            `json:"sevas,omitempty"`
+    Bookings         []SevaBookingReportRow     `json:"bookings,omitempty"`
+    Donations        []DonationReportRow        `json:"donations,omitempty"` // New field for donations
+    TemplesRegistered []TempleRegisteredReportRow `json:"temples_registered,omitempty"`
+    DevoteeBirthdays []DevoteeBirthdayReportRow `json:"devotee_birthdays,omitempty"`
+}
+
+// EventReportRow represents a single row in the events report
 type EventReportRow struct {
 	Title       string    `json:"title"`
 	Description string    `json:"description"`
@@ -52,82 +70,94 @@ type EventReportRow struct {
 	EventDate   time.Time `json:"event_date"`
 	EventTime   string    `json:"event_time"`
 	Location    string    `json:"location"`
-	CreatedBy   string    `json:"created_by"`
+	CreatedBy   uint      `json:"created_by"`
+	IsActive    bool      `json:"is_active"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
-	IsActive    bool      `json:"is_active"`
 }
 
-// ===== Sevas Report Row =====
+// SevaReportRow represents a single row in the sevas report
 type SevaReportRow struct {
-	Name               string    `json:"name"`
-	SevaType           string    `json:"seva_type"`
-	Description        string    `json:"description"`
-	Price              float64   `json:"price"`
-	Date               time.Time `json:"date"`
-	StartTime          string    `json:"start_time"`
-	EndTime            string    `json:"end_time"`
-	Duration           string    `json:"duration"`
-	MaxBookingsPerDay  int       `json:"max_bookings_per_day"`
-	Status             string    `json:"status"`
-	IsActive           bool      `json:"is_active"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	Name              string    `json:"name"`
+	SevaType          string    `json:"seva_type"`
+	Description       string    `json:"description"`
+	Price             float64   `json:"price"`
+	Date              time.Time `json:"date"`
+	StartTime         string    `json:"start_time"`
+	EndTime           string    `json:"end_time"`
+	Duration          int       `json:"duration"`
+	MaxBookingsPerDay int       `json:"max_bookings_per_day"`
+	Status            string    `json:"status"`
+	IsActive          bool      `json:"is_active"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
-// ===== Seva Bookings Report Row =====
+// SevaBookingReportRow represents a single row in the seva bookings report
 type SevaBookingReportRow struct {
-	SevaName     string    `json:"seva_name"`
-	SevaType     string    `json:"seva_type"`
-	DevoteeName  string    `json:"devotee_name"`
-	DevoteePhone string    `json:"devotee_phone"`
-	BookingTime  time.Time `json:"booking_time"`
-	Status       string    `json:"status"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	SevaName      string    `json:"seva_name"`
+	SevaType      string    `json:"seva_type"`
+	DevoteeName   string    `json:"devotee_name"`
+	DevoteePhone  string    `json:"devotee_phone"`
+	BookingTime   time.Time `json:"booking_time"`
+	Status        string    `json:"status"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-// ===== Temple Registered Report =====
+// DonationReportRow represents a single row in the donations report
+type DonationReportRow struct {
+    ID              uint       `json:"id"`
+    DonorName       string     `json:"donor_name"`
+    DonorEmail      string     `json:"donor_email"`
+    Amount          float64    `json:"amount"`
+    DonationType    string     `json:"donation_type"`
+    PaymentMethod   string     `json:"payment_method"`
+    Status          string     `json:"status"`
+    DonationDate    time.Time  `json:"donation_date"`
+    OrderID         string     `json:"order_id"`
+    PaymentID       *string    `json:"payment_id"`
+    CreatedAt       time.Time  `json:"created_at"`
+    UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+
+// TempleRegisteredReportRequest represents request parameters for temple registered report
 type TempleRegisteredReportRequest struct {
-    DateRange  string    `form:"date_range" json:"date_range"`
-    StartDate  time.Time `form:"start_date" json:"start_date"`
-    EndDate    time.Time `form:"end_date" json:"end_date"`
-    Status     string    `form:"status" json:"status"`
-    Format     string    `form:"format" json:"format"`
-    EntityID   string    `form:"entity_id" json:"entity_id"` // use this for filtering temples
+	EntityID  string    `json:"entity_id"`
+	Status    string    `json:"status"`
+	DateRange string    `json:"date_range"`
+	StartDate time.Time `json:"start_date"`
+	EndDate   time.Time `json:"end_date"`
+	Format    string    `json:"format"`
 }
 
+// TempleRegisteredReportRow represents a single row in the temples registered report
 type TempleRegisteredReportRow struct {
-    ID        uint      `json:"id"`
-    Name      string    `json:"name"`
-    CreatedAt time.Time `json:"created_at"`
-    Status    string    `json:"status"`
+	ID        uint      `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+	Status    string    `json:"status"`
 }
 
-// ===== Devotee Birthdays Report =====
+// DevoteeBirthdaysReportRequest represents request parameters for devotee birthdays report
 type DevoteeBirthdaysReportRequest struct {
-    DateRange  string    `form:"date_range" json:"date_range"`
-    StartDate  time.Time `form:"start_date" json:"start_date"`
-    EndDate    time.Time `form:"end_date" json:"end_date"`
-    Format     string    `form:"format" json:"format"`
-    EntityID   string    `form:"entity_id" json:"entity_id"`
+	EntityID  string    `json:"entity_id"`
+	DateRange string    `json:"date_range"`
+	StartDate time.Time `json:"start_date"`
+	EndDate   time.Time `json:"end_date"`
+	Format    string    `json:"format"`
 }
 
+// DevoteeBirthdayReportRow represents a single row in the devotee birthdays report
 type DevoteeBirthdayReportRow struct {
-    FullName    string    `json:"full_name"`
-    DateOfBirth time.Time `json:"date_of_birth"`
-    Gender      string    `json:"gender"`
-    Phone       string    `json:"phone"`
-    Email       string    `json:"email"`
-    TempleName  string    `json:"temple_name"`
-    MemberSince time.Time `json:"member_since"`
+	FullName     string    `json:"full_name"`
+	DateOfBirth  time.Time `json:"date_of_birth"`
+	Gender       string    `json:"gender"`
+	Phone        string    `json:"phone"`
+	Email        string    `json:"email"`
+	TempleName   string    `json:"temple_name"`
+	MemberSince  time.Time `json:"member_since"`
 }
 
-// ===== Generic Report Response =====
-type ReportData struct {
-	Events   []EventReportRow        `json:"events,omitempty"`
-	Sevas    []SevaReportRow         `json:"sevas,omitempty"`
-	Bookings []SevaBookingReportRow  `json:"bookings,omitempty"`
-	TemplesRegistered []TempleRegisteredReportRow `json:"temples_registered,omitempty"`
-	DevoteeBirthdays []DevoteeBirthdayReportRow `json:"devotee_birthdays,omitempty"`
-}
+// Removed the GetDateRange function from here to avoid duplication

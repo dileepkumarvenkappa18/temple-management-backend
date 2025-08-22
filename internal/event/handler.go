@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/middleware"
 )
 
@@ -19,27 +18,41 @@ func NewHandler(s *Service) *Handler {
 }
 
 // ===========================
-// 📌 Extract Authenticated User
-func getUserFromContext(c *gin.Context) (*auth.User, bool) {
-	userRaw, exists := c.Get("user")
+// 📌 Extract Access Context
+func getAccessContextFromContext(c *gin.Context) (middleware.AccessContext, bool) {
+	accessContextRaw, exists := c.Get("access_context")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
-		return nil, false
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return middleware.AccessContext{}, false
 	}
-	user, ok := userRaw.(auth.User)
+	
+	accessContext, ok := accessContextRaw.(middleware.AccessContext)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token user"})
-		return nil, false
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid access context"})
+		return middleware.AccessContext{}, false
 	}
-	return &user, true
+	
+	return accessContext, true
 }
 
 // ===========================
 // 🎯 Create Event - POST /events
 func (h *Handler) CreateEvent(c *gin.Context) {
-	user, ok := getUserFromContext(c)
-	if !ok || user.EntityID == nil {
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
+		return
+	}
+
+	// Check if user has access to an entity
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple"})
+		return
+	}
+
+	// Check write permissions (handled by middleware, but double-check)
+	if !accessContext.CanWrite() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
 		return
 	}
 
@@ -62,8 +75,8 @@ func (h *Handler) CreateEvent(c *gin.Context) {
 	// Get IP address for audit logging
 	ip := middleware.GetIPFromContext(c)
 
-	// Use the service method that includes validation and audit logging
-	if err := h.Service.CreateEvent(&req, user.ID, *user.EntityID, ip); err != nil {
+	// Use the service method with access context
+	if err := h.Service.CreateEvent(&req, accessContext, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create event: " + err.Error()})
 		return
 	}
@@ -74,13 +87,25 @@ func (h *Handler) CreateEvent(c *gin.Context) {
 // ===========================
 // 🔍 Get Event - GET /events/:id
 func (h *Handler) GetEventByID(c *gin.Context) {
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
+		return
+	}
+
+	// Check if user has access to an entity
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple"})
+		return
+	}
+
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id < 1 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event ID"})
 		return
 	}
 
-	event, err := h.Service.GetEventByID(uint(id))
+	event, err := h.Service.GetEventByID(uint(id), accessContext)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "event not found"})
 		return
@@ -92,13 +117,19 @@ func (h *Handler) GetEventByID(c *gin.Context) {
 // ===========================
 // 📆 Upcoming Events - GET /events/upcoming
 func (h *Handler) GetUpcomingEvents(c *gin.Context) {
-	user, ok := getUserFromContext(c)
-	if !ok || user.EntityID == nil {
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
+		return
+	}
+
+	// Check if user has access to an entity
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple"})
 		return
 	}
 
-	events, err := h.Service.GetUpcomingEvents(*user.EntityID)
+	events, err := h.Service.GetUpcomingEvents(accessContext)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch events"})
 		return
@@ -110,8 +141,14 @@ func (h *Handler) GetUpcomingEvents(c *gin.Context) {
 // ===========================
 // 📄 List Events - GET /events?limit=&offset=&search=
 func (h *Handler) ListEvents(c *gin.Context) {
-	user, ok := getUserFromContext(c)
-	if !ok || user.EntityID == nil {
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
+		return
+	}
+
+	// Check if user has access to an entity
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple"})
 		return
 	}
@@ -120,7 +157,7 @@ func (h *Handler) ListEvents(c *gin.Context) {
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	search := c.Query("search")
 
-	events, err := h.Service.ListEventsByEntity(*user.EntityID, limit, offset, search)
+	events, err := h.Service.ListEventsByEntity(accessContext, limit, offset, search)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list events"})
 		return
@@ -132,13 +169,19 @@ func (h *Handler) ListEvents(c *gin.Context) {
 // ===========================
 // 📊 Event Stats - GET /events/stats
 func (h *Handler) GetEventStats(c *gin.Context) {
-	user, ok := getUserFromContext(c)
-	if !ok || user.EntityID == nil {
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
+		return
+	}
+
+	// Check if user has access to an entity
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple"})
 		return
 	}
 
-	stats, err := h.Service.GetEventStats(*user.EntityID)
+	stats, err := h.Service.GetEventStats(accessContext)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch stats"})
 		return
@@ -150,9 +193,21 @@ func (h *Handler) GetEventStats(c *gin.Context) {
 // ===========================
 // 🛠 Update Event - PUT /events/:id
 func (h *Handler) UpdateEvent(c *gin.Context) {
-	user, ok := getUserFromContext(c)
-	if !ok || user.EntityID == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
+		return
+	}
+
+	// Check if user has access to an entity
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not linked to a temple"})
+		return
+	}
+
+	// Check write permissions (handled by middleware, but double-check)
+	if !accessContext.CanWrite() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
 		return
 	}
 
@@ -171,8 +226,8 @@ func (h *Handler) UpdateEvent(c *gin.Context) {
 	// Get IP address for audit logging
 	ip := middleware.GetIPFromContext(c)
 
-	// Use the updated service method that includes audit logging
-	if err := h.Service.UpdateEvent(uint(id), &req, *user.EntityID, user.ID, ip); err != nil {
+	// Use the updated service method with access context
+	if err := h.Service.UpdateEvent(uint(id), &req, accessContext, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update event: " + err.Error()})
 		return
 	}
@@ -183,9 +238,21 @@ func (h *Handler) UpdateEvent(c *gin.Context) {
 // ===========================
 // ❌ Delete Event - DELETE /events/:id
 func (h *Handler) DeleteEvent(c *gin.Context) {
-	user, ok := getUserFromContext(c)
-	if !ok || user.EntityID == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
+		return
+	}
+
+	// Check if user has access to an entity
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not linked to a temple"})
+		return
+	}
+
+	// Check write permissions (handled by middleware, but double-check)
+	if !accessContext.CanWrite() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
 		return
 	}
 
@@ -198,8 +265,8 @@ func (h *Handler) DeleteEvent(c *gin.Context) {
 	// Get IP address for audit logging
 	ip := middleware.GetIPFromContext(c)
 
-	// Use the updated service method that includes audit logging
-	if err := h.Service.DeleteEvent(uint(id), *user.EntityID, user.ID, ip); err != nil {
+	// Use the updated service method with access context
+	if err := h.Service.DeleteEvent(uint(id), accessContext, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete event: " + err.Error()})
 		return
 	}

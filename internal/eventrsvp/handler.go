@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/event"
+	"github.com/sharath018/temple-management-backend/middleware"
 )
 
 // Handler holds services needed for RSVP operations
@@ -36,6 +37,23 @@ func getUserFromContext(c *gin.Context) (*auth.User, bool) {
 	return &user, true
 }
 
+// ✅ Utility to extract access context
+func getAccessContext(c *gin.Context) (middleware.AccessContext, bool) {
+	accessRaw, exists := c.Get("access_context") // ✅ must match AuthMiddleware
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return middleware.AccessContext{}, false
+	}
+
+	accessCtx, ok := accessRaw.(middleware.AccessContext)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid access context"})
+		return middleware.AccessContext{}, false
+	}
+
+	return accessCtx, true
+}
+
 // ✅ Request struct
 type RSVPRequest struct {
 	Status string `json:"status" binding:"required"` // attending | maybe | not_attending
@@ -56,8 +74,13 @@ func (h *Handler) CreateRSVP(c *gin.Context) {
 		return
 	}
 
-	// 🎯 Ensure event exists
-	_, err = h.EventService.GetEventByID(uint(eventID))
+	// 🎯 Ensure event exists with access context
+	accessCtx, ok := getAccessContext(c)
+	if !ok {
+		return
+	}
+
+	_, err = h.EventService.GetEventByID(uint(eventID), accessCtx)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Event not found"})
 		return

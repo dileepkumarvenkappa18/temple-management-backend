@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
+	"github.com/sharath018/temple-management-backend/middleware"
 )
 
 // Service wraps business logic for temple events
 type Service struct {
-	Repo       *Repository
-	AuditSvc   auditlog.Service // NEW: Audit service for logging
+	Repo     *Repository
+	AuditSvc auditlog.Service // Audit service for logging
 }
 
 // NewService initializes a new Service with audit logging
@@ -24,15 +25,39 @@ func NewService(r *Repository, auditSvc auditlog.Service) *Service {
 
 // ===========================
 // 🎯 Create Event
-func (s *Service) CreateEvent(req *CreateEventRequest, createdBy uint, entityID uint, ip string) error {
+func (s *Service) CreateEvent(req *CreateEventRequest, accessContext middleware.AccessContext, ip string) error {
+	// Get accessible entity ID
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		return errors.New("no accessible entity")
+	}
+
+	// Check write permissions
+	if !accessContext.CanWrite() {
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&accessContext.UserID,
+			entityID,
+			"EVENT_CREATED",
+			map[string]interface{}{
+				"title":      req.Title,
+				"event_type": req.EventType,
+				"error":      "write access denied",
+			},
+			ip,
+			"failure",
+		)
+		return errors.New("write access denied")
+	}
+
 	// 🔄 Parse EventDate
 	eventDate, err := time.Parse("2006-01-02", req.EventDate)
 	if err != nil {
 		// Log failed event creation attempt
 		s.AuditSvc.LogAction(
 			context.Background(),
-			&createdBy,
-			&entityID,
+			&accessContext.UserID,
+			entityID,
 			"EVENT_CREATED",
 			map[string]interface{}{
 				"title":        req.Title,
@@ -54,8 +79,8 @@ func (s *Service) CreateEvent(req *CreateEventRequest, createdBy uint, entityID 
 			// Log failed event creation attempt
 			s.AuditSvc.LogAction(
 				context.Background(),
-				&createdBy,
-				&entityID,
+				&accessContext.UserID,
+				entityID,
 				"EVENT_CREATED",
 				map[string]interface{}{
 					"title":       req.Title,
@@ -86,8 +111,8 @@ func (s *Service) CreateEvent(req *CreateEventRequest, createdBy uint, entityID 
 		Location:    req.Location,
 		EventType:   req.EventType,
 		IsActive:    isActive,
-		CreatedBy:   createdBy,
-		EntityID:    entityID,
+		CreatedBy:   accessContext.UserID,
+		EntityID:    *entityID,
 	}
 
 	// Attempt to create event in database
@@ -96,8 +121,8 @@ func (s *Service) CreateEvent(req *CreateEventRequest, createdBy uint, entityID 
 		// Log failed event creation
 		s.AuditSvc.LogAction(
 			context.Background(),
-			&createdBy,
-			&entityID,
+			&accessContext.UserID,
+			entityID,
 			"EVENT_CREATED",
 			map[string]interface{}{
 				"title":       req.Title,
@@ -115,8 +140,8 @@ func (s *Service) CreateEvent(req *CreateEventRequest, createdBy uint, entityID 
 	// Log successful event creation
 	s.AuditSvc.LogAction(
 		context.Background(),
-		&createdBy,
-		&entityID,
+		&accessContext.UserID,
+		entityID,
 		"EVENT_CREATED",
 		map[string]interface{}{
 			"event_id":    event.ID,
@@ -135,10 +160,26 @@ func (s *Service) CreateEvent(req *CreateEventRequest, createdBy uint, entityID 
 
 // ===========================
 // 🔍 Get Event by ID
-func (s *Service) GetEventByID(id uint) (*Event, error) {
+func (s *Service) GetEventByID(id uint, accessContext middleware.AccessContext) (*Event, error) {
+	// Get accessible entity ID
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		return nil, errors.New("no accessible entity")
+	}
+
+	// Check read permissions
+	if !accessContext.CanRead() {
+		return nil, errors.New("read access denied")
+	}
+
 	event, err := s.Repo.GetEventByID(id)
 	if err != nil {
 		return nil, err
+	}
+
+	// Verify the event belongs to the accessible entity
+	if event.EntityID != *entityID {
+		return nil, errors.New("event not found")
 	}
 
 	count, _ := s.Repo.CountRSVPs(event.ID)
@@ -149,14 +190,36 @@ func (s *Service) GetEventByID(id uint) (*Event, error) {
 
 // ===========================
 // 📆 Get Upcoming Events
-func (s *Service) GetUpcomingEvents(entityID uint) ([]Event, error) {
-	return s.Repo.GetUpcomingEvents(entityID)
+func (s *Service) GetUpcomingEvents(accessContext middleware.AccessContext) ([]Event, error) {
+	// Get accessible entity ID
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		return nil, errors.New("no accessible entity")
+	}
+
+	// Check read permissions
+	if !accessContext.CanRead() {
+		return nil, errors.New("read access denied")
+	}
+
+	return s.Repo.GetUpcomingEvents(*entityID)
 }
 
 // ===========================
 // 📄 List Events with Pagination
-func (s *Service) ListEventsByEntity(entityID uint, limit, offset int, search string) ([]Event, error) {
-	events, err := s.Repo.ListEventsByEntity(entityID, limit, offset, search)
+func (s *Service) ListEventsByEntity(accessContext middleware.AccessContext, limit, offset int, search string) ([]Event, error) {
+	// Get accessible entity ID
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		return nil, errors.New("no accessible entity")
+	}
+
+	// Check read permissions
+	if !accessContext.CanRead() {
+		return nil, errors.New("read access denied")
+	}
+
+	events, err := s.Repo.ListEventsByEntity(*entityID, limit, offset, search)
 	if err != nil {
 		return nil, err
 	}
@@ -171,21 +234,55 @@ func (s *Service) ListEventsByEntity(entityID uint, limit, offset int, search st
 
 // ===========================
 // 📊 Dashboard Stats
-func (s *Service) GetEventStats(entityID uint) (*EventStatsResponse, error) {
-	return s.Repo.GetEventStats(entityID)
+func (s *Service) GetEventStats(accessContext middleware.AccessContext) (*EventStatsResponse, error) {
+	// Get accessible entity ID
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		return nil, errors.New("no accessible entity")
+	}
+
+	// Check read permissions
+	if !accessContext.CanRead() {
+		return nil, errors.New("read access denied")
+	}
+
+	return s.Repo.GetEventStats(*entityID)
 }
 
 // ===========================
 // 🛠 Update Event (with ownership check and audit logging)
-func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, entityID uint, userID uint, ip string) error {
+func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, accessContext middleware.AccessContext, ip string) error {
+	// Get accessible entity ID
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		return errors.New("no accessible entity")
+	}
+
+	// Check write permissions
+	if !accessContext.CanWrite() {
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&accessContext.UserID,
+			entityID,
+			"EVENT_UPDATED",
+			map[string]interface{}{
+				"event_id": id,
+				"error":    "write access denied",
+			},
+			ip,
+			"failure",
+		)
+		return errors.New("write access denied")
+	}
+
 	// First check if event exists and user has permission
 	event, err := s.Repo.GetEventByID(id)
 	if err != nil {
 		// Log failed update attempt - event not found
 		s.AuditSvc.LogAction(
 			context.Background(),
-			&userID,
-			&entityID,
+			&accessContext.UserID,
+			entityID,
 			"EVENT_UPDATED",
 			map[string]interface{}{
 				"event_id": id,
@@ -197,12 +294,12 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, entityID uint, u
 		return err
 	}
 
-	if event.EntityID != entityID {
+	if event.EntityID != *entityID {
 		// Log unauthorized update attempt
 		s.AuditSvc.LogAction(
 			context.Background(),
-			&userID,
-			&entityID,
+			&accessContext.UserID,
+			entityID,
 			"EVENT_UPDATED",
 			map[string]interface{}{
 				"event_id":     id,
@@ -229,8 +326,8 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, entityID uint, u
 		// Log failed update due to invalid date
 		s.AuditSvc.LogAction(
 			context.Background(),
-			&userID,
-			&entityID,
+			&accessContext.UserID,
+			entityID,
 			"EVENT_UPDATED",
 			map[string]interface{}{
 				"event_id":         id,
@@ -252,8 +349,8 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, entityID uint, u
 			// Log failed update due to invalid time
 			s.AuditSvc.LogAction(
 				context.Background(),
-				&userID,
-				&entityID,
+				&accessContext.UserID,
+				entityID,
 				"EVENT_UPDATED",
 				map[string]interface{}{
 					"event_id":         id,
@@ -287,8 +384,8 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, entityID uint, u
 		// Log failed update attempt
 		s.AuditSvc.LogAction(
 			context.Background(),
-			&userID,
-			&entityID,
+			&accessContext.UserID,
+			entityID,
 			"EVENT_UPDATED",
 			map[string]interface{}{
 				"event_id":    id,
@@ -321,8 +418,8 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, entityID uint, u
 
 	s.AuditSvc.LogAction(
 		context.Background(),
-		&userID,
-		&entityID,
+		&accessContext.UserID,
+		entityID,
 		"EVENT_UPDATED",
 		map[string]interface{}{
 			"event_id":    event.ID,
@@ -338,15 +435,38 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, entityID uint, u
 
 // ===========================
 // ❌ Delete Event (with ownership check and audit logging)
-func (s *Service) DeleteEvent(id uint, entityID uint, userID uint, ip string) error {
+func (s *Service) DeleteEvent(id uint, accessContext middleware.AccessContext, ip string) error {
+	// Get accessible entity ID
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		return errors.New("no accessible entity")
+	}
+
+	// Check write permissions
+	if !accessContext.CanWrite() {
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&accessContext.UserID,
+			entityID,
+			"EVENT_DELETED",
+			map[string]interface{}{
+				"event_id": id,
+				"error":    "write access denied",
+			},
+			ip,
+			"failure",
+		)
+		return errors.New("write access denied")
+	}
+
 	// First check if event exists and user has permission
 	event, err := s.Repo.GetEventByID(id)
 	if err != nil {
 		// Log failed delete attempt - event not found
 		s.AuditSvc.LogAction(
 			context.Background(),
-			&userID,
-			&entityID,
+			&accessContext.UserID,
+			entityID,
 			"EVENT_DELETED",
 			map[string]interface{}{
 				"event_id": id,
@@ -358,12 +478,12 @@ func (s *Service) DeleteEvent(id uint, entityID uint, userID uint, ip string) er
 		return err
 	}
 
-	if event.EntityID != entityID {
+	if event.EntityID != *entityID {
 		// Log unauthorized delete attempt
 		s.AuditSvc.LogAction(
 			context.Background(),
-			&userID,
-			&entityID,
+			&accessContext.UserID,
+			entityID,
 			"EVENT_DELETED",
 			map[string]interface{}{
 				"event_id":     id,
@@ -384,13 +504,13 @@ func (s *Service) DeleteEvent(id uint, entityID uint, userID uint, ip string) er
 	location := event.Location
 
 	// Attempt to delete the event
-	err = s.Repo.DeleteEvent(id, entityID)
+	err = s.Repo.DeleteEvent(id, *entityID)
 	if err != nil {
 		// Log failed delete attempt
 		s.AuditSvc.LogAction(
 			context.Background(),
-			&userID,
-			&entityID,
+			&accessContext.UserID,
+			entityID,
 			"EVENT_DELETED",
 			map[string]interface{}{
 				"event_id":    id,
@@ -406,8 +526,8 @@ func (s *Service) DeleteEvent(id uint, entityID uint, userID uint, ip string) er
 	// Log successful event deletion
 	s.AuditSvc.LogAction(
 		context.Background(),
-		&userID,
-		&entityID,
+		&accessContext.UserID,
+		entityID,
 		"EVENT_DELETED",
 		map[string]interface{}{
 			"event_id":    id,

@@ -10,8 +10,6 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/auth"
 )
 
-
-
 func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -54,9 +52,22 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 			return
 		}
 
-		// ✅ Store the real typed user object in context
+		// Set user in context
 		c.Set("user", user)
 		c.Set("claims", claims)
+		
+		// NEW: Handle assigned tenant access
+		var assignedTenantID *uint
+		if assignedTenantIDFloat, exists := claims["assigned_tenant_id"]; exists {
+			if tenantID, ok := assignedTenantIDFloat.(float64); ok {
+				id := uint(tenantID)
+				assignedTenantID = &id
+			}
+		}
+		
+		// Create and set access context
+		accessContext := ResolveAccessContext(user, assignedTenantID)
+		c.Set("access_context", accessContext)
 
 		c.Next()
 	}

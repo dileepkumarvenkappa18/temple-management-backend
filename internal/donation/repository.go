@@ -26,7 +26,10 @@ type Repository interface {
 	GetDonationTrends(ctx context.Context, entityID uint, days int) ([]TrendData, error)
 	GetDonationsByType(ctx context.Context, entityID uint) ([]TypeData, error)
 	GetDonationsByMethod(ctx context.Context, entityID uint) ([]MethodData, error)
+	
+	// Recent donations - BOTH USER AND ENTITY
 	GetRecentDonationsByUser(ctx context.Context, userID uint, limit int) ([]RecentDonation, error)
+	GetRecentDonationsByEntity(ctx context.Context, entityID uint, limit int) ([]RecentDonation, error)
 }
 
 type repository struct {
@@ -334,7 +337,7 @@ func (r *repository) GetDonationsByMethod(ctx context.Context, entityID uint) ([
 }
 
 // ==============================
-// FIXED: Recent Donations by User Only - PROPER USER FILTERING
+// Recent Donations - BOTH USER AND ENTITY
 // ==============================
 func (r *repository) GetRecentDonationsByUser(ctx context.Context, userID uint, limit int) ([]RecentDonation, error) {
 	var recent []RecentDonation
@@ -355,8 +358,21 @@ func (r *repository) GetRecentDonationsByUser(ctx context.Context, userID uint, 
 	return recent, err
 }
 
-
-
-
-
-
+func (r *repository) GetRecentDonationsByEntity(ctx context.Context, entityID uint, limit int) ([]RecentDonation, error) {
+	var recent []RecentDonation
+	err := r.db.WithContext(ctx).
+		Table("donations d").
+		Select(`
+			d.amount, d.donation_type, d.method, d.status, 
+			COALESCE(d.donated_at, d.created_at) as donated_at,
+			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name,
+			COALESCE(e.name, '') as entity_name
+		`).
+		Joins("LEFT JOIN users u ON d.user_id = u.id").
+		Joins("LEFT JOIN entities e ON d.entity_id = e.id").
+		Where("d.entity_id = ?", entityID).  // Filter by entity instead of user
+		Order("COALESCE(d.donated_at, d.created_at) DESC").
+		Limit(limit).
+		Scan(&recent).Error
+	return recent, err
+}

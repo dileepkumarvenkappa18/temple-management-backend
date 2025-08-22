@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
+	"github.com/sharath018/temple-management-backend/middleware"
 )
 
 type Service interface {
 	// Seva Core
-	CreateSeva(ctx context.Context, seva *Seva, userRole string, entityID uint, userID uint, ip string) error
+	CreateSeva(ctx context.Context, seva *Seva, accessContext middleware.AccessContext, ip string) error
 	UpdateSeva(ctx context.Context, seva *Seva, userRole string, entityID uint, userID uint, ip string) error
 	DeleteSeva(ctx context.Context, sevaID uint, userRole string) error
 	GetSevasByEntity(ctx context.Context, entityID uint) ([]Seva, error)
@@ -50,23 +51,33 @@ func NewService(repo Repository, auditSvc auditlog.Service) Service {
 	}
 }
 
-// Templeadmin only
-func (s *service) CreateSeva(ctx context.Context, seva *Seva, userRole string, entityID uint, userID uint, ip string) error {
-	if userRole != "templeadmin" {
-		// Audit failed attempt
-		s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_CREATE_FAILED", map[string]interface{}{
-			"reason": "unauthorized access",
+// Updated to use access context
+func (s *service) CreateSeva(ctx context.Context, seva *Seva, accessContext middleware.AccessContext, ip string) error {
+	// Check write permissions
+	if !accessContext.CanWrite() {
+		s.auditSvc.LogAction(ctx, &accessContext.UserID, accessContext.GetAccessibleEntityID(), "SEVA_CREATE_FAILED", map[string]interface{}{
+			"reason": "write access denied",
 			"seva_name": seva.Name,
 		}, ip, "failure")
-		return errors.New("unauthorized: only templeadmin can create sevas")
+		return errors.New("write access denied")
 	}
-	seva.EntityID = entityID
+
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		s.auditSvc.LogAction(ctx, &accessContext.UserID, nil, "SEVA_CREATE_FAILED", map[string]interface{}{
+			"reason": "no accessible entity",
+			"seva_name": seva.Name,
+		}, ip, "failure")
+		return errors.New("no accessible entity")
+	}
+
+	seva.EntityID = *entityID
 
 	// Create seva
 	err := s.repo.CreateSeva(ctx, seva)
 	if err != nil {
 		// Audit failed creation
-		s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_CREATE_FAILED", map[string]interface{}{
+		s.auditSvc.LogAction(ctx, &accessContext.UserID, entityID, "SEVA_CREATE_FAILED", map[string]interface{}{
 			"seva_name": seva.Name,
 			"seva_type": seva.SevaType,
 			"error": err.Error(),
@@ -75,11 +86,12 @@ func (s *service) CreateSeva(ctx context.Context, seva *Seva, userRole string, e
 	}
 
 	// Audit successful creation
-	s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_CREATED", map[string]interface{}{
+	s.auditSvc.LogAction(ctx, &accessContext.UserID, entityID, "SEVA_CREATED", map[string]interface{}{
 		"seva_id": seva.ID,
 		"seva_name": seva.Name,
 		"seva_type": seva.SevaType,
 		"price": seva.Price,
+		"role": accessContext.RoleName,
 	}, ip, "success")
 
 	return nil
@@ -134,7 +146,7 @@ func (s *service) GetSevaByID(ctx context.Context, id uint) (*Seva, error) {
 	return s.repo.GetSevaByID(ctx, id)
 }
 
-// Devotee only
+// Devotee only - keep unchanged
 func (s *service) BookSeva(ctx context.Context, booking *SevaBooking, userRole string, userID uint, entityID uint, ip string) error {
 	if userRole != "devotee" {
 		// Audit failed attempt
@@ -194,7 +206,7 @@ func (s *service) GetBookingsForEntity(ctx context.Context, entityID uint) ([]Se
 	return s.repo.ListBookingsByEntityID(ctx, entityID)
 }
 
-// Temple Admin only
+// Temple Admin only - keep existing logic since it's used through access context
 func (s *service) UpdateBookingStatus(ctx context.Context, bookingID uint, newStatus string, userID uint, ip string) error {
 	// Get booking details for audit
 	booking, err := s.repo.GetBookingByID(ctx, bookingID)

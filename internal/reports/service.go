@@ -32,24 +32,27 @@ func NewReportService(repo ReportRepository, exporter ReportExporter, auditSvc a
 }
 
 func (s *reportService) GetActivities(req ActivitiesReportRequest) (ReportData, error) {
-	// validate request
-	if req.Type != ReportTypeEvents && req.Type != ReportTypeSevas && req.Type != ReportTypeBookings {
-		return ReportData{}, fmt.Errorf("invalid report type: %s", req.Type)
-	}
-	start := req.StartDate
-	end := req.EndDate
+    // validate request
+    if req.Type != ReportTypeEvents && req.Type != ReportTypeSevas && 
+       req.Type != ReportTypeBookings && req.Type != ReportTypeDonations {
+        return ReportData{}, fmt.Errorf("invalid report type: %s", req.Type)
+    }
+    start := req.StartDate
+    end := req.EndDate
 
-	var data ReportData
-	var err error
-	switch req.Type {
-	case ReportTypeEvents:
-		data.Events, err = s.repo.GetEvents(convertUintSlice(req.EntityIDs), start, end)
-	case ReportTypeSevas:
-		data.Sevas, err = s.repo.GetSevas(convertUintSlice(req.EntityIDs), start, end)
-	case ReportTypeBookings:
-		data.Bookings, err = s.repo.GetSevaBookings(convertUintSlice(req.EntityIDs), start, end)
-	}
-	return data, err
+    var data ReportData
+    var err error
+    switch req.Type {
+    case ReportTypeEvents:
+        data.Events, err = s.repo.GetEvents(convertUintSlice(req.EntityIDs), start, end)
+    case ReportTypeSevas:
+        data.Sevas, err = s.repo.GetSevas(convertUintSlice(req.EntityIDs), start, end)
+    case ReportTypeBookings:
+        data.Bookings, err = s.repo.GetSevaBookings(convertUintSlice(req.EntityIDs), start, end)
+    case ReportTypeDonations:
+        data.Donations, err = s.repo.GetDonations(convertUintSlice(req.EntityIDs), start, end)
+    }
+    return data, err
 }
 
 func (s *reportService) ExportActivities(ctx context.Context, req ActivitiesReportRequest, userID *uint, ip string) ([]byte, string, string, error) {

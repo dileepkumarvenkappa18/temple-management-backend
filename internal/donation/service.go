@@ -16,28 +16,30 @@ import (
 	razorpay "github.com/razorpay/razorpay-go"
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
+	"github.com/sharath018/temple-management-backend/middleware"
 )
 
 type Service interface {
-	// Core donation operations
+	// Core donation operations (DEVOTEE - UNCHANGED)
 	StartDonation(req CreateDonationRequest) (*CreateDonationResponse, error)
 	VerifyAndUpdateDonation(req VerifyPaymentRequest) error
 	
-	// Data retrieval - FIXED
+	// Data retrieval - DEVOTEE (UNCHANGED) and TEMPLE ADMIN (UPDATED)
 	GetDonationsByUser(userID uint) ([]DonationWithUser, error)
-	GetDonationsWithFilters(filters DonationFilters) ([]DonationWithUser, int, error)
+	GetDonationsWithFilters(filters DonationFilters, accessContext middleware.AccessContext) ([]DonationWithUser, int, error)
 	
-	// Analytics and reporting
-	GetDashboardStats(entityID uint) (*DashboardStats, error)
-	GetTopDonors(entityID uint, limit int) ([]TopDonor, error)
-	GetAnalytics(entityID uint, days int) (*AnalyticsData, error)
+	// Analytics and reporting - TEMPLE ADMIN (UPDATED)
+	GetDashboardStats(entityID uint, accessContext middleware.AccessContext) (*DashboardStats, error)
+	GetTopDonors(entityID uint, limit int, accessContext middleware.AccessContext) ([]TopDonor, error)
+	GetAnalytics(entityID uint, days int, accessContext middleware.AccessContext) (*AnalyticsData, error)
 	
-	// Receipt and export
-	GenerateReceipt(donationID uint, userID uint) (*Receipt, error)
-	ExportDonations(filters DonationFilters, format string) ([]byte, string, error)
+	// Receipt and export - BOTH (UPDATED)
+	GenerateReceipt(donationID uint, userID uint, accessContext *middleware.AccessContext) (*Receipt, error)
+	ExportDonations(filters DonationFilters, format string, accessContext middleware.AccessContext) ([]byte, string, error)
 
-	// FIXED: Recent donations for specific user only
+	// Recent donations - BOTH (UPDATED)
 	GetRecentDonationsByUser(ctx context.Context, userID uint, limit int) ([]RecentDonation, error)
+	GetRecentDonationsByEntity(ctx context.Context, entityID uint, limit int, accessContext middleware.AccessContext) ([]RecentDonation, error)
 }
 
 type service struct {
@@ -58,7 +60,7 @@ func NewService(repo Repository, cfg *config.Config, auditSvc auditlog.Service) 
 }
 
 // ==============================
-// Core Donation Operations
+// Core Donation Operations (DEVOTEE - UNCHANGED)
 // ==============================
 
 // StartDonation initializes the Razorpay order and creates a pending donation entry
@@ -148,7 +150,7 @@ func (s *service) StartDonation(req CreateDonationRequest) (*CreateDonationRespo
 	}, nil
 }
 
-// VerifyAndUpdateDonation securely verifies Razorpay signature and updates payment status
+// VerifyAndUpdateDonation securely verifies Razorpay signature and updates payment status (DEVOTEE - UNCHANGED)
 func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 	ctx := context.Background()
 	
@@ -294,7 +296,7 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 }
 
 // ==============================
-// Data Retrieval - FIXED
+// Data Retrieval - DEVOTEE (UNCHANGED) and TEMPLE ADMIN (UPDATED)
 // ==============================
 
 func (s *service) GetDonationsByUser(userID uint) ([]DonationWithUser, error) {
@@ -321,7 +323,18 @@ func (s *service) GetDonationsByUser(userID uint) ([]DonationWithUser, error) {
 	return donations, nil
 }
 
-func (s *service) GetDonationsWithFilters(filters DonationFilters) ([]DonationWithUser, int, error) {
+func (s *service) GetDonationsWithFilters(filters DonationFilters, accessContext middleware.AccessContext) ([]DonationWithUser, int, error) {
+	// Check permissions
+	if !accessContext.CanRead() {
+		return nil, 0, errors.New("read access denied")
+	}
+
+	// Verify entity access
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil || *entityID != filters.EntityID {
+		return nil, 0, errors.New("access denied to requested entity")
+	}
+
 	donations, total, err := s.repo.ListWithFilters(context.Background(), filters)
 	if err != nil {
 		return nil, 0, err
@@ -346,10 +359,21 @@ func (s *service) GetDonationsWithFilters(filters DonationFilters) ([]DonationWi
 }
 
 // ==============================
-// Analytics and Reporting
+// Analytics and Reporting - TEMPLE ADMIN (UPDATED)
 // ==============================
 
-func (s *service) GetDashboardStats(entityID uint) (*DashboardStats, error) {
+func (s *service) GetDashboardStats(entityID uint, accessContext middleware.AccessContext) (*DashboardStats, error) {
+	// Check permissions
+	if !accessContext.CanRead() {
+		return nil, errors.New("read access denied")
+	}
+
+	// Verify entity access
+	accessibleEntityID := accessContext.GetAccessibleEntityID()
+	if accessibleEntityID == nil || *accessibleEntityID != entityID {
+		return nil, errors.New("access denied to requested entity")
+	}
+
 	ctx := context.Background()
 	
 	// Get overall stats
@@ -397,11 +421,33 @@ func (s *service) GetDashboardStats(entityID uint) (*DashboardStats, error) {
 	}, nil
 }
 
-func (s *service) GetTopDonors(entityID uint, limit int) ([]TopDonor, error) {
+func (s *service) GetTopDonors(entityID uint, limit int, accessContext middleware.AccessContext) ([]TopDonor, error) {
+	// Check permissions
+	if !accessContext.CanRead() {
+		return nil, errors.New("read access denied")
+	}
+
+	// Verify entity access
+	accessibleEntityID := accessContext.GetAccessibleEntityID()
+	if accessibleEntityID == nil || *accessibleEntityID != entityID {
+		return nil, errors.New("access denied to requested entity")
+	}
+
 	return s.repo.GetTopDonors(context.Background(), entityID, limit)
 }
 
-func (s *service) GetAnalytics(entityID uint, days int) (*AnalyticsData, error) {
+func (s *service) GetAnalytics(entityID uint, days int, accessContext middleware.AccessContext) (*AnalyticsData, error) {
+	// Check permissions
+	if !accessContext.CanRead() {
+		return nil, errors.New("read access denied")
+	}
+
+	// Verify entity access
+	accessibleEntityID := accessContext.GetAccessibleEntityID()
+	if accessibleEntityID == nil || *accessibleEntityID != entityID {
+		return nil, errors.New("access denied to requested entity")
+	}
+
 	ctx := context.Background()
 	
 	// Get donation trends
@@ -430,10 +476,10 @@ func (s *service) GetAnalytics(entityID uint, days int) (*AnalyticsData, error) 
 }
 
 // ==============================
-// Receipt and Export
+// Receipt and Export - BOTH (UPDATED)
 // ==============================
 
-func (s *service) GenerateReceipt(donationID uint, userID uint) (*Receipt, error) {
+func (s *service) GenerateReceipt(donationID uint, userID uint, accessContext *middleware.AccessContext) (*Receipt, error) {
 	ctx := context.Background()
 	
 	donation, err := s.repo.GetByIDWithUser(ctx, donationID)
@@ -441,10 +487,23 @@ func (s *service) GenerateReceipt(donationID uint, userID uint) (*Receipt, error
 		return nil, err
 	}
 
-	// Check if user owns this donation or is admin
-	if donation.UserID != userID {
-		// TODO: Check if user is admin of the entity
-		// For now, allow only owner
+	// Check access permissions
+	hasAccess := false
+	
+	// For devotees - can only access their own donations
+	if donation.UserID == userID {
+		hasAccess = true
+	}
+	
+	// For temple admins - can access donations for their entity
+	if accessContext != nil {
+		entityID := accessContext.GetAccessibleEntityID()
+		if entityID != nil && *entityID == donation.EntityID && accessContext.CanRead() {
+			hasAccess = true
+		}
+	}
+
+	if !hasAccess {
 		return nil, errors.New("unauthorized to access this donation")
 	}
 
@@ -477,7 +536,18 @@ func (s *service) GenerateReceipt(donationID uint, userID uint) (*Receipt, error
 	}, nil
 }
 
-func (s *service) ExportDonations(filters DonationFilters, format string) ([]byte, string, error) {
+func (s *service) ExportDonations(filters DonationFilters, format string, accessContext middleware.AccessContext) ([]byte, string, error) {
+	// Check permissions
+	if !accessContext.CanRead() {
+		return nil, "", errors.New("read access denied")
+	}
+
+	// Verify entity access
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil || *entityID != filters.EntityID {
+		return nil, "", errors.New("access denied to requested entity")
+	}
+
 	ctx := context.Background()
 	
 	// Get all donations matching filters
@@ -556,8 +626,23 @@ func (s *service) exportAsCSV(donations []DonationWithUser) ([]byte, string, err
 }
 
 // ==============================
-// FIXED: Recent Donations by User Only
+// Recent Donations - BOTH (UPDATED)
 // ==============================
 func (s *service) GetRecentDonationsByUser(ctx context.Context, userID uint, limit int) ([]RecentDonation, error) {
 	return s.repo.GetRecentDonationsByUser(ctx, userID, limit)
+}
+
+func (s *service) GetRecentDonationsByEntity(ctx context.Context, entityID uint, limit int, accessContext middleware.AccessContext) ([]RecentDonation, error) {
+	// Check permissions
+	if !accessContext.CanRead() {
+		return nil, errors.New("read access denied")
+	}
+
+	// Verify entity access
+	accessibleEntityID := accessContext.GetAccessibleEntityID()
+	if accessibleEntityID == nil || *accessibleEntityID != entityID {
+		return nil, errors.New("access denied to requested entity")
+	}
+
+	return s.repo.GetRecentDonationsByEntity(ctx, entityID, limit)
 }

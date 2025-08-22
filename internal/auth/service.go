@@ -194,9 +194,24 @@ func (s *service) generateAccessToken(user *User) (string, error) {
 		"role_id": user.RoleID,
 		"exp":     time.Now().Add(s.accessTTL).Unix(),
 	}
+	
+	// Add entity_id if it exists
 	if user.EntityID != nil {
 		claims["entity_id"] = *user.EntityID
 	}
+	
+	// NEW: Add assigned tenant info for standarduser/monitoringuser
+	if user.Role.RoleName == "standarduser" || user.Role.RoleName == "monitoringuser" {
+		assignedTenantID, err := s.repo.GetAssignedTenantID(user.ID)
+		if err == nil && assignedTenantID != nil {
+			claims["assigned_tenant_id"] = *assignedTenantID
+			
+			// Add permission type based on role
+			permissionType, _ := s.repo.GetUserPermissionType(user.ID)
+			claims["permission_type"] = permissionType
+		}
+	}
+	
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.accessSecret))
 }

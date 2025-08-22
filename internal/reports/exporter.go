@@ -22,21 +22,25 @@ func NewReportExporter() ReportExporter {
 	return &reportExporter{}
 }
 
+// Update the existing Export method in reportExporter struct
+// Find this function and add the case for donations
 func (e *reportExporter) Export(reportType, format string, data ReportData) ([]byte, string, string, error) {
-	timestamp := time.Now().Format("20060102_150405")
-	
-	switch reportType {
-	case ReportTypeEvents:
-		return e.exportEventsByFormat(format, timestamp, data.Events)
-	case ReportTypeSevas:
-		return e.exportSevasByFormat(format, timestamp, data.Sevas)
-	case ReportTypeBookings:
-		return e.exportBookingsByFormat(format, timestamp, data.Bookings)
-	case ReportTypeTempleRegistered:
-		return e.exportTemplesRegistered(data.TemplesRegistered)
-	case ReportTypeTempleRegisteredPDF: // Add this
+    timestamp := time.Now().Format("20060102_150405")
+    
+    switch reportType {
+    case ReportTypeEvents:
+        return e.exportEventsByFormat(format, timestamp, data.Events)
+    case ReportTypeSevas:
+        return e.exportSevasByFormat(format, timestamp, data.Sevas)
+    case ReportTypeBookings:
+        return e.exportBookingsByFormat(format, timestamp, data.Bookings)
+    case ReportTypeDonations: // Add this case
+        return e.exportDonationsByFormat(format, timestamp, data.Donations)
+    case ReportTypeTempleRegistered:
+        return e.exportTemplesRegistered(data.TemplesRegistered)
+    case ReportTypeTempleRegisteredPDF:
         return e.exportTemplesRegisteredPDF(data.TemplesRegistered)
-    case ReportTypeTempleRegisteredExcel: // Add this
+    case ReportTypeTempleRegisteredExcel:
         return e.exportTemplesRegisteredExcel(data.TemplesRegistered)
     case ReportTypeDevoteeBirthdays:
         return e.exportDevoteeBirthdays(data.DevoteeBirthdays)
@@ -44,9 +48,9 @@ func (e *reportExporter) Export(reportType, format string, data ReportData) ([]b
         return e.exportDevoteeBirthdaysPDF(data.DevoteeBirthdays)
     case ReportTypeDevoteeBirthdaysExcel:
         return e.exportDevoteeBirthdaysExcel(data.DevoteeBirthdays)
-	default:
-		return nil, "", "", fmt.Errorf("unsupported report type: %s", reportType)
-	}
+    default:
+        return nil, "", "", fmt.Errorf("unsupported report type: %s", reportType)
+    }
 }
 
 // Export Events by format
@@ -198,7 +202,7 @@ func (e *reportExporter) exportEventsCSV(events []EventReportRow) ([]byte, error
 			event.EventDate.Format("2006-01-02"),
 			event.EventTime,
 			event.Location,
-			event.CreatedBy,
+			strconv.FormatUint(uint64(event.CreatedBy), 10),
 			event.CreatedAt.Format("2006-01-02 15:04:05"),
 			event.UpdatedAt.Format("2006-01-02 15:04:05"),
 			strconv.FormatBool(event.IsActive),
@@ -308,7 +312,7 @@ func (e *reportExporter) exportSevasCSV(sevas []SevaReportRow) ([]byte, error) {
 			seva.Date.Format("2006-01-02"),
 			seva.StartTime,
 			seva.EndTime,
-			seva.Duration,
+			strconv.Itoa(seva.Duration),
 			strconv.Itoa(seva.MaxBookingsPerDay),
 			seva.Status,
 			strconv.FormatBool(seva.IsActive),
@@ -355,7 +359,7 @@ func (e *reportExporter) exportSevasPDF(sevas []SevaReportRow) ([]byte, error) {
 		pdf.CellFormat(widths[2], 6, fmt.Sprintf("%.2f", seva.Price), "1", 0, "R", false, 0, "")
 		pdf.CellFormat(widths[3], 6, seva.StartTime, "1", 0, "C", false, 0, "")
 		pdf.CellFormat(widths[4], 6, seva.EndTime, "1", 0, "C", false, 0, "")
-		pdf.CellFormat(widths[5], 6, seva.Duration, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[5], 6, strconv.Itoa(seva.Duration), "1", 0, "C", false, 0, "")
 		pdf.CellFormat(widths[6], 6, seva.Status, "1", 0, "C", false, 0, "")
 		pdf.CellFormat(widths[7], 6, strconv.FormatBool(seva.IsActive), "1", 0, "C", false, 0, "")
 		pdf.Ln(-1)
@@ -680,4 +684,162 @@ func (e *reportExporter) exportDevoteeBirthdaysPDF(rows []DevoteeBirthdayReportR
     }
 
     return buf.Bytes(), "devotee_birthdays_report.pdf", "application/pdf", nil
+}
+
+
+// Add these functions to your existing exporter.go file
+// Export Donations by format
+// Add to your exporter.go file (NOT inside another function):
+
+// Export Donations by format
+func (e *reportExporter) exportDonationsByFormat(format, timestamp string, donations []DonationReportRow) ([]byte, string, string, error) {
+    switch format {
+    case FormatExcel:
+        data, err := e.exportDonationsExcel(donations)
+        if err != nil {
+            return nil, "", "", err
+        }
+        filename := fmt.Sprintf("donations_report_%s.xlsx", timestamp)
+        return data, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nil
+        
+    case FormatCSV:
+        data, err := e.exportDonationsCSV(donations)
+        if err != nil {
+            return nil, "", "", err
+        }
+        filename := fmt.Sprintf("donations_report_%s.csv", timestamp)
+        return data, filename, "text/csv", nil
+        
+    case FormatPDF:
+        data, err := e.exportDonationsPDF(donations)
+        if err != nil {
+            return nil, "", "", err
+        }
+        filename := fmt.Sprintf("donations_report_%s.pdf", timestamp)
+        return data, filename, "application/pdf", nil
+        
+    default:
+        return nil, "", "", fmt.Errorf("unsupported format for donations: %s", format)
+    }
+}
+
+func (e *reportExporter) exportDonationsExcel(donations []DonationReportRow) ([]byte, error) {
+    f := excelize.NewFile()
+    sheetName := "Donations"
+    f.SetSheetName("Sheet1", sheetName)
+    
+    headers := []string{"ID", "Donor Name", "Donor Email", "Amount", "Donation Type", "Payment Method", "Status", "Donation Date", "Order ID", "Payment ID", "Created At", "Updated At"}
+    for i, header := range headers {
+        cell := fmt.Sprintf("%c1", 'A'+i)
+        f.SetCellValue(sheetName, cell, header)
+    }
+    
+    for i, donation := range donations {
+        row := i + 2
+        paymentID := ""
+        if donation.PaymentID != nil {
+            paymentID = *donation.PaymentID
+        }
+        
+        f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), donation.ID)
+        f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), donation.DonorName)
+        f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), donation.DonorEmail)
+        f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), donation.Amount)
+        f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), donation.DonationType)
+        f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), donation.PaymentMethod)
+        f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), donation.Status)
+        f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), donation.DonationDate.Format("2006-01-02 15:04:05"))
+        f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), donation.OrderID)
+        f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), paymentID)
+        f.SetCellValue(sheetName, fmt.Sprintf("K%d", row), donation.CreatedAt.Format("2006-01-02 15:04:05"))
+        f.SetCellValue(sheetName, fmt.Sprintf("L%d", row), donation.UpdatedAt.Format("2006-01-02 15:04:05"))
+    }
+    
+    buf, err := f.WriteToBuffer()
+    if err != nil {
+        return nil, err
+    }
+    return buf.Bytes(), nil
+}
+
+func (e *reportExporter) exportDonationsCSV(donations []DonationReportRow) ([]byte, error) {
+    var buf bytes.Buffer
+    writer := csv.NewWriter(&buf)
+    
+    headers := []string{"ID", "Donor Name", "Donor Email", "Amount", "Donation Type", "Payment Method", "Status", "Donation Date", "Order ID", "Payment ID", "Created At", "Updated At"}
+    if err := writer.Write(headers); err != nil {
+        return nil, err
+    }
+    
+    for _, donation := range donations {
+        paymentID := ""
+        if donation.PaymentID != nil {
+            paymentID = *donation.PaymentID
+        }
+        
+        record := []string{
+            strconv.FormatUint(uint64(donation.ID), 10),
+            donation.DonorName,
+            donation.DonorEmail,
+            fmt.Sprintf("%.2f", donation.Amount),
+            donation.DonationType,
+            donation.PaymentMethod,
+            donation.Status,
+            donation.DonationDate.Format("2006-01-02 15:04:05"),
+            donation.OrderID,
+            paymentID,
+            donation.CreatedAt.Format("2006-01-02 15:04:05"),
+            donation.UpdatedAt.Format("2006-01-02 15:04:05"),
+        }
+        if err := writer.Write(record); err != nil {
+            return nil, err
+        }
+    }
+    
+    // Important: Flush before getting bytes
+    writer.Flush()
+    if err := writer.Error(); err != nil {
+        return nil, err
+    }
+    
+    return buf.Bytes(), nil
+}
+
+func (e *reportExporter) exportDonationsPDF(donations []DonationReportRow) ([]byte, error) {
+    pdf := gofpdf.New("L", "mm", "A4", "")
+    pdf.AddPage()
+    pdf.SetFont("Arial", "B", 16)
+    pdf.Cell(0, 10, "Donations Report")
+    pdf.Ln(20)
+    
+    pdf.SetFont("Arial", "B", 10)
+    // Define column widths
+    widths := []float64{35, 30, 20, 25, 25, 20, 25, 25}
+    headers := []string{"Donor Name", "Donor Email", "Amount", "Type", "Method", "Status", "Donation Date", "Order ID"}
+    
+    // Print headers with borders
+    for i, header := range headers {
+        pdf.CellFormat(widths[i], 7, header, "1", 0, "C", false, 0, "")
+    }
+    pdf.Ln(-1)
+    
+    // Print data rows with borders
+    pdf.SetFont("Arial", "", 8)
+    for _, donation := range donations {
+        pdf.CellFormat(widths[0], 6, donation.DonorName, "1", 0, "L", false, 0, "")
+        pdf.CellFormat(widths[1], 6, donation.DonorEmail, "1", 0, "L", false, 0, "")
+        pdf.CellFormat(widths[2], 6, fmt.Sprintf("%.2f", donation.Amount), "1", 0, "R", false, 0, "")
+        pdf.CellFormat(widths[3], 6, donation.DonationType, "1", 0, "L", false, 0, "")
+        pdf.CellFormat(widths[4], 6, donation.PaymentMethod, "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[5], 6, donation.Status, "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[6], 6, donation.DonationDate.Format("2006-01-02"), "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[7], 6, donation.OrderID, "1", 0, "L", false, 0, "")
+        pdf.Ln(-1)
+    }
+    
+    var buf bytes.Buffer
+    if err := pdf.Output(&buf); err != nil {
+        return nil, err
+    }
+    return buf.Bytes(), nil
 }

@@ -26,6 +26,10 @@ type Repository interface {
 	
 	// NEW: Public roles method
 	GetPublicRoles() ([]UserRole, error)
+
+		// New methods for tenant assignment
+	GetAssignedTenantID(userID uint) (*uint, error)
+	GetUserPermissionType(userID uint) (string, error)
 }
 
 type repository struct{ db *gorm.DB }
@@ -174,4 +178,51 @@ func (r *repository) GetPublicRoles() ([]UserRole, error) {
 	var roles []UserRole
 	err := r.db.Where("can_register_publicly = ?", true).Find(&roles).Error
 	return roles, err
+}
+
+// Add these methods to your auth/repository.go
+
+// GetAssignedTenantID returns the assigned tenant ID for a user
+func (r *repository) GetAssignedTenantID(userID uint) (*uint, error) {
+	var assignment struct {
+		TenantID uint
+	}
+	
+	err := r.db.Table("tenant_user_assignments").
+		Select("tenant_id").
+		Where("user_id = ? AND status = ?", userID, "active").
+		First(&assignment).Error
+		
+	if err != nil {
+		return nil, err
+	}
+	
+	return &assignment.TenantID, nil
+}
+
+// GetUserPermissionType returns the permission type based on user role
+func (r *repository) GetUserPermissionType(userID uint) (string, error) {
+	var user struct {
+		RoleName string
+	}
+	
+	err := r.db.Table("users").
+		Select("user_roles.role_name").
+		Joins("JOIN user_roles ON users.role_id = user_roles.id").
+		Where("users.id = ?", userID).
+		First(&user).Error
+		
+	if err != nil {
+		return "", err
+	}
+	
+	// Set permission type based on role
+	switch user.RoleName {
+	case "standarduser":
+		return "full", nil
+	case "monitoringuser":
+		return "readonly", nil
+	default:
+		return "full", nil
+	}
 }

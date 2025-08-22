@@ -50,9 +50,11 @@ func (h *Handler) CreateSeva(c *gin.Context) {
 		return
 	}
 
-	user := c.MustGet("user").(auth.User)
-	if user.Role.RoleName != "templeadmin" || user.EntityID == nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized or invalid entity"})
+	// Use access context instead of direct user access
+	accessContext := c.MustGet("access_context").(middleware.AccessContext)
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "No accessible entity"})
 		return
 	}
 
@@ -60,7 +62,7 @@ func (h *Handler) CreateSeva(c *gin.Context) {
 	ip := middleware.GetIPFromContext(c)
 
 	seva := Seva{
-		EntityID:          *user.EntityID,
+		EntityID:          *entityID,
 		Name:              input.Name,
 		SevaType:          input.SevaType,
 		Description:       input.Description,
@@ -74,7 +76,7 @@ func (h *Handler) CreateSeva(c *gin.Context) {
 		IsActive:          true,              // ✅ defaulted
 	}
 
-	if err := h.service.CreateSeva(c, &seva, user.Role.RoleName, *user.EntityID, user.ID, ip); err != nil {
+	if err := h.service.CreateSeva(c, &seva, accessContext, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create seva: " + err.Error()})
 		return
 	}
@@ -83,6 +85,7 @@ func (h *Handler) CreateSeva(c *gin.Context) {
 }
 
 func (h *Handler) GetSevas(c *gin.Context) {
+	// Keep devotee logic unchanged
 	user := c.MustGet("user").(auth.User)
 	if user.Role.RoleName != "devotee" || user.EntityID == nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
@@ -121,6 +124,7 @@ func (h *Handler) BookSeva(c *gin.Context) {
 		return
 	}
 
+	// Keep devotee logic unchanged
 	user := c.MustGet("user").(auth.User)
 	if user.Role.RoleName != "devotee" || user.EntityID == nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized or invalid entity"})
@@ -150,6 +154,7 @@ func (h *Handler) BookSeva(c *gin.Context) {
 }
 
 func (h *Handler) GetMyBookings(c *gin.Context) {
+	// Keep devotee logic unchanged
 	user := c.MustGet("user").(auth.User)
 	bookings, err := h.service.GetBookingsForUser(c, user.ID)
 	if err != nil {
@@ -160,9 +165,11 @@ func (h *Handler) GetMyBookings(c *gin.Context) {
 }
 
 func (h *Handler) GetEntityBookings(c *gin.Context) {
-	user := c.MustGet("user").(auth.User)
-	if user.Role.RoleName != "templeadmin" || user.EntityID == nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+	// Use access context instead of direct user access
+	accessContext := c.MustGet("access_context").(middleware.AccessContext)
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "No accessible entity"})
 		return
 	}
 
@@ -175,7 +182,7 @@ func (h *Handler) GetEntityBookings(c *gin.Context) {
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
 	bookings, err := h.service.GetDetailedBookingsWithFilters(
-		c, *user.EntityID, status, sevaType, startDate, endDate, search, limit, offset,
+		c, *entityID, status, sevaType, startDate, endDate, search, limit, offset,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch detailed bookings: " + err.Error()})
@@ -202,28 +209,39 @@ func (h *Handler) GetBookingByID(c *gin.Context) {
 }
 
 func (h *Handler) GetBookingCounts(c *gin.Context) {
-    user := c.MustGet("user").(auth.User)
-    
-    if (user.Role.RoleName != "templeadmin" && user.Role.RoleName != "devotee") || user.EntityID == nil {
-        c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
-        return
-    }
+	// Handle both devotee and temple admin access
+	user := c.MustGet("user").(auth.User)
+	var entityID *uint
 
-    counts, err := h.service.GetBookingStatusCounts(c, *user.EntityID)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch counts: " + err.Error()})
-        return
-    }
+	// Check if user is devotee (original logic)
+	if user.Role.RoleName == "devotee" {
+		if user.EntityID == nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+			return
+		}
+		entityID = user.EntityID
+	} else {
+		// Use access context for temple admin users
+		accessContext := c.MustGet("access_context").(middleware.AccessContext)
+		entityID = accessContext.GetAccessibleEntityID()
+		if entityID == nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "No accessible entity"})
+			return
+		}
+	}
 
-    c.JSON(http.StatusOK, gin.H{"counts": counts})
+	counts, err := h.service.GetBookingStatusCounts(c, *entityID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch counts: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"counts": counts})
 }
 
 func (h *Handler) UpdateBookingStatus(c *gin.Context) {
+	// Access control is already handled by RequireWriteAccess() middleware
 	user := c.MustGet("user").(auth.User)
-	if user.Role.RoleName != "templeadmin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
-		return
-	}
 
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {

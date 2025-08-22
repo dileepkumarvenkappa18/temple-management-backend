@@ -1,39 +1,21 @@
 package reports
 
 import (
-	"fmt"
 	"time"
 
 	"gorm.io/gorm"
 )
 
-// TempleadminInfo represents basic templeadmin information for superadmin selection
-type TempleadminInfo struct {
-	ID       uint   `json:"id"`
-	FullName string `json:"full_name"`
-	Email    string `json:"email"`
-	Phone    string `json:"phone"`
-	Status   string `json:"status"`
-}
-
 // ReportRepository defines the database operations required by the reports service.
 type ReportRepository interface {
-	// Existing methods
+	// GetEntitiesByTempleAdmin returns entity IDs created by the given templeadmin user
 	GetEntitiesByTenant(userID uint) ([]uint, error)
-	GetEvents(entityIDs []uint, start, end time.Time) ([]EventReportRow, error)
-	GetSevas(entityIDs []uint, start, end time.Time) ([]SevaReportRow, error)
-	GetSevaBookings(entityIDs []uint, start, end time.Time) ([]SevaBookingReportRow, error)
-	GetTemplesRegistered(entityIDs []uint, start, end time.Time, status string) ([]TempleRegisteredReportRow, error)
-	GetDevoteeBirthdays(entityIDs []uint, start, end time.Time) ([]DevoteeBirthdayReportRow, error)
-	
-	// New methods for superadmin support
-	GetEntitiesByMultipleTenants(userIDs []uint) ([]uint, error)
-	ValidateEntityOwnershipByMultipleTenants(entityID uint, userIDs []uint) (bool, error)
-	GetAllTempleadmins() ([]TempleadminInfo, error)
-
-	CountEventsByEntities(entityIDs []uint) (int64, error)
-    CountSevasByEntities(entityIDs []uint) (int64, error)
-    CountBookingsByEntities(entityIDs []uint) (int64, error)
+    GetEvents(entityIDs []uint, start, end time.Time) ([]EventReportRow, error)
+    GetSevas(entityIDs []uint, start, end time.Time) ([]SevaReportRow, error)
+    GetSevaBookings(entityIDs []uint, start, end time.Time) ([]SevaBookingReportRow, error)
+    GetTemplesRegistered(entityIDs []uint, start, end time.Time, status string) ([]TempleRegisteredReportRow, error)
+    GetDevoteeBirthdays(entityIDs []uint, start, end time.Time) ([]DevoteeBirthdayReportRow, error)
+    GetDonations(entityIDs []uint, start, end time.Time) ([]DonationReportRow, error) // New method for donations
 }
 
 type repository struct {
@@ -47,60 +29,8 @@ func NewRepository(db *gorm.DB) ReportRepository {
 func (r *repository) GetEntitiesByTenant(userID uint) ([]uint, error) {
 	var ids []uint
 	// Table "entities" has created_by which stores templeadmin user ID
-	err := r.db.Table("entities").
-		Select("id").
-		Where("created_by = ? AND status = ?", userID, "approved").
-		Scan(&ids).Error
-	
-	fmt.Printf("DEBUG: GetEntitiesByTenant - UserID: %d, Found entities: %v\n", userID, ids)
+	err := r.db.Table("entities").Select("id").Where("created_by = ?", userID).Scan(&ids).Error
 	return ids, err
-}
-
-// GetEntitiesByMultipleTenants returns entity IDs created by multiple templeadmins
-func (r *repository) GetEntitiesByMultipleTenants(userIDs []uint) ([]uint, error) {
-	var ids []uint
-	if len(userIDs) == 0 {
-		return ids, nil
-	}
-	
-	err := r.db.Table("entities").
-		Select("id").
-		Where("created_by IN ? AND status = ?", userIDs, "approved").
-		Scan(&ids).Error
-	
-	fmt.Printf("DEBUG: GetEntitiesByMultipleTenants - UserIDs: %v, Found entities: %v\n", userIDs, ids)
-	return ids, err
-}
-
-// ValidateEntityOwnershipByMultipleTenants checks if an entity is owned by any of the given tenants
-func (r *repository) ValidateEntityOwnershipByMultipleTenants(entityID uint, userIDs []uint) (bool, error) {
-	if len(userIDs) == 0 {
-		return false, nil
-	}
-	
-	var count int64
-	err := r.db.Table("entities").
-		Where("id = ? AND created_by IN ?", entityID, userIDs).
-		Count(&count).Error
-	
-	fmt.Printf("DEBUG: ValidateEntityOwnershipByMultipleTenants - EntityID: %d, UserIDs: %v, Found: %t\n", entityID, userIDs, count > 0)
-	return count > 0, err
-}
-
-// GetAllTempleadmins returns list of all templeadmins for superadmin selection
-func (r *repository) GetAllTempleadmins() ([]TempleadminInfo, error) {
-	var templeadmins []TempleadminInfo
-	
-	err := r.db.Table("users u").
-		Select("u.id, u.full_name, u.email, u.phone, u.status").
-		Joins("INNER JOIN user_roles ur ON u.role_id = ur.id").
-		Where("ur.role_name = ?", "templeadmin").
-		Where("u.status = ?", "active").
-		Order("u.full_name ASC").
-		Scan(&templeadmins).Error
-	
-	fmt.Printf("DEBUG: GetAllTempleadmins - Found %d templeadmins\n", len(templeadmins))
-	return templeadmins, err
 }
 
 func (r *repository) GetEvents(entityIDs []uint, start, end time.Time) ([]EventReportRow, error) {
@@ -109,14 +39,13 @@ func (r *repository) GetEvents(entityIDs []uint, start, end time.Time) ([]EventR
 		return out, nil
 	}
 	
+	// Fixed: Select actual event_type column instead of empty string
 	err := r.db.Table("events").
 		Select("title, description, event_type, event_date, event_time, location, created_by, created_at, updated_at, is_active").
 		Where("entity_id IN ?", entityIDs).
 		Where("event_date BETWEEN ? AND ?", start, end).
 		Order("event_date DESC").
 		Scan(&out).Error
-	
-	fmt.Printf("DEBUG: GetEvents - EntityIDs: %v, DateRange: %v to %v, Found: %d events\n", entityIDs, start.Format("2006-01-02"), end.Format("2006-01-02"), len(out))
 	return out, err
 }
 
@@ -126,14 +55,14 @@ func (r *repository) GetSevas(entityIDs []uint, start, end time.Time) ([]SevaRep
 		return out, nil
 	}
 	
+	// Fixed: Use created_at as date since the date column appears to be empty
+	// Also handle the empty date column by using created_at instead
 	err := r.db.Table("sevas").
 		Select("name, seva_type, description, price, created_at as date, start_time, end_time, duration, max_bookings_per_day, status, is_active, created_at, updated_at").
 		Where("entity_id IN ?", entityIDs).
 		Where("created_at BETWEEN ? AND ?", start, end).
 		Order("created_at DESC").
 		Scan(&out).Error
-	
-	fmt.Printf("DEBUG: GetSevas - EntityIDs: %v, DateRange: %v to %v, Found: %d sevas\n", entityIDs, start.Format("2006-01-02"), end.Format("2006-01-02"), len(out))
 	return out, err
 }
 
@@ -143,6 +72,7 @@ func (r *repository) GetSevaBookings(entityIDs []uint, start, end time.Time) ([]
 		return out, nil
 	}
 
+	// Fixed: Get seva_type from sevas table
 	err := r.db.Table("seva_bookings sb").
 		Select("s.name as seva_name, s.seva_type, u.full_name as devotee_name, u.phone as devotee_phone, sb.booking_time as booking_time, sb.status, sb.created_at, sb.updated_at").
 		Joins("LEFT JOIN sevas s ON sb.seva_id = s.id").
@@ -151,30 +81,53 @@ func (r *repository) GetSevaBookings(entityIDs []uint, start, end time.Time) ([]
 		Where("sb.created_at BETWEEN ? AND ?", start, end).
 		Order("sb.created_at DESC").
 		Scan(&out).Error
-	
-	fmt.Printf("DEBUG: GetSevaBookings - EntityIDs: %v, DateRange: %v to %v, Found: %d bookings\n", entityIDs, start.Format("2006-01-02"), end.Format("2006-01-02"), len(out))
 	return out, err
 }
 
+// New method to get donations for reporting
+// Add this method to your repository struct
+func (r *repository) GetDonations(entityIDs []uint, start, end time.Time) ([]DonationReportRow, error) {
+    var out []DonationReportRow
+    if len(entityIDs) == 0 {
+        return out, nil
+    }
+
+    err := r.db.Table("donations d").
+        Select(`
+            d.id, 
+            COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as donor_name, 
+            COALESCE(u.email, '') as donor_email,
+            d.amount, 
+            d.donation_type, 
+            d.method as payment_method, 
+            d.status, 
+            COALESCE(d.donated_at, d.created_at) as donation_date,
+            d.order_id,
+            d.payment_id,
+            d.created_at, 
+            d.updated_at
+        `).
+        Joins("LEFT JOIN users u ON d.user_id = u.id").
+        Where("d.entity_id IN ?", entityIDs).
+        Where("d.created_at BETWEEN ? AND ?", start, end).
+        Order("d.created_at DESC").
+        Scan(&out).Error
+    return out, err
+}
+
 func (r *repository) GetTemplesRegistered(entityIDs []uint, start, end time.Time, status string) ([]TempleRegisteredReportRow, error) {
-	var rows []TempleRegisteredReportRow
-	if len(entityIDs) == 0 {
-		return rows, nil
-	}
-	
-	query := r.db.Table("entities").
-		Select("id, name, created_at, status").
-		Where("id IN ?", entityIDs).
-		Where("created_at BETWEEN ? AND ?", start, end)
-	
-	if status != "" {
-		query = query.Where("status = ?", status)
-	}
-	
-	err := query.Order("created_at DESC").Scan(&rows).Error
-	
-	fmt.Printf("DEBUG: GetTemplesRegistered - EntityIDs: %v, DateRange: %v to %v, Status: %s, Found: %d temples\n", entityIDs, start.Format("2006-01-02"), end.Format("2006-01-02"), status, len(rows))
-	return rows, err
+    var rows []TempleRegisteredReportRow
+    if len(entityIDs) == 0 {
+        return rows, nil
+    }
+    query := r.db.Table("entities").Select("id, name, created_at, status").
+        Where("id IN ?", entityIDs).
+        Where("created_at BETWEEN ? AND ?", start, end)
+    if status != "" {
+        query = query.Where("status = ?", status)
+    }
+    err := query.Order("created_at DESC").Scan(&rows).Error
+    return rows, err
 }
 
 func (r *repository) GetDevoteeBirthdays(entityIDs []uint, start, end time.Time) ([]DevoteeBirthdayReportRow, error) {
@@ -237,25 +190,5 @@ func (r *repository) GetDevoteeBirthdays(entityIDs []uint, start, end time.Time)
 	err := query.Order("EXTRACT(MONTH FROM dp.dob), EXTRACT(DAY FROM dp.dob)").
 		Scan(&rows).Error
 
-	fmt.Printf("DEBUG: GetDevoteeBirthdays - EntityIDs: %v, DateRange: %v to %v, Found: %d birthdays\n", entityIDs, start.Format("2006-01-02"), end.Format("2006-01-02"), len(rows))
 	return rows, err
-}
-
-// in reports/repository.go
-func (r *repository) CountEventsByEntities(entityIDs []uint) (int64, error) {
-	var count int64
-	err := r.db.Table("events").Where("entity_id IN ?", entityIDs).Count(&count).Error
-	return count, err
-}
-
-func (r *repository) CountSevasByEntities(entityIDs []uint) (int64, error) {
-	var count int64
-	err := r.db.Table("sevas").Where("entity_id IN ?", entityIDs).Count(&count).Error
-	return count, err
-}
-
-func (r *repository) CountBookingsByEntities(entityIDs []uint) (int64, error) {
-	var count int64
-	err := r.db.Table("seva_bookings").Where("entity_id IN ?", entityIDs).Count(&count).Error
-	return count, err
 }
