@@ -1,4 +1,4 @@
-// src/stores/auth.js - FIXED WITH COMPLETE ROLE MAPPING
+// src/stores/auth.js
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '@/plugins/axios'
@@ -13,11 +13,12 @@ export const useAuthStore = defineStore('auth', () => {
   const loading = ref(false)
   const error = ref(null)
   const currentTenantId = ref(localStorage.getItem('current_tenant_id') || null)
+  const assignedTenantId = ref(localStorage.getItem('assigned_tenant_id') || null)
   
   // Getters
   const isAuthenticated = computed(() => !!token.value && !!user.value)
   
-  // ✅ FIXED: Complete role mapping including ALL backend roleIds
+  // Complete role mapping including ALL backend roleIds
   const userRole = computed(() => {
   if (!user.value) return null
 
@@ -25,7 +26,7 @@ export const useAuthStore = defineStore('auth', () => {
   if (typeof user.value.role === 'string') {
     const roleStr = user.value.role.toLowerCase().trim()
 
-    // ✅ Normalize role string variations
+    // Normalize role string variations
     if (roleStr === 'monitoringuser' || roleStr === 'monitoring_user') return 'monitoring_user'
     if (roleStr === 'standarduser' || roleStr === 'standard_user') return 'standard_user'
     if (roleStr === 'superadmin' || roleStr === 'super_admin') return 'superadmin'
@@ -33,7 +34,7 @@ export const useAuthStore = defineStore('auth', () => {
     return roleStr
   }
 
-  // ✅ COMPLETE role mapping for ALL backend roleIds
+  // COMPLETE role mapping for ALL backend roleIds
   const ROLE_MAP = {
     1: 'superadmin',
     2: 'templeadmin',
@@ -53,20 +54,43 @@ export const useAuthStore = defineStore('auth', () => {
 
   return mappedRole
 })
-  // ✅ FIXED: Better dashboard path logic
+  
+  // Parse JWT token to extract claims
+  const parseJwt = (token) => {
+    try {
+      // JWT tokens are base64 encoded and have three parts separated by dots
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+
+      return JSON.parse(jsonPayload);
+    } catch (e) {
+      console.error('Error parsing JWT token:', e);
+      return {};
+    }
+  };
+  
+  // Dashboard path logic with assigned tenant ID support
+  // UPDATED: Changed redirection path for monitoring_user and standard_user to tenant dashboard
   const getDashboardPath = (userRole) => {
     const role = (userRole || '').toLowerCase().trim()
     
     console.log('🎯 Getting dashboard path for role:', role)
     
-    // ✅ CRITICAL: Handle special admin roles first
-    if (role === 'standard_user' || role === 'standarduser') {
-      console.log('✅ Standard user -> /tenant-selection')
-      return '/tenant-selection'
-    }
-    
-    if (role === 'monitoring_user' || role === 'monitoringuser') {
-      console.log('✅ Monitoring user -> /tenant-selection')
+    // Handle monitoring_user and standard_user with assigned tenant ID
+    if (role === 'standard_user' || role === 'standarduser' || 
+        role === 'monitoring_user' || role === 'monitoringuser') {
+      // Check for assigned tenant ID
+      if (assignedTenantId.value) {
+        console.log(`✅ ${role} redirecting to assigned tenant: ${assignedTenantId.value}`)
+        // UPDATED: Redirect to tenant dashboard instead of entity dashboard
+        return `/tenant/${assignedTenantId.value}/dashboard`
+      }
+      
+      // Fallback to tenant selection if no assigned tenant
+      console.log(`✅ ${role} with no assigned tenant -> tenant selection`)
       return '/tenant-selection'
     }
     
@@ -130,11 +154,13 @@ export const useAuthStore = defineStore('auth', () => {
   
   const isEndUser = computed(() => isDevotee.value || isVolunteer.value)
   
-  // ✅ FIXED: Check if user needs tenant selection
+  // Check if user needs tenant selection
   const needsTenantSelection = computed(() => {
     const role = userRole.value?.toLowerCase() || '';
-    return role === 'standard_user' || role === 'standarduser' || 
-           role === 'monitoring_user' || role === 'monitoringuser';
+    // Only need tenant selection if standard/monitoring user AND no assigned tenant
+    return (role === 'standard_user' || role === 'standarduser' || 
+           role === 'monitoring_user' || role === 'monitoringuser') && 
+           !assignedTenantId.value;
   })
   
   // Refresh the auth token
@@ -266,6 +292,7 @@ const hasRole = (roleToCheck) => {
       user.value = null
       token.value = null
       currentTenantId.value = null
+      assignedTenantId.value = null
       
       // Force a complete page reload to clear any Vue Router state
       window.location.href = window.location.origin + '/login'
@@ -280,24 +307,44 @@ const hasRole = (roleToCheck) => {
     if (storedToken) {
       token.value = storedToken
 
+      // Extract assigned tenant ID from token
+      try {
+        const tokenData = parseJwt(storedToken);
+        if (tokenData.assigned_tenant_id) {
+          assignedTenantId.value = tokenData.assigned_tenant_id;
+          localStorage.setItem('assigned_tenant_id', tokenData.assigned_tenant_id);
+          console.log('✅ Found assigned tenant ID in token:', tokenData.assigned_tenant_id);
+          
+          // Set tenant header for assigned_tenant_id
+          api.defaults.headers.common['X-Tenant-ID'] = tokenData.assigned_tenant_id;
+          console.log('✅ Set X-Tenant-ID header from token:', tokenData.assigned_tenant_id);
+        }
+      } catch (e) {
+        console.error('Failed to parse token for assigned tenant ID:', e);
+      }
+
       const storedUser = localStorage.getItem('user_data')
       if (storedUser && storedUser !== 'undefined') {
         try {
           user.value = JSON.parse(storedUser)
           api.defaults.headers.common['Authorization'] = `Bearer ${token.value}`
           console.log('Auth initialized with stored user:', user.value)
-          console.log('User role computed as:', userRole.value) // ✅ ADDED: Debug role computation
+          console.log('User role computed as:', userRole.value) 
           console.log('Set Authorization header with token')
           
           // ADDED: Refresh token timestamp
           localStorage.setItem('token_last_refreshed', new Date().getTime());
           
-          // Set tenant header if applicable
-          const tenantId = localStorage.getItem('current_tenant_id');
-          if (tenantId) {
-            api.defaults.headers.common['X-Tenant-ID'] = tenantId;
-            currentTenantId.value = tenantId;
-            console.log('Set X-Tenant-ID header:', tenantId);
+          // Set tenant header if applicable (fallback to stored value)
+          if (assignedTenantId.value) {
+            // Already set from token parsing above
+          } else {
+            const tenantId = localStorage.getItem('current_tenant_id');
+            if (tenantId) {
+              api.defaults.headers.common['X-Tenant-ID'] = tenantId;
+              currentTenantId.value = tenantId;
+              console.log('Set X-Tenant-ID header from localStorage:', tenantId);
+            }
           }
           
           return true;
@@ -339,7 +386,7 @@ const hasRole = (roleToCheck) => {
     }
   }
 
-  // ✅ FIXED: Login action - Clean and consistent
+  // Login action - Clean and consistent with assigned tenant ID extraction
   const login = async (credentials) => {
     loading.value = true
     error.value = null
@@ -365,7 +412,7 @@ const hasRole = (roleToCheck) => {
         throw new Error('No authentication token received from server')
       }
       
-      console.log('👤 Raw user data from backend:', userData) // ✅ ADDED: Debug user data
+      console.log('👤 Raw user data from backend:', userData)
       
       // Store auth data
       token.value = accessToken
@@ -373,7 +420,25 @@ const hasRole = (roleToCheck) => {
       localStorage.setItem('auth_token', accessToken)
       localStorage.setItem('user_data', JSON.stringify(userData))
       
-      // ✅ ADDED: Debug role computation after user is set
+      // Extract assigned tenant ID from token
+      try {
+        const tokenData = parseJwt(accessToken);
+        console.log('🔑 Token payload:', tokenData);
+        
+        if (tokenData.assigned_tenant_id) {
+          assignedTenantId.value = tokenData.assigned_tenant_id;
+          localStorage.setItem('assigned_tenant_id', tokenData.assigned_tenant_id);
+          console.log('✅ Found assigned tenant ID in token:', tokenData.assigned_tenant_id);
+          
+          // Set tenant header for API calls when using assigned tenant ID
+          api.defaults.headers.common['X-Tenant-ID'] = tokenData.assigned_tenant_id;
+          console.log('✅ Set X-Tenant-ID header from token:', tokenData.assigned_tenant_id);
+        }
+      } catch (e) {
+        console.error('Failed to parse token for assigned tenant ID:', e);
+      }
+      
+      // Debug role computation after user is set
       console.log('🎭 Computed user role after login:', userRole.value)
       console.log('🔍 Role computed from roleId:', userData.roleId)
       
@@ -384,18 +449,18 @@ const hasRole = (roleToCheck) => {
       api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
       console.log('🔑 Set Authorization header with token')
       
-      // For tenant users, store and set tenant ID
-      if (userData.roleId === 2 || userData.role === 'templeadmin' || userData.role === 'tenant') {
+      // For tenant users, store and set tenant ID (only if not already set from token)
+      if (!assignedTenantId.value && (userData.roleId === 2 || userData.role === 'templeadmin' || userData.role === 'tenant')) {
         const tenantId = userData.id
         currentTenantId.value = tenantId
         localStorage.setItem('current_tenant_id', tenantId)
         
         // Set tenant header for API calls
         api.defaults.headers.common['X-Tenant-ID'] = tenantId
-        console.log('🏛️ Set X-Tenant-ID header:', tenantId)
+        console.log('🏛️ Set X-Tenant-ID header from user data:', tenantId)
       }
       
-      // ✅ FIXED: Use the getDashboardPath function consistently
+      // Use the getDashboardPath function with assigned tenant ID awareness
       const redirectPath = getDashboardPath(userRole.value)
       
       console.log('🎯 Login successful, redirecting to:', redirectPath)
@@ -585,6 +650,7 @@ const hasRole = (roleToCheck) => {
     console.log('------- DEBUG TENANT DATA -------')
     console.log('Current user:', user.value)
     console.log('Current tenant ID:', currentTenantId.value)
+    console.log('Assigned tenant ID:', assignedTenantId.value)
     console.log('Is tenant?', isTenant.value)
     console.log('Dashboard route:', dashboardRoute.value)
     console.log('Auth headers:', api.defaults.headers.common)
@@ -593,8 +659,10 @@ const hasRole = (roleToCheck) => {
       user_data: localStorage.getItem('user_data'),
       current_tenant_id: localStorage.getItem('current_tenant_id'),
       selected_tenant_id: localStorage.getItem('selected_tenant_id'),
-      current_entity_id: localStorage.getItem('current_entity_id')
+      current_entity_id: localStorage.getItem('current_entity_id'),
+      assigned_tenant_id: localStorage.getItem('assigned_tenant_id')
     })
+    console.log('Token payload:', parseJwt(localStorage.getItem('auth_token')))
     console.log('--------------------------------')
   }
   
@@ -605,6 +673,7 @@ const hasRole = (roleToCheck) => {
     loading,
     error,
     currentTenantId,
+    assignedTenantId,
     normalizedRole,
     hasRole,
     checkAuth,
@@ -637,6 +706,7 @@ const hasRole = (roleToCheck) => {
     resetPassword,
     refreshToken,
     verifyToken,
+    parseJwt,
     
     // For backwards compatibility
     initializeAuth: initialize,

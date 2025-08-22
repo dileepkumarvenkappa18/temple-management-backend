@@ -247,7 +247,7 @@ const statusFilter = ref('all');
 const selectedTenants = ref([]);
 const selectedReport = ref('');
 
-// Report types - UPDATED to use superadmin routes
+// Report types
 const reportTypes = [
   {
     id: 'temple-register',
@@ -276,7 +276,6 @@ const reportTypes = [
     iconColor: 'text-purple-600',
     route: '/superadmin/reports/birthdays'
   },
-  // NEW: User Details Report
   {
     id: 'user-details',
     name: 'User Details Report',
@@ -286,7 +285,6 @@ const reportTypes = [
     iconColor: 'text-amber-600',
     route: '/superadmin/reports/user-details'
   },
-  // NEW: Tenant and Temple Approval Report
   {
     id: 'approval-status',
     name: 'Approval Status Report',
@@ -340,7 +338,9 @@ const canProceed = computed(() => {
 const fetchTenants = async () => {
   loading.value = true;
   try {
+    console.log('Fetching tenants...');
     await superAdminStore.fetchTenants();
+    console.log(`Fetched ${superAdminStore.tenants.length} tenants`);
   } catch (error) {
     console.error('Error fetching tenants:', error);
     toast.error('Failed to load tenants. Please try again.');
@@ -418,17 +418,19 @@ const proceedToReport = () => {
   // Encode the selected tenants as a URL-friendly string
   const tenantsParam = selectedTenants.value.join(',');
   
-  // Navigate to the superadmin report route with tenants parameter
+  // Navigate to the report route with tenants parameter
   router.push({
     path: report.route,
     query: {
-      tenants: tenantsParam
+      tenants: tenantsParam,
+      from: 'superadmin'
     }
   });
 };
 
 // Lifecycle hooks
 onMounted(async () => {
+  console.log('SuperadminReportsView mounted');
   await fetchTenants();
 });
 </script>

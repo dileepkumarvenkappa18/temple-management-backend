@@ -9,6 +9,7 @@ const user = ref(null)
 const token = ref(localStorage.getItem('auth_token'))
 const isLoading = ref(false)
 const isInitialized = ref(false)
+const assignedTenantId = ref(localStorage.getItem('assigned_tenant_id'))
 
 export function useAuth() {
   // Computed properties
@@ -23,23 +24,64 @@ export function useAuth() {
   const isDevotee = computed(() => userRole.value === USER_ROLES.DEVOTEE)
   const isVolunteer = computed(() => userRole.value === USER_ROLES.VOLUNTEER)
   const isEndUser = computed(() => isDevotee.value || isVolunteer.value)
+  
+  // Special role checks
+  const isStandardUser = computed(() => {
+    const role = (userRole.value || '').toLowerCase();
+    return role === 'standard_user' || role === 'standarduser';
+  })
+  
+  const isMonitoringUser = computed(() => {
+    const role = (userRole.value || '').toLowerCase();
+    return role === 'monitoring_user' || role === 'monitoringuser';
+  })
 
   // Status checks
   const isPending = computed(() => userStatus.value === USER_STATUS.PENDING)
   const isApproved = computed(() => userStatus.value === USER_STATUS.APPROVED)
   const isRejected = computed(() => userStatus.value === USER_STATUS.REJECTED)
 
+  // Function to parse JWT token
+  const parseJwt = (token) => {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+
+      return JSON.parse(jsonPayload);
+    } catch (e) {
+      console.error('Error parsing JWT token:', e);
+      return {};
+    }
+  };
+
   // Get role configuration
   const getRoleConfig = (role) => {
     return rolesConfig.roles[role] || null
   }
 
-  // Get dashboard path based on role and entity
+  // Get dashboard path based on role, entity, and assigned tenant ID
+  // UPDATED: Changed redirection for monitoring_user and standard_user to tenant dashboard
   const getDashboardPath = () => {
     if (!user.value) return '/login'
     
     const roleConfig = getRoleConfig(userRole.value)
     if (!roleConfig) return '/login'
+    
+    // Special handling for monitoring_user and standard_user
+    if (isStandardUser.value || isMonitoringUser.value) {
+      // If assigned tenant ID is available, redirect to that tenant's dashboard
+      if (assignedTenantId.value) {
+        console.log(`✅ Redirecting ${userRole.value} to assigned tenant: ${assignedTenantId.value}`);
+        // UPDATED: Redirect to tenant dashboard instead of entity dashboard
+        return `/tenant/${assignedTenantId.value}/dashboard`;
+      }
+      
+      // Otherwise, redirect to tenant selection
+      return '/tenant-selection';
+    }
 
     // Replace :id with actual entity ID for end users
     if (isEndUser.value && currentEntity.value) {
@@ -72,7 +114,7 @@ export function useAuth() {
     return true
   }
 
-  // Authentication actions
+  // Authentication actions with token parsing
   const login = async (credentials) => {
     const { showToast } = useToast()
     
@@ -88,9 +130,24 @@ export function useAuth() {
       localStorage.setItem('auth_token', authToken)
       localStorage.setItem('user_data', JSON.stringify(userData))
       
+      // Extract assigned_tenant_id from token if present
+      try {
+        const tokenData = parseJwt(authToken);
+        if (tokenData.assigned_tenant_id) {
+          assignedTenantId.value = tokenData.assigned_tenant_id;
+          localStorage.setItem('assigned_tenant_id', tokenData.assigned_tenant_id);
+          console.log('Found assigned tenant ID in token:', tokenData.assigned_tenant_id);
+          
+          // Set tenant header for API calls
+          apiClient.setTenantId(tokenData.assigned_tenant_id);
+        }
+      } catch (e) {
+        console.error('Failed to parse token for assigned tenant ID:', e);
+      }
+      
       showToast('Login successful!', 'success')
       
-      // Redirect to appropriate dashboard
+      // Get dashboard path with assigned tenant ID awareness
       const dashboardPath = getDashboardPath()
       
       return { 
@@ -137,6 +194,21 @@ export function useAuth() {
           localStorage.setItem('auth_token', response.data.token)
           localStorage.setItem('user_data', JSON.stringify(newUser))
           
+          // Check for assigned tenant ID in token
+          try {
+            const tokenData = parseJwt(response.data.token);
+            if (tokenData.assigned_tenant_id) {
+              assignedTenantId.value = tokenData.assigned_tenant_id;
+              localStorage.setItem('assigned_tenant_id', tokenData.assigned_tenant_id);
+              console.log('Found assigned tenant ID in token:', tokenData.assigned_tenant_id);
+              
+              // Set tenant header for API calls
+              apiClient.setTenantId(tokenData.assigned_tenant_id);
+            }
+          } catch (e) {
+            console.error('Failed to parse token for assigned tenant ID:', e);
+          }
+          
           // Redirect based on role
           return { 
             success: true, 
@@ -175,9 +247,11 @@ export function useAuth() {
       // Clear local state regardless of API call success
       token.value = null
       user.value = null
+      assignedTenantId.value = null
       localStorage.removeItem('auth_token')
       localStorage.removeItem('user_data')
       localStorage.removeItem('current_tenant_id')
+      localStorage.removeItem('assigned_tenant_id')
       
       isLoading.value = false
       
@@ -220,7 +294,7 @@ export function useAuth() {
     }
   }
 
-  // Initialize auth state from localStorage
+  // Initialize auth state from localStorage with token parsing
   const initializeAuth = async () => {
     try {
       const storedToken = localStorage.getItem('auth_token')
@@ -230,12 +304,42 @@ export function useAuth() {
         token.value = storedToken
         user.value = JSON.parse(storedUser)
         
+        // Extract assigned_tenant_id from token if present
+        try {
+          const tokenData = parseJwt(storedToken);
+          if (tokenData.assigned_tenant_id) {
+            assignedTenantId.value = tokenData.assigned_tenant_id;
+            localStorage.setItem('assigned_tenant_id', tokenData.assigned_tenant_id);
+            console.log('Found assigned tenant ID in token:', tokenData.assigned_tenant_id);
+            
+            // Set tenant header for API calls
+            apiClient.setTenantId(tokenData.assigned_tenant_id);
+          }
+        } catch (e) {
+          console.error('Failed to parse token for assigned tenant ID:', e);
+        }
+        
         // Verify token is still valid
         try {
           const response = await apiClient.auth.refreshToken()
           if (response.data.token) {
             token.value = response.data.token
             localStorage.setItem('auth_token', response.data.token)
+            
+            // Re-check assigned tenant ID in new token
+            try {
+              const tokenData = parseJwt(response.data.token);
+              if (tokenData.assigned_tenant_id) {
+                assignedTenantId.value = tokenData.assigned_tenant_id;
+                localStorage.setItem('assigned_tenant_id', tokenData.assigned_tenant_id);
+                console.log('Found assigned tenant ID in refreshed token:', tokenData.assigned_tenant_id);
+                
+                // Set tenant header for API calls
+                apiClient.setTenantId(tokenData.assigned_tenant_id);
+              }
+            } catch (e) {
+              console.error('Failed to parse refreshed token for assigned tenant ID:', e);
+            }
           }
         } catch (error) {
           // Token is invalid, clear auth state
@@ -344,6 +448,7 @@ export function useAuth() {
     token: computed(() => token.value),
     isLoading: computed(() => isLoading.value),
     isInitialized: computed(() => isInitialized.value),
+    assignedTenantId: computed(() => assignedTenantId.value),
     
     // Computed properties
     isAuthenticated,
@@ -355,6 +460,8 @@ export function useAuth() {
     isDevotee,
     isVolunteer,
     isEndUser,
+    isStandardUser,
+    isMonitoringUser,
     isPending,
     isApproved,
     isRejected,
@@ -371,6 +478,7 @@ export function useAuth() {
     hasPermission,
     canAccessRoute,
     getDashboardPath,
-    getRoleConfig
+    getRoleConfig,
+    parseJwt
   }
 }

@@ -1,4 +1,4 @@
-// src/router/guards.js - UPDATED FOR FIXED ROLE MAPPING
+// src/router/guards.js
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useDevoteeStore } from '@/stores/devotee'
@@ -29,7 +29,7 @@ function isStatusEqual(status1, status2) {
 }
 
 /**
- * Authentication Guard - ✅ UPDATED FOR CORRECT ROLE HANDLING
+ * Authentication Guard - Updated for assigned tenant handling
  * Checks if user is authenticated before accessing protected routes
  */
 export function requireAuth(to, from, next) {
@@ -39,8 +39,9 @@ export function requireAuth(to, from, next) {
   console.log('🔐 Auth Check:', {
     isAuthenticated: authStore.isAuthenticated,
     user: authStore.user,
-    userRole: authStore.userRole, // ✅ This should now work correctly
+    userRole: authStore.userRole,
     needsTenantSelection: authStore.needsTenantSelection,
+    assignedTenantId: authStore.assignedTenantId,
     route: to.path,
     toName: to.name
   })
@@ -57,21 +58,22 @@ export function requireAuth(to, from, next) {
     return false
   }
   
-  // ✅ SIMPLIFIED: Use the needsTenantSelection computed property from auth store
+  // Check assigned tenant ID before redirecting to tenant selection
   if (authStore.needsTenantSelection && 
       to.name !== 'TenantSelection' && 
       !to.path.includes('/tenant-selection')) {
     
-    console.log('📍 CRITICAL REDIRECT: User needs tenant selection, redirecting...')
+    console.log('📍 User needs tenant selection, redirecting...')
     console.log('- User role:', authStore.userRole)
     console.log('- Needs tenant selection:', authStore.needsTenantSelection)
+    console.log('- Assigned tenant ID:', authStore.assignedTenantId)
     
     // Force redirect to tenant selection page using route name for consistency
     next({ name: 'TenantSelection' });
     return false;
   }
   
-  // ✅ ALLOW: Superadmin can access tenant selection too
+  // ALLOW: Superadmin can access tenant selection too
   if (authStore.isSuperAdmin && to.name === 'TenantSelection') {
     console.log('📍 SuperAdmin accessing tenant selection - allowed');
     next();
@@ -104,14 +106,14 @@ function normalizeRole(role) {
 }
 
 /**
- * Guest Guard - ✅ UPDATED
+ * Guest Guard - Updated with assigned tenant awareness
  * Redirects authenticated users away from guest-only pages (login, register)
  */
 export function requireGuest(to, from, next) {
   const authStore = useAuthStore()
   
   if (authStore.isAuthenticated) {
-    // ✅ Use auth store's getDashboardPath method
+    // Use auth store's getDashboardPath method
     const redirectPath = authStore.getDashboardPath(authStore.userRole)
     console.log('🚪 Guest guard: authenticated user redirected to:', redirectPath)
     next({ path: redirectPath })
@@ -191,13 +193,13 @@ export function setupRouteGuards(router) {
       return next('/auth/login');
     }
     
-    // If all checks pass, continue
+    // All checks pass, continue
     next();
   });
 }
 
 /**
- * Role-based Access Guard - ✅ ENHANCED VERSION
+ * Role-based Access Guard
  * Checks if user has required role to access the route
  */
 export function requireRole(roles) {
@@ -216,7 +218,7 @@ export function requireRole(roles) {
     const userRole = authStore.userRole || ''
     const normalizedRole = userRole.toLowerCase().trim()
     
-    // ✅ BUILD: Complete list of user roles (including variations)
+    // BUILD: Complete list of user roles (including variations)
     const userRoles = [normalizedRole]
     
     // Add mapped version of the role if it exists
@@ -224,7 +226,7 @@ export function requireRole(roles) {
       userRoles.push(roleMapping[normalizedRole])
     }
     
-    // ✅ ENHANCED: For special roles, also check the alternative format
+    // ENHANCED: For special roles, also check the alternative format
     const roleVariations = {
       'standard_user': ['standarduser'],
       'monitoring_user': ['monitoringuser'],
@@ -264,7 +266,7 @@ export function requireRole(roles) {
 }
 
 /**
- * SPECIFIC GUARD: Check Role (for route files) - ✅ ENHANCED VERSION
+ * SPECIFIC GUARD: Check Role (for route files)
  * This is the specific function your route files are importing
  */
 export function checkRole(to, from, next, requiredRole) {
@@ -283,7 +285,7 @@ export function checkRole(to, from, next, requiredRole) {
   const normalizedRole = userRole.toLowerCase().trim()
   const normalizedRequiredRole = requiredRole.toLowerCase().trim()
   
-  // ✅ BUILD: Complete list of user roles (including variations)
+  // BUILD: Complete list of user roles (including variations)
   const userRoles = [normalizedRole]
   
   // Add mapped version of the role if it exists
@@ -291,7 +293,7 @@ export function checkRole(to, from, next, requiredRole) {
     userRoles.push(roleMapping[normalizedRole])
   }
   
-  // ✅ ENHANCED: For special roles, also check the alternative format
+  // ENHANCED: For special roles, also check the alternative format
   const roleVariations = {
     'standard_user': ['standarduser'],
     'monitoring_user': ['monitoringuser'],
@@ -316,12 +318,13 @@ export function checkRole(to, from, next, requiredRole) {
 }
 
 /**
- * Get default route based on user role - ✅ ENHANCED VERSION
+ * Get default route based on user role - UPDATED with assigned tenant support
  */
 export function getDefaultRoute(role) {
   if (!role) return '/';
   
   const normalizedRole = role.toLowerCase().trim()
+  const authStore = useAuthStore();
   
   const routes = {
     'tenant': '/tenant/dashboard',
@@ -329,11 +332,19 @@ export function getDefaultRoute(role) {
     'devotee': '/devotee/temple-selection',
     'volunteer': '/volunteer/temple-selection',
     'superadmin': '/superadmin/dashboard',
-    'super_admin': '/superadmin/dashboard',
-    'standard_user': '/tenant-selection',
-    'standarduser': '/tenant-selection',
-    'monitoring_user': '/tenant-selection',
-    'monitoringuser': '/tenant-selection'
+    'super_admin': '/superadmin/dashboard'
+  }
+  
+  // Special handling for standard_user and monitoring_user
+  if (normalizedRole === 'standard_user' || normalizedRole === 'standarduser' || 
+      normalizedRole === 'monitoring_user' || normalizedRole === 'monitoringuser') {
+    
+    // Use assigned tenant ID if available
+    if (authStore.assignedTenantId) {
+      // UPDATED: Redirect to tenant dashboard instead of entity dashboard
+      return `/tenant/${authStore.assignedTenantId}/dashboard`;
+    }
+    return '/tenant-selection';
   }
   
   return routes[normalizedRole] || '/'
