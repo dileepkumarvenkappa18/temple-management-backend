@@ -381,21 +381,39 @@ eventRoutes.Use(middleware.RequireTempleAccess())
 		}
 	}
 
-	// ========== Reports ==========
-	{
-		reportsRepo := reports.NewRepository(database.DB)
-		reportsExporter := reports.NewReportExporter()
-		reportsService := reports.NewReportService(reportsRepo, reportsExporter, auditSvc) // ✅ INJECT AUDIT SERVICE
-		reportsHandler := reports.NewHandler(reportsService, reportsRepo, auditSvc)        // ✅ INJECT AUDIT SERVICE
+// ========== Reports ==========
+{
+	reportsRepo := reports.NewRepository(database.DB)
+	reportsExporter := reports.NewReportExporter()
+	reportsService := reports.NewReportService(reportsRepo, reportsExporter, auditSvc) // ✅ INJECT AUDIT SERVICE
+	reportsHandler := reports.NewHandler(reportsService, reportsRepo, auditSvc)        // ✅ INJECT AUDIT SERVICE
 
-		reportsRoutes := protected.Group("/entities/:id/reports")
-		reportsRoutes.Use(middleware.RBACMiddleware("templeadmin"))
+	reportsRoutes := protected.Group("/entities/:id/reports")
+	reportsRoutes.Use(middleware.RequireTempleAccess()) // Allow templeadmin, standarduser, monitoringuser
+	{
+		// All report endpoints are read-only by default, but may generate downloadable files
+		// Since report generation can be considered a "sensitive" operation, we can optionally require write access
+		// However, for now, let's allow all three roles to view and export reports
+		
+		reportsRoutes.GET("/activities", reportsHandler.GetActivities)
+		reportsRoutes.GET("/temple-registered", reportsHandler.GetTempleRegisteredReport)
+		reportsRoutes.GET("/devotee-birthdays", reportsHandler.GetDevoteeBirthdaysReport)
+		reportsRoutes.GET("/devotee-list", reportsHandler.GetDevoteeListReport)
+		reportsRoutes.GET("/devotee-profile", reportsHandler.GetDevoteeProfileReport)
+		
+		// If you want to restrict export functionality to only users with write access, 
+		// you can create a separate group with write access requirement:
+		/*
+		exportRoutes := reportsRoutes.Group("")
+		exportRoutes.Use(middleware.RequireWriteAccess())
 		{
-			reportsRoutes.GET("/activities", reportsHandler.GetActivities)
-			reportsRoutes.GET("/temple-registered", reportsHandler.GetTempleRegisteredReport)
-			reportsRoutes.GET("/devotee-birthdays", reportsHandler.GetDevoteeBirthdaysReport) // NEW ENDPOINT
+			exportRoutes.GET("/activities", reportsHandler.GetActivities) // when ?format= is provided
+			exportRoutes.GET("/temple-registered", reportsHandler.GetTempleRegisteredReport) // when ?format= is provided
+			// ... other export endpoints
 		}
+		*/
 	}
+}
 
 	// Serve the SPA (Single Page Application) for any other route
 	r.NoRoute(func(c *gin.Context) {

@@ -9,6 +9,7 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/entity"
 	"gorm.io/gorm"
+	"database/sql"
 )
 
 type Repository struct {
@@ -721,9 +722,6 @@ func (r *Repository) GetAssignableTenants(ctx context.Context, limit, page int) 
     return tenants, total, nil
 }
 
-// Add these methods to the existing repository.go file
-
-// NEW: Get tenants for selection (SuperAdmin sees all active temple admins)
 func (r *Repository) GetTenantsForSelection(ctx context.Context) ([]TenantSelectionResponse, error) {
 	var tenants []TenantSelectionResponse
 
@@ -732,7 +730,7 @@ func (r *Repository) GetTenantsForSelection(ctx context.Context) ([]TenantSelect
 			users.id,
 			users.full_name as name,
 			users.email,
-			COALESCE(td.temple_place, '') as location,
+			COALESCE(td.temple_name, td.temple_place, '') as location,
 			users.status,
 			COALESCE(entity_count.count, 0) as temples_count
 		FROM users
@@ -774,7 +772,7 @@ func (r *Repository) GetTenantsForSelection(ctx context.Context) ([]TenantSelect
 	return tenants, nil
 }
 
-// NEW: Get assigned tenants for StandardUser/MonitoringUser
+// Get assigned tenants for StandardUser / MonitoringUser
 func (r *Repository) GetAssignedTenantsForUser(ctx context.Context, userID uint) ([]TenantSelectionResponse, error) {
 	var tenants []TenantSelectionResponse
 
@@ -783,7 +781,7 @@ func (r *Repository) GetAssignedTenantsForUser(ctx context.Context, userID uint)
 			tenant_user.id,
 			tenant_user.full_name as name,
 			tenant_user.email,
-			COALESCE(td.temple_place, '') as location,
+			COALESCE(td.temple_name, td.temple_place, '') as location,
 			tenant_user.status,
 			COALESCE(entity_count.count, 0) as temples_count
 		FROM tenant_user_assignments tua
@@ -830,3 +828,71 @@ func (r *Repository) GetAssignedTenantsForUser(ctx context.Context, userID uint)
 
 
 
+// New method to get tenants with temple details
+func (r *Repository) GetTenantsWithTempleDetails(ctx context.Context, role, status string) ([]TenantResponse, error) {
+	var responses []TenantResponse
+	
+	query := `
+		SELECT 
+			u.id, 
+			u.full_name as "fullName",
+			u.email,
+			ur.role_name as "role",
+			u.status,
+			e.id as temple_id, 
+			COALESCE(e.name, td.temple_name) as temple_name, 
+			COALESCE(e.city, td.temple_place) as temple_city, 
+			COALESCE(e.state, '') as temple_state
+		FROM 
+			users u
+		JOIN 
+			user_roles ur ON u.role_id = ur.id
+		LEFT JOIN 
+			tenant_details td ON u.id = td.user_id
+		LEFT JOIN 
+			entities e ON u.id = e.created_by
+		WHERE 
+			ur.role_name = ? AND u.status = ?
+	`
+	
+	rows, err := r.db.WithContext(ctx).Raw(query, role, status).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	for rows.Next() {
+		var tr TenantResponse
+		var templeID sql.NullInt64
+		var templeName, templeCity, templeState sql.NullString
+		
+		err := rows.Scan(
+			&tr.ID,
+			&tr.FullName,
+			&tr.Email,
+			&tr.Role,
+			&tr.Status,
+			&templeID,
+			&templeName,
+			&templeCity,
+			&templeState,
+		)
+		
+		if err != nil {
+			return nil, err
+		}
+		
+		if templeID.Valid && templeName.Valid {
+			tr.Temple = &TempleDetails{
+				ID:    uint(templeID.Int64),
+				Name:  templeName.String,
+				City:  templeCity.String,
+				State: templeState.String,
+			}
+		}
+		
+		responses = append(responses, tr)
+	}
+	
+	return responses, nil
+}

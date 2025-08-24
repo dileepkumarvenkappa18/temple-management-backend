@@ -146,3 +146,23 @@ type TenantAssignmentDetails struct {
 	AssignedOn  time.Time `json:"assigned_on"`
 	UpdatedOn   time.Time `json:"updated_on"`
 }
+
+// ================ TEMPLE DETAILS FOR API RESPONSE ================
+
+// TempleDetails represents the temple details for API response
+type TempleDetails struct {
+	ID    uint   `json:"id"`
+	Name  string `json:"name"`
+	City  string `json:"city"`
+	State string `json:"state"`
+}
+
+// TenantResponse represents a tenant with their temple details for API response
+type TenantResponse struct {
+	ID       uint           `json:"id"`
+	FullName string         `json:"fullName"`
+	Email    string         `json:"email"`
+	Role     string         `json:"role"`
+	Status   string         `json:"status"`
+	Temple   *TempleDetails `json:"temple,omitempty"`
+}

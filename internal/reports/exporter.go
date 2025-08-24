@@ -48,8 +48,26 @@ func (e *reportExporter) Export(reportType, format string, data ReportData) ([]b
         return e.exportDevoteeBirthdaysPDF(data.DevoteeBirthdays)
     case ReportTypeDevoteeBirthdaysExcel:
         return e.exportDevoteeBirthdaysExcel(data.DevoteeBirthdays)
+     case ReportTypeDevoteeListCSV:
+        return e.exportDevoteeListCSV(data.DevoteeList)
+    case ReportTypeDevoteeListExcel:
+        return e.exportDevoteeListExcel(data.DevoteeList)
+    case ReportTypeDevoteeListPDF:
+        return e.exportDevoteeListPDF(data.DevoteeList)
+    // NEW: Devotee Profile export cases
+    case ReportTypeDevoteeProfile:
+        return e.exportDevoteeProfileByFormat(format, data.DevoteeProfiles)
+    case ReportTypeDevoteeList:
+        return e.exportDevoteeListByFormat(format, data.DevoteeList)
+    case ReportTypeDevoteeProfileCSV:
+        return e.exportDevoteeProfileCSV(data.DevoteeProfiles)
+    case ReportTypeDevoteeProfileExcel:
+        return e.exportDevoteeProfileExcel(data.DevoteeProfiles)
+    case ReportTypeDevoteeProfilePDF:
+        return e.exportDevoteeProfilePDF(data.DevoteeProfiles)
     default:
         return nil, "", "", fmt.Errorf("unsupported report type: %s", reportType)
+
     }
 }
 
@@ -842,4 +860,252 @@ func (e *reportExporter) exportDonationsPDF(donations []DonationReportRow) ([]by
         return nil, err
     }
     return buf.Bytes(), nil
+}
+
+
+// Devotee List Export - format switch (FIXED: removed unused timestamp parameter)
+func (e *reportExporter) exportDevoteeListByFormat(format string, rows []DevoteeListReportRow) ([]byte, string, string, error) {
+    switch format {
+    case FormatCSV:
+        return e.exportDevoteeListCSV(rows)
+    case FormatExcel:
+        return e.exportDevoteeListExcel(rows)
+    case FormatPDF:
+        return e.exportDevoteeListPDF(rows)
+    default:
+        return nil, "", "", fmt.Errorf("unsupported format for devotee list: %s", format)
+    }
+}
+
+// NEW: Devotee Profile Export - format switch (FIXED: removed unused timestamp parameter)
+func (e *reportExporter) exportDevoteeProfileByFormat(format string, rows []DevoteeProfileReportRow) ([]byte, string, string, error) {
+    switch format {
+    case FormatCSV:
+        return e.exportDevoteeProfileCSV(rows)
+    case FormatExcel:
+        return e.exportDevoteeProfileExcel(rows)
+    case FormatPDF:
+        return e.exportDevoteeProfilePDF(rows)
+    default:
+        return nil, "", "", fmt.Errorf("unsupported format for devotee profile: %s", format)
+    }
+}
+
+// NEW: Devotee Profile CSV export
+func (e *reportExporter) exportDevoteeProfileCSV(rows []DevoteeProfileReportRow) ([]byte, string, string, error) {
+    buf := &bytes.Buffer{}
+    w := csv.NewWriter(buf)
+
+    headers := []string{"User ID", "Full Name", "Date of Birth", "Gender", "Full Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
+    if err := w.Write(headers); err != nil {
+        return nil, "", "", err
+    }
+
+    for _, r := range rows {
+        record := []string{
+            r.UserID,
+            r.FullName,
+            r.DOB.Format("2006-01-02"),
+            r.Gender,
+            r.FullAddress,
+            r.Gotra,
+            r.Nakshatra,
+            r.Rashi,
+            r.Lagna,
+        }
+        if err := w.Write(record); err != nil {
+            return nil, "", "", err
+        }
+    }
+
+    w.Flush()
+    if err := w.Error(); err != nil {
+        return nil, "", "", err
+    }
+
+    return buf.Bytes(), "devotee_profile_report.csv", "text/csv", nil
+}
+
+// NEW: Devotee Profile Excel export
+func (e *reportExporter) exportDevoteeProfileExcel(rows []DevoteeProfileReportRow) ([]byte, string, string, error) {
+    f := excelize.NewFile()
+    sheet := "Devotee Profile"
+    index, err := f.NewSheet(sheet)
+    if err != nil {
+        return nil, "", "", err
+    }
+    f.DeleteSheet("Sheet1")
+    f.SetActiveSheet(index)
+
+    headers := []string{"User ID", "Full Name", "Date of Birth", "Gender", "Full Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
+    for i, h := range headers {
+        cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+        f.SetCellValue(sheet, cell, h)
+    }
+
+    for rIdx, r := range rows {
+        row := rIdx + 2
+        f.SetCellValue(sheet, fmt.Sprintf("A%d", row), r.UserID)
+        f.SetCellValue(sheet, fmt.Sprintf("B%d", row), r.FullName)
+        f.SetCellValue(sheet, fmt.Sprintf("C%d", row), r.DOB.Format("2006-01-02"))
+        f.SetCellValue(sheet, fmt.Sprintf("D%d", row), r.Gender)
+        f.SetCellValue(sheet, fmt.Sprintf("E%d", row), r.FullAddress)
+        f.SetCellValue(sheet, fmt.Sprintf("F%d", row), r.Gotra)
+        f.SetCellValue(sheet, fmt.Sprintf("G%d", row), r.Nakshatra)
+        f.SetCellValue(sheet, fmt.Sprintf("H%d", row), r.Rashi)
+        f.SetCellValue(sheet, fmt.Sprintf("I%d", row), r.Lagna)
+    }
+
+    var buf bytes.Buffer
+    if err := f.Write(&buf); err != nil {
+        return nil, "", "", err
+    }
+
+    return buf.Bytes(), "devotee_profile_report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nil
+}
+
+// NEW: Devotee Profile PDF export
+func (e *reportExporter) exportDevoteeProfilePDF(rows []DevoteeProfileReportRow) ([]byte, string, string, error) {
+    pdf := gofpdf.New("L", "mm", "A4", "") // Landscape for more columns
+    pdf.AddPage()
+    pdf.SetFont("Arial", "B", 12)
+    pdf.Cell(40, 10, "Devotee Profile Report")
+    pdf.Ln(10)
+
+    pdf.SetFont("Arial", "B", 8) // Smaller font for headers
+    headers := []string{"User ID", "Full Name", "DOB", "Gender", "Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
+    widths := []float64{25, 35, 22, 15, 50, 20, 25, 20, 20}
+
+    for i, h := range headers {
+        pdf.CellFormat(widths[i], 7, h, "1", 0, "C", false, 0, "")
+    }
+    pdf.Ln(-1)
+
+    pdf.SetFont("Arial", "", 7) // Even smaller font for data
+    for _, r := range rows {
+        pdf.CellFormat(widths[0], 6, r.UserID, "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[1], 6, r.FullName, "1", 0, "L", false, 0, "")
+        pdf.CellFormat(widths[2], 6, r.DOB.Format("2006-01-02"), "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[3], 6, r.Gender, "1", 0, "C", false, 0, "")
+        
+        // Truncate address if too long for PDF cell
+        address := r.FullAddress
+        if len(address) > 30 {
+            address = address[:27] + "..."
+        }
+        pdf.CellFormat(widths[4], 6, address, "1", 0, "L", false, 0, "")
+        
+        pdf.CellFormat(widths[5], 6, r.Gotra, "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[6], 6, r.Nakshatra, "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[7], 6, r.Rashi, "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[8], 6, r.Lagna, "1", 0, "C", false, 0, "")
+        pdf.Ln(-1)
+    }
+
+    var buf bytes.Buffer
+    if err := pdf.Output(&buf); err != nil {
+        return nil, "", "", err
+    }
+
+    return buf.Bytes(), "devotee_profile_report.pdf", "application/pdf", nil
+}
+
+// Devotee List CSV export
+func (e *reportExporter) exportDevoteeListCSV(rows []DevoteeListReportRow) ([]byte, string, string, error) {
+    buf := &bytes.Buffer{}
+    w := csv.NewWriter(buf)
+
+    headers := []string{"User ID", "Devotee Name", "Devotee Status", "Joined At", "Created At"}
+    if err := w.Write(headers); err != nil {
+        return nil, "", "", err
+    }
+
+    for _, r := range rows {
+        record := []string{
+            r.UserID,
+            r.DevoteeName,
+            r.DevoteeStatus,
+            r.JoinedAt.Format("2006-01-02 15:04:05"),
+            r.CreatedAt.Format("2006-01-02 15:04:05"),
+        }
+        if err := w.Write(record); err != nil {
+            return nil, "", "", err
+        }
+    }
+
+    w.Flush()
+    if err := w.Error(); err != nil {
+        return nil, "", "", err
+    }
+
+    return buf.Bytes(), "devotee_list_report.csv", "text/csv", nil
+}
+
+// Devotee List Excel export
+func (e *reportExporter) exportDevoteeListExcel(rows []DevoteeListReportRow) ([]byte, string, string, error) {
+    f := excelize.NewFile()
+    sheet := "Devotee List"
+    index, err := f.NewSheet(sheet)
+    if err != nil {
+        return nil, "", "", err
+    }
+    f.DeleteSheet("Sheet1")
+    f.SetActiveSheet(index)
+
+    headers := []string{"User ID", "Devotee Name", "Devotee Status", "Joined At", "Created At"}
+    for i, h := range headers {
+        cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+        f.SetCellValue(sheet, cell, h)
+    }
+
+    for rIdx, r := range rows {
+        row := rIdx + 2
+        f.SetCellValue(sheet, fmt.Sprintf("A%d", row), r.UserID)
+        f.SetCellValue(sheet, fmt.Sprintf("B%d", row), r.DevoteeName)
+        f.SetCellValue(sheet, fmt.Sprintf("C%d", row), r.DevoteeStatus)
+        f.SetCellValue(sheet, fmt.Sprintf("D%d", row), r.JoinedAt.Format("2006-01-02 15:04:05"))
+        f.SetCellValue(sheet, fmt.Sprintf("E%d", row), r.CreatedAt.Format("2006-01-02 15:04:05"))
+    }
+
+    var buf bytes.Buffer
+    if err := f.Write(&buf); err != nil {
+        return nil, "", "", err
+    }
+
+    return buf.Bytes(), "devotee_list_report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nil
+}
+
+// Devotee List PDF export
+func (e *reportExporter) exportDevoteeListPDF(rows []DevoteeListReportRow) ([]byte, string, string, error) {
+    pdf := gofpdf.New("P", "mm", "A4", "")
+    pdf.AddPage()
+    pdf.SetFont("Arial", "B", 12)
+    pdf.Cell(40, 10, "Devotee List Report")
+    pdf.Ln(10)
+
+    pdf.SetFont("Arial", "B", 10)
+    headers := []string{"User ID", "Devotee Name", "Devotee Status", "Joined At", "Created At"}
+    widths := []float64{30, 50, 30, 30, 40}
+
+    for i, h := range headers {
+        pdf.CellFormat(widths[i], 7, h, "1", 0, "C", false, 0, "")
+    }
+    pdf.Ln(-1)
+
+    pdf.SetFont("Arial", "", 9)
+    for _, r := range rows {
+        pdf.CellFormat(widths[0], 6, r.UserID, "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[1], 6, r.DevoteeName, "1", 0, "L", false, 0, "")
+        pdf.CellFormat(widths[2], 6, r.DevoteeStatus, "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[3], 6, r.JoinedAt.Format("2006-01-02 15:04:05"), "1", 0, "C", false, 0, "")
+        pdf.CellFormat(widths[4], 6, r.CreatedAt.Format("2006-01-02 15:04:05"), "1", 0, "C", false, 0, "")
+        pdf.Ln(-1)
+    }
+
+    var buf bytes.Buffer
+    if err := pdf.Output(&buf); err != nil {
+        return nil, "", "", err
+    }
+
+    return buf.Bytes(), "devotee_list_report.pdf", "application/pdf", nil
 }

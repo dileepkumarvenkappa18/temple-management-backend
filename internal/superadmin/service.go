@@ -1093,3 +1093,9 @@ func (s *Service) GetTenantsForSelection(ctx context.Context, userID uint, userR
 		return nil, errors.New("unauthorized: invalid role for tenant selection")
 	}
 }
+
+// GetTenantsWithTempleDetails fetches tenants with their temple details based on role and status
+// GetTenantsWithTempleDetails fetches tenants with their temple details based on role and status
+func (s *Service) GetTenantsWithTempleDetails(ctx context.Context, role, status string) ([]TenantResponse, error) {
+    return s.repo.GetTenantsWithTempleDetails(ctx, role, status)
+}

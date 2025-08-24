@@ -16,6 +16,9 @@ type ReportRepository interface {
     GetTemplesRegistered(entityIDs []uint, start, end time.Time, status string) ([]TempleRegisteredReportRow, error)
     GetDevoteeBirthdays(entityIDs []uint, start, end time.Time) ([]DevoteeBirthdayReportRow, error)
     GetDonations(entityIDs []uint, start, end time.Time) ([]DonationReportRow, error) // New method for donations
+	GetDevoteeList(entityIDs []uint, start, end time.Time, status string) ([]DevoteeListReportRow, error)
+
+GetDevoteeProfiles(entityIDs []uint, start, end time.Time, status string) ([]DevoteeProfileReportRow, error)
 }
 
 type repository struct {
@@ -191,4 +194,78 @@ func (r *repository) GetDevoteeBirthdays(entityIDs []uint, start, end time.Time)
 		Scan(&rows).Error
 
 	return rows, err
+}
+
+func (r *repository) GetDevoteeList(entityIDs []uint, start, end time.Time, status string) ([]DevoteeListReportRow, error) {
+    var rows []DevoteeListReportRow
+    if len(entityIDs) == 0 {
+        return rows, nil
+    }
+
+    query := r.db.Table("users u").
+        Select(`
+            u.id as user_id,
+            u.full_name as devotee_name,
+            uem.joined_at,
+            uem.status as devotee_status,
+            u.created_at
+        `).
+        Joins("INNER JOIN user_entity_memberships uem ON u.id = uem.user_id").
+        Where("uem.entity_id IN ?", entityIDs)
+
+    if status != "" {
+        query = query.Where("uem.status = ?", status)
+    }
+
+    query = query.Where("uem.joined_at BETWEEN ? AND ?", start, end).
+        Order("uem.joined_at DESC")
+
+    err := query.Scan(&rows).Error
+
+    return rows, err
+}
+
+// ===============================
+// New method for Devotee Profile Report
+// ===============================
+
+func (r *repository) GetDevoteeProfiles(entityIDs []uint, start, end time.Time, status string) ([]DevoteeProfileReportRow, error) {
+    var rows []DevoteeProfileReportRow
+    if len(entityIDs) == 0 {
+        return rows, nil
+    }
+
+    query := r.db.Table("users u").
+        Select(`
+            u.id as user_id,
+            u.full_name,
+            dp.dob,
+            dp.gender,
+            CONCAT(
+                COALESCE(dp.street_address, ''), ' ',
+                COALESCE(dp.city, ''), ' ',
+                COALESCE(dp.state, ''), ' ',
+                COALESCE(dp.country, ''), ' ',
+                COALESCE(dp.pincode, '')
+            ) as full_address,
+            COALESCE(dp.gotra, '') as gotra,
+            COALESCE(dp.nakshatra, '') as nakshatra,
+            COALESCE(dp.rashi, '') as rashi,
+            COALESCE(dp.lagna, '') as lagna
+        `).
+        Joins("INNER JOIN user_entity_memberships uem ON u.id = uem.user_id").
+        Joins("INNER JOIN devotee_profiles dp ON u.id = dp.user_id").
+        Where("u.role_id = ?", 3).
+        Where("uem.entity_id IN ?", entityIDs)
+
+    if status != "" {
+        query = query.Where("uem.status = ?", status)
+    }
+
+    query = query.Where("uem.joined_at BETWEEN ? AND ?", start, end).
+        Order("u.full_name ASC")
+
+    err := query.Scan(&rows).Error
+
+    return rows, err
 }

@@ -8,7 +8,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
-	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/middleware"
 )
 
@@ -30,27 +29,21 @@ func NewHandler(svc ReportService, repo ReportRepository, auditSvc auditlog.Serv
 
 // GetActivities handles requests for the activities report
 func (h *Handler) GetActivities(c *gin.Context) {
-	// get logged-in user (AuthMiddleware already ran)
-	userVal, ok := c.Get("user")
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
 		return
 	}
-	user, ok := userVal.(auth.User)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user object"})
-		return
-	}
+	ctx := accessContext.(middleware.AccessContext)
 
 	// Get IP address from context (set by AuditMiddleware)
 	ip := middleware.GetIPFromContext(c)
 
-	// reports/handler.go - in GetActivities method
-	entityParam := c.Param("id") // instead of "entity_id"
-	// either "all" or numeric id
+	entityParam := c.Param("id") // either "all" or numeric id
 	reportType := c.Query("type")
 	if reportType == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "type query param required: events|sevas|bookings"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "type query param required: events|sevas|bookings|donations"})
 		return
 	}
 	dateRange := c.Query("date_range")
@@ -77,20 +70,32 @@ func (h *Handler) GetActivities(c *gin.Context) {
 		Format:    format,
 	}
 
-	// resolve entity IDs: if "all" -> fetch user's entities; else validate single entity ownership
+	// resolve entity IDs based on access context
 	var entityIDs []string
 	if strings.ToLower(entityParam) == "all" {
-		ids, err := h.repo.GetEntitiesByTenant(user.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
-			return
-		}
-		if len(ids) == 0 {
-			c.JSON(http.StatusOK, gin.H{"data": ReportData{}})
-			return
-		}
-		for _, id := range ids {
-			entityIDs = append(entityIDs, fmt.Sprint(id))
+		// For "all", get accessible entities based on user role
+		if ctx.RoleName == "templeadmin" {
+			// Templeadmin can access their own entities
+			ids, err := h.repo.GetEntitiesByTenant(ctx.UserID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
+				return
+			}
+			if len(ids) == 0 {
+				c.JSON(http.StatusOK, gin.H{"data": ReportData{}})
+				return
+			}
+			for _, id := range ids {
+				entityIDs = append(entityIDs, fmt.Sprint(id))
+			}
+		} else {
+			// standarduser/monitoringuser can only access their assigned entity
+			accessibleEntityID := ctx.GetAccessibleEntityID()
+			if accessibleEntityID == nil {
+				c.JSON(http.StatusForbidden, gin.H{"error": "no accessible entity"})
+				return
+			}
+			entityIDs = append(entityIDs, fmt.Sprint(*accessibleEntityID))
 		}
 	} else {
 		// parse numeric entity id
@@ -99,20 +104,9 @@ func (h *Handler) GetActivities(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entity_id path param"})
 			return
 		}
-		// verify user owns this entity (fetch user's entities and check presence)
-		ids, err := h.repo.GetEntitiesByTenant(user.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate entity"})
-			return
-		}
-		owned := false
-		for _, id := range ids {
-			if id == uint(eid) {
-				owned = true
-				break
-			}
-		}
-		if !owned {
+		
+		// verify user can access this specific entity
+		if !h.canAccessEntity(ctx, uint(eid)) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized for this entity"})
 			return
 		}
@@ -136,14 +130,14 @@ func (h *Handler) GetActivities(c *gin.Context) {
 			"entity_ids": req.EntityIDs,
 			"date_range": req.DateRange,
 		}
-		h.auditSvc.LogAction(c.Request.Context(), &user.ID, nil, "TEMPLE_ACTIVITIES_REPORT_VIEWED", details, ip, "success")
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "TEMPLE_ACTIVITIES_REPORT_VIEWED", details, ip, "success")
 		
 		c.JSON(http.StatusOK, data)
 		return
 	}
 
 	// Else export file (format present)
-	bytes, fname, mime, err := h.service.ExportActivities(c.Request.Context(), req, &user.ID, ip)
+	bytes, fname, mime, err := h.service.ExportActivities(c.Request.Context(), req, &ctx.UserID, ip)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -154,17 +148,13 @@ func (h *Handler) GetActivities(c *gin.Context) {
 }
 
 func (h *Handler) GetTempleRegisteredReport(c *gin.Context) {
-	// get logged-in user (AuthMiddleware already ran)
-	userVal, ok := c.Get("user")
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
 		return
 	}
-	user, ok := userVal.(auth.User)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user object"})
-		return
-	}
+	ctx := accessContext.(middleware.AccessContext)
 
 	// Get IP address from context (set by AuditMiddleware)
 	ip := middleware.GetIPFromContext(c)
@@ -186,20 +176,29 @@ func (h *Handler) GetTempleRegisteredReport(c *gin.Context) {
 		return
 	}
 
-	// Resolve entity IDs same way as in GetActivities
+	// Resolve entity IDs based on access context
 	var entityIDs []string
 	if strings.ToLower(entityParam) == "all" {
-		ids, err := h.repo.GetEntitiesByTenant(user.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
-			return
-		}
-		if len(ids) == 0 {
-			c.JSON(http.StatusOK, gin.H{"data": []TempleRegisteredReportRow{}})
-			return
-		}
-		for _, id := range ids {
-			entityIDs = append(entityIDs, fmt.Sprint(id))
+		if ctx.RoleName == "templeadmin" {
+			ids, err := h.repo.GetEntitiesByTenant(ctx.UserID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
+				return
+			}
+			if len(ids) == 0 {
+				c.JSON(http.StatusOK, gin.H{"data": []TempleRegisteredReportRow{}})
+				return
+			}
+			for _, id := range ids {
+				entityIDs = append(entityIDs, fmt.Sprint(id))
+			}
+		} else {
+			accessibleEntityID := ctx.GetAccessibleEntityID()
+			if accessibleEntityID == nil {
+				c.JSON(http.StatusForbidden, gin.H{"error": "no accessible entity"})
+				return
+			}
+			entityIDs = append(entityIDs, fmt.Sprint(*accessibleEntityID))
 		}
 	} else {
 		eid, err := strconv.ParseUint(entityParam, 10, 64)
@@ -207,19 +206,8 @@ func (h *Handler) GetTempleRegisteredReport(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entity_id path param"})
 			return
 		}
-		ids, err := h.repo.GetEntitiesByTenant(user.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate entity"})
-			return
-		}
-		owned := false
-		for _, id := range ids {
-			if id == uint(eid) {
-				owned = true
-				break
-			}
-		}
-		if !owned {
+		
+		if !h.canAccessEntity(ctx, uint(eid)) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized for this entity"})
 			return
 		}
@@ -260,14 +248,14 @@ func (h *Handler) GetTempleRegisteredReport(c *gin.Context) {
 			"status":     status,
 			"date_range": dateRange,
 		}
-		h.auditSvc.LogAction(c.Request.Context(), &user.ID, nil, "TEMPLE_REGISTER_REPORT_VIEWED", details, ip, "success")
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "TEMPLE_REGISTER_REPORT_VIEWED", details, ip, "success")
 		
 		c.JSON(http.StatusOK, data)
 		return
 	}
 
 	// Export file (format is present)
-	bytes, fname, mime, err := h.service.ExportTempleRegisteredReport(c.Request.Context(), req, entityIDs, reportType, &user.ID, ip)
+	bytes, fname, mime, err := h.service.ExportTempleRegisteredReport(c.Request.Context(), req, entityIDs, reportType, &ctx.UserID, ip)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -278,17 +266,13 @@ func (h *Handler) GetTempleRegisteredReport(c *gin.Context) {
 }
 
 func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
-	// get logged-in user (AuthMiddleware already ran)
-	userVal, ok := c.Get("user")
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
 		return
 	}
-	user, ok := userVal.(auth.User)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user object"})
-		return
-	}
+	ctx := accessContext.(middleware.AccessContext)
 
 	// Get IP address from context (set by AuditMiddleware)
 	ip := middleware.GetIPFromContext(c)
@@ -309,20 +293,29 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 		return
 	}
 
-	// Resolve entity IDs same way as in other handlers
+	// Resolve entity IDs based on access context
 	var entityIDs []string
 	if strings.ToLower(entityParam) == "all" {
-		ids, err := h.repo.GetEntitiesByTenant(user.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
-			return
-		}
-		if len(ids) == 0 {
-			c.JSON(http.StatusOK, gin.H{"data": []DevoteeBirthdayReportRow{}})
-			return
-		}
-		for _, id := range ids {
-			entityIDs = append(entityIDs, fmt.Sprint(id))
+		if ctx.RoleName == "templeadmin" {
+			ids, err := h.repo.GetEntitiesByTenant(ctx.UserID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
+				return
+			}
+			if len(ids) == 0 {
+				c.JSON(http.StatusOK, gin.H{"data": []DevoteeBirthdayReportRow{}})
+				return
+			}
+			for _, id := range ids {
+				entityIDs = append(entityIDs, fmt.Sprint(id))
+			}
+		} else {
+			accessibleEntityID := ctx.GetAccessibleEntityID()
+			if accessibleEntityID == nil {
+				c.JSON(http.StatusForbidden, gin.H{"error": "no accessible entity"})
+				return
+			}
+			entityIDs = append(entityIDs, fmt.Sprint(*accessibleEntityID))
 		}
 	} else {
 		eid, err := strconv.ParseUint(entityParam, 10, 64)
@@ -330,19 +323,8 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entity_id path param"})
 			return
 		}
-		ids, err := h.repo.GetEntitiesByTenant(user.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate entity"})
-			return
-		}
-		owned := false
-		for _, id := range ids {
-			if id == uint(eid) {
-				owned = true
-				break
-			}
-		}
-		if !owned {
+		
+		if !h.canAccessEntity(ctx, uint(eid)) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized for this entity"})
 			return
 		}
@@ -381,14 +363,14 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 			"entity_ids": entityIDs,
 			"date_range": dateRange,
 		}
-		h.auditSvc.LogAction(c.Request.Context(), &user.ID, nil, "DEVOTEE_BIRTHDAYS_REPORT_VIEWED", details, ip, "success")
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "DEVOTEE_BIRTHDAYS_REPORT_VIEWED", details, ip, "success")
 		
 		c.JSON(http.StatusOK, data)
 		return
 	}
 
 	// Export file (format is present)
-	bytes, fname, mime, err := h.service.ExportDevoteeBirthdaysReport(c.Request.Context(), req, entityIDs, reportType, &user.ID, ip)
+	bytes, fname, mime, err := h.service.ExportDevoteeBirthdaysReport(c.Request.Context(), req, entityIDs, reportType, &ctx.UserID, ip)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -396,4 +378,249 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
 	c.Data(http.StatusOK, mime, bytes)
+}
+
+// GetDevoteeListReport handles requests for devotee list report
+func (h *Handler) GetDevoteeListReport(c *gin.Context) {
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+
+	ip := middleware.GetIPFromContext(c)
+
+	entityParam := c.Param("id") // "all" or entity id
+
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	status := c.Query("status") // active|inactive|blocked etc
+	format := c.Query("format")
+
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var entityIDs []string
+	if strings.ToLower(entityParam) == "all" {
+		if ctx.RoleName == "templeadmin" {
+			ids, err := h.repo.GetEntitiesByTenant(ctx.UserID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
+				return
+			}
+			if len(ids) == 0 {
+				c.JSON(http.StatusOK, gin.H{"data": []DevoteeListReportRow{}})
+				return
+			}
+			for _, id := range ids {
+				entityIDs = append(entityIDs, fmt.Sprint(id))
+			}
+		} else {
+			accessibleEntityID := ctx.GetAccessibleEntityID()
+			if accessibleEntityID == nil {
+				c.JSON(http.StatusForbidden, gin.H{"error": "no accessible entity"})
+				return
+			}
+			entityIDs = append(entityIDs, fmt.Sprint(*accessibleEntityID))
+		}
+	} else {
+		eid, err := strconv.ParseUint(entityParam, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entity_id path param"})
+			return
+		}
+		
+		if !h.canAccessEntity(ctx, uint(eid)) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized for this entity"})
+			return
+		}
+		entityIDs = append(entityIDs, fmt.Sprint(eid))
+	}
+
+	req := DevoteeListReportRequest{
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Status:    status,
+		Format:    format,
+		EntityID:  entityParam,
+	}
+
+	var reportType string
+	switch format {
+	case "excel":
+		reportType = ReportTypeDevoteeListExcel
+	case "pdf":
+		reportType = ReportTypeDevoteeListPDF
+	case "csv":
+		reportType = ReportTypeDevoteeListCSV
+	default:
+		data, err := h.service.GetDevoteeListReport(req, entityIDs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		details := map[string]interface{}{
+			"report_type": "devotee_list",
+			"format":     "json_preview",
+			"entity_ids": entityIDs,
+			"status":     status,
+			"date_range": dateRange,
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "DEVOTEE_LIST_REPORT_VIEWED", details, ip, "success")
+		c.JSON(http.StatusOK, data)
+		return
+	}
+
+	bytes, fname, mime, err := h.service.ExportDevoteeListReport(c.Request.Context(), req, entityIDs, reportType, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
+}
+
+// GetDevoteeProfileReport handles requests for devotee profile report
+func (h *Handler) GetDevoteeProfileReport(c *gin.Context) {
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+
+	ip := middleware.GetIPFromContext(c)
+
+	entityParam := c.Param("id") // "all" or entity id
+
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	status := c.Query("status") // active|inactive|blocked etc
+	format := c.Query("format")
+
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var entityIDs []string
+	if strings.ToLower(entityParam) == "all" {
+		if ctx.RoleName == "templeadmin" {
+			ids, err := h.repo.GetEntitiesByTenant(ctx.UserID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
+				return
+			}
+			if len(ids) == 0 {
+				c.JSON(http.StatusOK, gin.H{"data": []DevoteeProfileReportRow{}})
+				return
+			}
+			for _, id := range ids {
+				entityIDs = append(entityIDs, fmt.Sprint(id))
+			}
+		} else {
+			accessibleEntityID := ctx.GetAccessibleEntityID()
+			if accessibleEntityID == nil {
+				c.JSON(http.StatusForbidden, gin.H{"error": "no accessible entity"})
+				return
+			}
+			entityIDs = append(entityIDs, fmt.Sprint(*accessibleEntityID))
+		}
+	} else {
+		eid, err := strconv.ParseUint(entityParam, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entity_id path param"})
+			return
+		}
+		
+		if !h.canAccessEntity(ctx, uint(eid)) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized for this entity"})
+			return
+		}
+		entityIDs = append(entityIDs, fmt.Sprint(eid))
+	}
+
+	req := DevoteeProfileReportRequest{
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Status:    status,
+		Format:    format,
+		EntityID:  entityParam,
+	}
+
+	var reportType string
+	switch format {
+	case "excel":
+		reportType = ReportTypeDevoteeProfileExcel
+	case "pdf":
+		reportType = ReportTypeDevoteeProfilePDF
+	case "csv":
+		reportType = ReportTypeDevoteeProfileCSV
+	default:
+		data, err := h.service.GetDevoteeProfileReport(req, entityIDs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		details := map[string]interface{}{
+			"report_type": "devotee_profile",
+			"format":     "json_preview",
+			"entity_ids": entityIDs,
+			"status":     status,
+			"date_range": dateRange,
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "DEVOTEE_PROFILE_REPORT_VIEWED", details, ip, "success")
+		c.JSON(http.StatusOK, data)
+		return
+	}
+
+	bytes, fname, mime, err := h.service.ExportDevoteeProfileReport(c.Request.Context(), req, entityIDs, reportType, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
+}
+
+// canAccessEntity checks if the user can access a specific entity
+func (h *Handler) canAccessEntity(ctx middleware.AccessContext, entityID uint) bool {
+	if ctx.RoleName == "templeadmin" {
+		// Templeadmin can access entities they created
+		ids, err := h.repo.GetEntitiesByTenant(ctx.UserID)
+		if err != nil {
+			return false
+		}
+		for _, id := range ids {
+			if id == entityID {
+				return true
+			}
+		}
+		return false
+	} else {
+		// standarduser/monitoringuser can only access their assigned entity
+		accessibleEntityID := ctx.GetAccessibleEntityID()
+		return accessibleEntityID != nil && *accessibleEntityID == entityID
+	}
 }

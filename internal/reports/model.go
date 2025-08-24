@@ -39,6 +39,18 @@ const (
 	// Donation report types
 	ReportTypeDonationsExcel = "donations-excel"
 	ReportTypeDonationsPDF   = "donations-pdf"
+
+	// Devotee list report types
+	ReportTypeDevoteeList        = "devotee-list"
+    ReportTypeDevoteeListCSV        = "devotee-list-csv"
+    ReportTypeDevoteeListExcel      = "devotee-list-excel"
+    ReportTypeDevoteeListPDF        = "devotee-list-pdf"
+
+    // Devotee profile report types - NEW
+    ReportTypeDevoteeProfile        = "devotee-profile"
+    ReportTypeDevoteeProfileCSV     = "devotee-profile-csv"
+    ReportTypeDevoteeProfileExcel   = "devotee-profile-excel"
+    ReportTypeDevoteeProfilePDF     = "devotee-profile-pdf"
 )
 
 // ActivitiesReportRequest represents request parameters for temple activities report
@@ -60,6 +72,8 @@ type ReportData struct {
     Donations        []DonationReportRow        `json:"donations,omitempty"` // New field for donations
     TemplesRegistered []TempleRegisteredReportRow `json:"temples_registered,omitempty"`
     DevoteeBirthdays []DevoteeBirthdayReportRow `json:"devotee_birthdays,omitempty"`
+	DevoteeList        []DevoteeListReportRow      `json:"devotee_list,omitempty"`
+    DevoteeProfiles    []DevoteeProfileReportRow   `json:"devotee_profiles,omitempty"` // NEW
 }
 
 // EventReportRow represents a single row in the events report
@@ -160,4 +174,44 @@ type DevoteeBirthdayReportRow struct {
 	MemberSince  time.Time `json:"member_since"`
 }
 
-// Removed the GetDateRange function from here to avoid duplication
+// DevoteeListReportRequest represents request parameters for devotee list report
+type DevoteeListReportRequest struct {
+    EntityID  string    `json:"entity_id"`
+    DateRange string    `json:"date_range"`
+    StartDate time.Time `json:"start_date"`
+    EndDate   time.Time `json:"end_date"`
+    Status    string    `json:"status"` // active, inactive, blocked, etc.
+    Format    string    `json:"format"`
+}
+
+// DevoteeListReportRow represents a single row in the devotee list report
+type DevoteeListReportRow struct {
+    UserID        string    `json:"user_id"`
+    DevoteeName   string    `json:"devotee_name"`
+    JoinedAt      time.Time `json:"joined_at"`
+    DevoteeStatus string    `json:"devotee_status"`
+    CreatedAt     time.Time `json:"created_at"`
+}
+
+// DevoteeProfileReportRequest represents request parameters for devotee profile report - NEW
+type DevoteeProfileReportRequest struct {
+    EntityID  string    `json:"entity_id"`
+    DateRange string    `json:"date_range"`
+    StartDate time.Time `json:"start_date"`
+    EndDate   time.Time `json:"end_date"`
+    Status    string    `json:"status"` // active, inactive, blocked, etc.
+    Format    string    `json:"format"`
+}
+
+// DevoteeProfileReportRow represents a single row in the devotee profile report - NEW
+type DevoteeProfileReportRow struct {
+    UserID      string    `json:"user_id"`
+    FullName    string    `json:"full_name"`
+    DOB         time.Time `json:"dob"`
+    Gender      string    `json:"gender"`
+    FullAddress string    `json:"full_address"`
+    Gotra       string    `json:"gotra"`
+    Nakshatra   string    `json:"nakshatra"`
+    Rashi       string    `json:"rashi"`
+    Lagna       string    `json:"lagna"`
+}

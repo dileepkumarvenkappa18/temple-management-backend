@@ -15,6 +15,12 @@ type ReportService interface {
 	ExportTempleRegisteredReport(ctx context.Context, req TempleRegisteredReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error)
 	GetDevoteeBirthdaysReport(req DevoteeBirthdaysReportRequest, entityIDs []string) ([]DevoteeBirthdayReportRow, error)
 	ExportDevoteeBirthdaysReport(ctx context.Context, req DevoteeBirthdaysReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error)
+	GetDevoteeListReport(req DevoteeListReportRequest, entityIDs []string) ([]DevoteeListReportRow, error)
+    ExportDevoteeListReport(ctx context.Context, req DevoteeListReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error)
+    
+    // New methods for devotee profile report
+    GetDevoteeProfileReport(req DevoteeProfileReportRequest, entityIDs []string) ([]DevoteeProfileReportRow, error)
+    ExportDevoteeProfileReport(ctx context.Context, req DevoteeProfileReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error)
 }
 
 type reportService struct {
@@ -212,4 +218,102 @@ func (s *reportService) ExportDevoteeBirthdaysReport(ctx context.Context, req De
 	s.auditSvc.LogAction(ctx, userID, nil, "DEVOTEE_BIRTHDAYS_REPORT_DOWNLOADED", details, ip, "success")
 
 	return bytes, filename, mimeType, nil
+}
+
+func (s *reportService) GetDevoteeListReport(req DevoteeListReportRequest, entityIDs []string) ([]DevoteeListReportRow, error) {
+    return s.repo.GetDevoteeList(convertUintSlice(entityIDs), req.StartDate, req.EndDate, req.Status)
+}
+
+func (s *reportService) ExportDevoteeListReport(ctx context.Context, req DevoteeListReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error) {
+    rows, err := s.GetDevoteeListReport(req, entityIDs)
+    if err != nil {
+        details := map[string]interface{}{
+            "report_type": "devotee_list",
+            "format":      req.Format,
+            "error":       err.Error(),
+            "status":      req.Status,
+        }
+        s.auditSvc.LogAction(ctx, userID, nil, "DEVOTEE_LIST_REPORT_DOWNLOAD_FAILED", details, ip, "failure")
+        return nil, "", "", err
+    }
+
+    data := ReportData{
+        DevoteeList: rows,
+    }
+
+    bytes, filename, mimeType, err := s.exporter.Export(reportType, req.Format, data)
+    if err != nil {
+        details := map[string]interface{}{
+            "report_type": "devotee_list",
+            "format":      req.Format,
+            "error":       err.Error(),
+            "status":      req.Status,
+        }
+        s.auditSvc.LogAction(ctx, userID, nil, "DEVOTEE_LIST_REPORT_DOWNLOAD_FAILED", details, ip, "failure")
+        return nil, "", "", err
+    }
+
+    details := map[string]interface{}{
+        "report_type":  "devotee_list",
+        "format":       req.Format,
+        "filename":     filename,
+        "entity_ids":   entityIDs,
+        "status":       req.Status,
+        "date_range":   req.DateRange,
+        "record_count": len(rows),
+    }
+    s.auditSvc.LogAction(ctx, userID, nil, "DEVOTEE_LIST_REPORT_DOWNLOADED", details, ip, "success")
+
+    return bytes, filename, mimeType, nil
+}
+
+// ===============================
+// New Devotee Profile Report Methods
+// ===============================
+
+func (s *reportService) GetDevoteeProfileReport(req DevoteeProfileReportRequest, entityIDs []string) ([]DevoteeProfileReportRow, error) {
+    return s.repo.GetDevoteeProfiles(convertUintSlice(entityIDs), req.StartDate, req.EndDate, req.Status)
+}
+
+func (s *reportService) ExportDevoteeProfileReport(ctx context.Context, req DevoteeProfileReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error) {
+    rows, err := s.GetDevoteeProfileReport(req, entityIDs)
+    if err != nil {
+        details := map[string]interface{}{
+            "report_type": "devotee_profile",
+            "format":      req.Format,
+            "error":       err.Error(),
+            "status":      req.Status,
+        }
+        s.auditSvc.LogAction(ctx, userID, nil, "DEVOTEE_PROFILE_REPORT_DOWNLOAD_FAILED", details, ip, "failure")
+        return nil, "", "", err
+    }
+
+    data := ReportData{
+        DevoteeProfiles: rows,
+    }
+
+    bytes, filename, mimeType, err := s.exporter.Export(reportType, req.Format, data)
+    if err != nil {
+        details := map[string]interface{}{
+            "report_type": "devotee_profile",
+            "format":      req.Format,
+            "error":       err.Error(),
+            "status":      req.Status,
+        }
+        s.auditSvc.LogAction(ctx, userID, nil, "DEVOTEE_PROFILE_REPORT_DOWNLOAD_FAILED", details, ip, "failure")
+        return nil, "", "", err
+    }
+
+    details := map[string]interface{}{
+        "report_type":  "devotee_profile",
+        "format":       req.Format,
+        "filename":     filename,
+        "entity_ids":   entityIDs,
+        "status":       req.Status,
+        "date_range":   req.DateRange,
+        "record_count": len(rows),
+    }
+    s.auditSvc.LogAction(ctx, userID, nil, "DEVOTEE_PROFILE_REPORT_DOWNLOADED", details, ip, "success")
+
+    return bytes, filename, mimeType, nil
 }

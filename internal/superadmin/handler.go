@@ -388,8 +388,7 @@ func (h *Handler) CreateRole(c *gin.Context) {
 
     adminID := c.GetUint("userID")
     ip := middleware.GetIPFromContext(c)
-
-    err := h.service.CreateRole(c.Request.Context(), &req, adminID, ip)
+	err := h.service.CreateRole(c.Request.Context(), &req, adminID, ip)
     if err != nil {
         if strings.Contains(err.Error(), "already exists") {
             c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
@@ -631,3 +630,42 @@ func (h *Handler) GetTenantsForSelection(c *gin.Context) {
 		"total": len(tenants),
 	})
 }
+
+// GET /superadmin/tenants
+func (h *Handler) GetTenants(c *gin.Context) {
+    role := c.Query("role")
+    status := c.Query("status")
+    
+    // Use the enhanced method when role is templeadmin
+    if role == "templeadmin" {
+        tenants, err := h.service.GetTenantsWithTempleDetails(c.Request.Context(), role, status)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+            return
+        }
+        
+        c.JSON(http.StatusOK, gin.H{"data": tenants})
+        return
+    }
+    
+    // Fall back to GetTenantsWithFilters for other roles with default pagination
+    limit := 10
+    page := 1
+    tenants, total, err := h.service.GetTenantsWithFilters(c.Request.Context(), status, limit, page)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tenants"})
+        return
+    }
+    
+    c.JSON(http.StatusOK, gin.H{
+        "data":  tenants,
+        "total": total,
+        "page":  page,
+        "limit": limit,
+    })
+}
+
+
+
+
+
