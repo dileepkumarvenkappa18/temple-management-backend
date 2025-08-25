@@ -108,6 +108,7 @@ func (s *service) Register(in RegisterInput) error {
 		RoleID:       role.ID,
 		Status:       status,
 		Phone:        phone,
+		CreatedBy: "system",
 	}
 
 	if err := s.repo.Create(user); err != nil {

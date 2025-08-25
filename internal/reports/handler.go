@@ -624,3 +624,130 @@ func (h *Handler) canAccessEntity(ctx middleware.AccessContext, entityID uint) b
 		return accessibleEntityID != nil && *accessibleEntityID == entityID
 	}
 }
+
+// GetAuditLogsReport handles requests for audit logs report
+func (h *Handler) GetAuditLogsReport(c *gin.Context) {
+    // 1️⃣ Get access context from middleware
+    accessContext, exists := c.Get("access_context")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+        return
+    }
+    ctx := accessContext.(middleware.AccessContext)
+
+    // 2️⃣ Get IP address from context
+    ip := middleware.GetIPFromContext(c)
+
+    // 3️⃣ Get request query/path params
+    entityParam := c.Param("id") // "all" or specific entity id
+    action := c.Query("action")
+    status := c.Query("status")
+    dateRange := c.Query("date_range")
+    if dateRange == "" {
+        dateRange = DateRangeWeekly // default weekly
+    }
+    startDateStr := c.Query("start_date")
+    endDateStr := c.Query("end_date")
+    format := c.Query("format") // json preview, csv, excel, pdf
+
+    // 4️⃣ Determine start and end dates
+    start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+
+    // 5️⃣ Resolve entity IDs based on access context
+    var entityIDs []string
+    if strings.ToLower(entityParam) == "all" {
+        if ctx.RoleName == "templeadmin" {
+            ids, err := h.repo.GetEntitiesByTenant(ctx.UserID)
+            if err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
+                return
+            }
+            if len(ids) == 0 {
+                c.JSON(http.StatusOK, gin.H{"data": []AuditLogReportRow{}})
+                return
+            }
+            for _, id := range ids {
+                entityIDs = append(entityIDs, fmt.Sprint(id))
+            }
+        } else {
+            accessibleEntityID := ctx.GetAccessibleEntityID()
+            if accessibleEntityID == nil {
+                c.JSON(http.StatusForbidden, gin.H{"error": "no accessible entity"})
+                return
+            }
+            entityIDs = append(entityIDs, fmt.Sprint(*accessibleEntityID))
+        }
+    } else {
+        eid, err := strconv.ParseUint(entityParam, 10, 64)
+        if err != nil {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entity_id path param"})
+            return
+        }
+
+        if !h.canAccessEntity(ctx, uint(eid)) {
+            c.JSON(http.StatusForbidden, gin.H{"error": "not authorized for this entity"})
+            return
+        }
+        entityIDs = append(entityIDs, fmt.Sprint(eid))
+    }
+
+    // 6️⃣ Build the request struct
+    req := AuditLogReportRequest{
+        EntityID:  entityParam,
+        Action:    action,
+        Status:    status,
+        DateRange: dateRange,
+        StartDate: start,
+        EndDate:   end,
+        Format:    format,
+    }
+
+    // 7️⃣ Handle JSON preview
+    if format == "" {
+        data, err := h.service.GetAuditLogsReport(req, entityIDs)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+            return
+        }
+
+        details := map[string]interface{}{
+            "report_type": "audit_logs",
+            "format":      "json_preview",
+            "entity_ids":  entityIDs,
+            "action":      action,
+            "status":      status,
+            "date_range":  dateRange,
+        }
+        h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "AUDIT_LOGS_REPORT_VIEWED", details, ip, "success")
+        c.JSON(http.StatusOK, data)
+        return
+    }
+
+    // 8️⃣ Export file logic
+    var reportType string
+    switch format {
+    case "excel":
+        reportType = ReportTypeAuditLogsExcel
+    case "pdf":
+        reportType = ReportTypeAuditLogsPDF
+    case "csv":
+        reportType = ReportTypeAuditLogsCSV
+    default:
+        c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported export format"})
+        return
+    }
+
+    bytes, fname, mime, err := h.service.ExportAuditLogsReport(c.Request.Context(), req, entityIDs, reportType, &ctx.UserID, ip)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+
+    // 9️⃣ Send the file
+    c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+    c.Data(http.StatusOK, mime, bytes)
+}

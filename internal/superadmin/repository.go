@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 	"errors"
+	"fmt"
 	
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
@@ -895,4 +896,39 @@ func (r *Repository) GetTenantsWithTempleDetails(ctx context.Context, role, stat
 	}
 	
 	return responses, nil
+}
+// BulkCreateUsers inserts multiple users safely with better error handling
+func (r *Repository) BulkCreateUsers(ctx context.Context, users []auth.User) error {
+	if len(users) == 0 {
+		return nil
+	}
+
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var createdCount int
+		
+		for i, user := range users {
+			// Check if email already exists
+			var existingUser auth.User
+			err := tx.Where("email = ?", user.Email).First(&existingUser).Error
+			if err == nil {
+				// User exists, skip
+				fmt.Printf("User with email %s already exists, skipping\n", user.Email)
+				continue
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				// Database error
+				return fmt.Errorf("error checking existing user %s: %v", user.Email, err)
+			}
+
+			// Create the user
+			if err := tx.Create(&user).Error; err != nil {
+				return fmt.Errorf("error creating user %d (%s): %v", i+1, user.Email, err)
+			}
+			
+			createdCount++
+			fmt.Printf("Successfully created user: %s\n", user.Email)
+		}
+		
+		fmt.Printf("Transaction completed. Created %d users out of %d\n", createdCount, len(users))
+		return nil
+	})
 }

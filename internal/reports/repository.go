@@ -19,6 +19,7 @@ type ReportRepository interface {
 	GetDevoteeList(entityIDs []uint, start, end time.Time, status string) ([]DevoteeListReportRow, error)
 
 GetDevoteeProfiles(entityIDs []uint, start, end time.Time, status string) ([]DevoteeProfileReportRow, error)
+GetAuditLogs(entityIDs []uint, start, end time.Time, actionTypes []string) ([]AuditLogReportRow, error)
 }
 
 type repository struct {
@@ -267,5 +268,46 @@ func (r *repository) GetDevoteeProfiles(entityIDs []uint, start, end time.Time, 
 
     err := query.Scan(&rows).Error
 
+    return rows, err
+}
+
+// Update your existing GetAuditLogs method in repository.go
+// The SELECT fields need to match your AuditLogReportRow struct
+
+func (r *repository) GetAuditLogs(entityIDs []uint, start, end time.Time, actionTypes []string) ([]AuditLogReportRow, error) {
+    var rows []AuditLogReportRow
+    if len(entityIDs) == 0 {
+        return rows, nil // return empty slice if no entities provided
+    }
+
+    // Build base query - SELECT fields must match AuditLogReportRow struct
+    query := r.db.Table("audit_logs al").
+        Select(`
+            al.id,
+            al.entity_id,
+            e.name AS entity_name,
+            al.user_id,
+            u.full_name AS user_name,
+            COALESCE(ur.name, '') AS user_role,
+            COALESCE(al.table_name, '') AS table_name,
+            COALESCE(al.record_id, '') AS record_id,
+            al.created_at AS timestamp,
+            COALESCE(al.details, '') AS details,
+            al.action,
+            al.created_at
+        `).
+        Joins("LEFT JOIN users u ON al.user_id = u.id").
+        Joins("LEFT JOIN entities e ON al.entity_id = e.id").
+        Joins("LEFT JOIN user_roles ur ON u.role_id = ur.id").
+        Where("al.entity_id IN ?", entityIDs).
+        Where("al.created_at BETWEEN ? AND ?", start, end)
+
+    // Filter by action types if provided
+    if len(actionTypes) > 0 {
+        query = query.Where("al.action IN ?", actionTypes)
+    }
+
+    // Order descending by created_at (latest first)
+    err := query.Order("al.created_at DESC").Scan(&rows).Error
     return rows, err
 }

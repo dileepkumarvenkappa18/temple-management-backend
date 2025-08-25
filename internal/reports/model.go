@@ -51,6 +51,13 @@ const (
     ReportTypeDevoteeProfileCSV     = "devotee-profile-csv"
     ReportTypeDevoteeProfileExcel   = "devotee-profile-excel"
     ReportTypeDevoteeProfilePDF     = "devotee-profile-pdf"
+
+	// Audit log report types
+ReportTypeAuditLogs      = "audit-logs"
+ReportTypeAuditLogsCSV   = "audit-logs-csv"
+ReportTypeAuditLogsExcel = "audit-logs-excel"
+ReportTypeAuditLogsPDF   = "audit-logs-pdf"
+
 )
 
 // ActivitiesReportRequest represents request parameters for temple activities report
@@ -65,15 +72,19 @@ type ActivitiesReportRequest struct {
 }
 
 // ReportData combines all report data types into a single response structure
+// Make sure your ReportData struct includes AuditLogs field
+// Add this to your structs (likely in types.go or service.go)
+
 type ReportData struct {
-    Events           []EventReportRow           `json:"events,omitempty"`
-    Sevas            []SevaReportRow            `json:"sevas,omitempty"`
-    Bookings         []SevaBookingReportRow     `json:"bookings,omitempty"`
-    Donations        []DonationReportRow        `json:"donations,omitempty"` // New field for donations
+    Events            []EventReportRow            `json:"events,omitempty"`
+    Sevas             []SevaReportRow             `json:"sevas,omitempty"`
+    Bookings          []SevaBookingReportRow      `json:"bookings,omitempty"`
+    Donations         []DonationReportRow         `json:"donations,omitempty"`
     TemplesRegistered []TempleRegisteredReportRow `json:"temples_registered,omitempty"`
-    DevoteeBirthdays []DevoteeBirthdayReportRow `json:"devotee_birthdays,omitempty"`
-	DevoteeList        []DevoteeListReportRow      `json:"devotee_list,omitempty"`
-    DevoteeProfiles    []DevoteeProfileReportRow   `json:"devotee_profiles,omitempty"` // NEW
+    DevoteeBirthdays  []DevoteeBirthdayReportRow  `json:"devotee_birthdays,omitempty"`
+    DevoteeList       []DevoteeListReportRow      `json:"devotee_list,omitempty"`
+    DevoteeProfiles   []DevoteeProfileReportRow   `json:"devotee_profiles,omitempty"`
+    AuditLogs         []AuditLogReportRow         `json:"audit_logs,omitempty"` // ADD THIS LINE
 }
 
 // EventReportRow represents a single row in the events report
@@ -214,4 +225,32 @@ type DevoteeProfileReportRow struct {
     Nakshatra   string    `json:"nakshatra"`
     Rashi       string    `json:"rashi"`
     Lagna       string    `json:"lagna"`
+}
+
+// AuditLogReportRequest represents request parameters for audit logs report
+type AuditLogReportRequest struct {
+    EntityID  string    `json:"entity_id"`
+    Action    string    `json:"action"`
+    Status    string    `json:"status"`
+    DateRange string    `json:"date_range"`
+    StartDate time.Time `json:"start_date"`
+    EndDate   time.Time `json:"end_date"`
+    Format    string    `json:"format"`
+}
+
+
+
+type AuditLogReportRow struct {
+    ID         uint      `json:"id"`
+    EntityID   uint      `json:"entity_id"`
+    EntityName string    `json:"entity_name"`
+    UserID     *uint     `json:"user_id"`
+    UserName   string    `json:"user_name"`
+    UserRole   string    `json:"user_role"`
+    TableName  string    `json:"table_name"`
+    RecordID   string    `json:"record_id"`
+    Timestamp  time.Time `json:"timestamp"`
+    Details    string    `json:"details"`
+    Action     string    `json:"action"`
+    CreatedAt  time.Time `json:"created_at"`
 }

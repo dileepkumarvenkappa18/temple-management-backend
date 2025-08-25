@@ -8,6 +8,9 @@ import (
 	"time"
 	"fmt"
 	"gorm.io/gorm"
+	"encoding/csv"
+    "io"
+    "mime/multipart"
 
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
@@ -1098,4 +1101,128 @@ func (s *Service) GetTenantsForSelection(ctx context.Context, userID uint, userR
 // GetTenantsWithTempleDetails fetches tenants with their temple details based on role and status
 func (s *Service) GetTenantsWithTempleDetails(ctx context.Context, role, status string) ([]TenantResponse, error) {
     return s.repo.GetTenantsWithTempleDetails(ctx, role, status)
+}
+// BulkUploadUsers parses CSV and inserts users
+func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, adminID uint, ip string) (*BulkUploadResult, error) {
+	reader := csv.NewReader(file)
+	reader.TrimLeadingSpace = true
+
+	// Skip header
+	if _, err := reader.Read(); err != nil {
+		return nil, errors.New("invalid CSV format or missing header")
+	}
+
+	var users []auth.User
+	var successCount, failCount int
+	var errorsList []string
+	totalRows := 0
+
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+
+		totalRows++
+
+		if err != nil {
+			failCount++
+			errorsList = append(errorsList, fmt.Sprintf("row read error: %v", err))
+			continue
+		}
+
+		// Check for 6 columns
+		if len(record) < 6 {
+			failCount++
+			errorsList = append(errorsList, "row missing required fields")
+			continue
+		}
+
+		// Parse CSV columns
+		fullName := strings.TrimSpace(record[0])    // Full Name
+		email := strings.TrimSpace(record[1])       // Email
+		phone := strings.TrimSpace(record[2])       // Phone
+		password := strings.TrimSpace(record[3])    // Password - FIXED: Actually use this
+		roleName := strings.ToLower(strings.TrimSpace(record[4])) // Role
+		status := strings.ToLower(strings.TrimSpace(record[5]))   // Status
+
+		if fullName == "" || email == "" {
+			failCount++
+			errorsList = append(errorsList, fmt.Sprintf("invalid row: %v", record))
+			continue
+		}
+
+		// Validate role
+		role, err := s.repo.FindRoleByName(ctx, roleName)
+		if err != nil || role == nil {
+			failCount++
+			errorsList = append(errorsList, fmt.Sprintf("invalid role for email %s", email))
+			continue
+		}
+
+		// Clean phone
+		cleanPhoneNo, err := cleanPhone(phone)
+		if err != nil {
+			failCount++
+			errorsList = append(errorsList, fmt.Sprintf("invalid phone for email %s", email))
+			continue
+		}
+
+		// FIXED: Handle password properly
+		var passwordHash string
+		if password != "" {
+			// Use password from CSV
+			hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+			if err != nil {
+				failCount++
+				errorsList = append(errorsList, fmt.Sprintf("error hashing password for email %s", email))
+				continue
+			}
+			passwordHash = string(hash)
+		} else {
+			// Use default password only if CSV password is empty
+			hash, _ := bcrypt.GenerateFromPassword([]byte("Default@123"), bcrypt.DefaultCost)
+			passwordHash = string(hash)
+		}
+
+		user := auth.User{
+			FullName:     fullName,
+			Email:        email,
+			Phone:        cleanPhoneNo,
+			RoleID:       role.ID,
+			Status:       status,
+			PasswordHash: passwordHash,
+		}
+
+		users = append(users, user)
+		successCount++
+
+		// Debug logging
+		fmt.Printf("Prepared user for creation: %s (Role ID: %d, Status: %s)\n", email, role.ID, status)
+	}
+
+	// Save to DB
+	fmt.Printf("Attempting to save %d users to database\n", len(users))
+	if len(users) > 0 {
+		if err := s.repo.BulkCreateUsers(ctx, users); err != nil {
+			fmt.Printf("Database save error: %v\n", err)
+			errorsList = append(errorsList, fmt.Sprintf("Database error: %v", err))
+			return &BulkUploadResult{
+				TotalRows:    totalRows,
+				SuccessCount: 0,
+				FailedCount:  totalRows,
+				Errors:       errorsList,
+			}, nil
+		}
+		fmt.Printf("Successfully saved %d users to database\n", len(users))
+	} else {
+		fmt.Printf("No users to save - all rows failed validation\n")
+	}
+
+	return &BulkUploadResult{
+		TotalRows:    totalRows,
+		SuccessCount: successCount,
+		FailedCount:  failCount,
+		Errors:       errorsList,
+	}, nil
 }

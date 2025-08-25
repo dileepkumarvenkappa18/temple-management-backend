@@ -666,6 +666,35 @@ func (h *Handler) GetTenants(c *gin.Context) {
 }
 
 
+// POST /superadmin/users/bulk-upload
+func (h *Handler) BulkUploadUsers(c *gin.Context) {
+    file, err := c.FormFile("file")
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "CSV file is required"})
+        return
+    }
+
+    f, err := file.Open()
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open file"})
+        return
+    }
+    defer f.Close()
+
+    adminID := c.GetUint("userID")
+    ip := middleware.GetIPFromContext(c)
+
+    result, err := h.service.BulkUploadUsers(c.Request.Context(), f, adminID, ip)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.JSON(http.StatusOK, result)
+}
+
+
+
 
 
 

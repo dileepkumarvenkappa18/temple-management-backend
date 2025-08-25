@@ -166,3 +166,22 @@ type TenantResponse struct {
 	Status   string         `json:"status"`
 	Temple   *TempleDetails `json:"temple,omitempty"`
 }
+
+// BulkUserCSV maps each row of the uploaded CSV file.
+type BulkUserCSV struct {
+	FullName string `csv:"Full Name" json:"full_name"`
+	Email    string `csv:"Email" json:"email"`
+	Phone    string `csv:"Phone" json:"phone"`
+	Password string `csv:"Password" json:"password"`
+	Role     string `csv:"Role" json:"role"`
+	Status   string `csv:"Status" json:"status"`
+}
+
+// BulkUploadResult represents response after processing bulk upload.
+type BulkUploadResult struct {
+	
+	TotalRows    int `json:"total_rows"`
+	SuccessCount int `json:"success_count"`
+	FailedCount  int `json:"failed_count"`
+	Errors       []string `json:"errors,omitempty"` // ✅ add this
+}

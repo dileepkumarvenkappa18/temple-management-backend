@@ -40,6 +40,8 @@ type User struct {
 	CreatedAt            time.Time      `json:"created_at"`
 	UpdatedAt            time.Time      `json:"updated_at"`
 	DeletedAt            gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedBy string `gorm:"size:50" json:"created_by"`
+
 }
 
 // TableName overrides table name for User

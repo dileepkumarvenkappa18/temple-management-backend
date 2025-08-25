@@ -159,6 +159,9 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		superadminRoutes.GET("/tenants/assignable", superadminHandler.GetTenantsForAssignment)
 		// Assigns a list of users to a selected temple/tenant
 		superadminRoutes.POST("/users/assign", superadminHandler.AssignUsersToTenant)
+		// Bulk upload users via CSV
+        superadminRoutes.POST("/users/bulk-upload", superadminHandler.BulkUploadUsers)
+
 	}
 
 	protected.GET("/tenants/selection", 
@@ -400,6 +403,7 @@ eventRoutes.Use(middleware.RequireTempleAccess())
 		reportsRoutes.GET("/devotee-birthdays", reportsHandler.GetDevoteeBirthdaysReport)
 		reportsRoutes.GET("/devotee-list", reportsHandler.GetDevoteeListReport)
 		reportsRoutes.GET("/devotee-profile", reportsHandler.GetDevoteeProfileReport)
+		 reportsRoutes.GET("/audit-logs", reportsHandler.GetAuditLogsReport)  // fixed typo
 		
 		// If you want to restrict export functionality to only users with write access, 
 		// you can create a separate group with write access requirement:
