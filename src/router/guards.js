@@ -80,15 +80,8 @@ export function requireAuth(to, from, next) {
     return true;
   }
   
-  // Devotee role check for temple selection redirection
-  if (authStore.isDevotee && to.name !== 'DevoteeTempleSelection' && !to.path.includes('/temple-selection')) {
-    const entityId = to.params.id
-    // Only redirect if not accessing entity specific routes
-    if (!entityId || !to.path.includes(`/entity/${entityId}/`)) {
-      next({ name: 'DevoteeTempleSelection' })
-      return false
-    }
-  }
+  // MODIFIED: Removed the condition that would redirect from temple selection to dashboard
+  // when a devotee has already joined a temple. Now they'll always go to temple selection first.
   
   console.log('✅ Auth guard passed for role:', authStore.userRole);
   next()

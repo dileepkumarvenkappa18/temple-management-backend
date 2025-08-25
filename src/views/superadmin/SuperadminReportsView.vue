@@ -120,10 +120,10 @@
                         class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                       />
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ tenant.name }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ tenant.temple?.name || 'N/A' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ getTenantDisplayName(tenant) }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ getTempleNameDisplay(tenant) }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {{ tenant.temple?.city ? `${tenant.temple.city}, ${tenant.temple.state}` : 'N/A' }}
+                      {{ getLocationDisplay(tenant) }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
                       <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full" 
@@ -234,6 +234,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useSuperAdminStore } from '@/stores/superadmin';
 import { useToast } from '@/composables/useToast';
+import superAdminService from '@/services/superadmin.service';
 
 // Router and stores
 const router = useRouter();
@@ -296,6 +297,9 @@ const reportTypes = [
   }
 ];
 
+// Temple data mapping for tenants
+const tenantTempleMap = ref({});
+
 // Computed properties
 const filteredTenants = computed(() => {
   let tenants = superAdminStore.tenants;
@@ -305,9 +309,9 @@ const filteredTenants = computed(() => {
     const query = searchQuery.value.toLowerCase();
     tenants = tenants.filter(tenant => 
       tenant.name?.toLowerCase().includes(query) || 
-      tenant.temple?.name?.toLowerCase().includes(query) ||
-      tenant.temple?.city?.toLowerCase().includes(query) ||
-      tenant.temple?.state?.toLowerCase().includes(query)
+      tenant.fullName?.toLowerCase().includes(query) ||
+      getTempleNameDisplay(tenant).toLowerCase().includes(query) ||
+      getLocationDisplay(tenant).toLowerCase().includes(query)
     );
   }
   
@@ -335,17 +339,179 @@ const canProceed = computed(() => {
 });
 
 // Methods
+const getTenantDisplayName = (tenant) => {
+  return tenant.fullName || tenant.name || tenant.FullName || `Temple Admin #${tenant.id || tenant.ID}`;
+};
+
+// Get temple name for display
+const getTempleNameDisplay = (tenant) => {
+  // If we have the temple data from tenant-temple mapping
+  if (tenantTempleMap.value[tenant.id || tenant.ID]) {
+    return tenantTempleMap.value[tenant.id || tenant.ID].name;
+  }
+  
+  // Check for various possible temple data structures in the tenant object
+  if (tenant.temple && tenant.temple.name) {
+    return tenant.temple.name;
+  }
+  
+  if (tenant.Temple && tenant.Temple.name) {
+    return tenant.Temple.name;
+  }
+  
+  if (tenant.Temple && tenant.Temple.Name) {
+    return tenant.Temple.Name;
+  }
+  
+  if (tenant.EntityID && tenant.EntityName) {
+    return tenant.EntityName;
+  }
+  
+  return getTenantDisplayName(tenant) + "'s Temple";
+};
+
+// Get location for display
+const getLocationDisplay = (tenant) => {
+  // If we have the temple data from tenant-temple mapping
+  if (tenantTempleMap.value[tenant.id || tenant.ID]) {
+    const templeInfo = tenantTempleMap.value[tenant.id || tenant.ID];
+    if (templeInfo.city && templeInfo.state) {
+      return `${templeInfo.city}, ${templeInfo.state}`;
+    }
+  }
+  
+  // Check for various possible location data structures
+  if (tenant.temple) {
+    if (tenant.temple.city && tenant.temple.state) {
+      return `${tenant.temple.city}, ${tenant.temple.state}`;
+    }
+    if (tenant.temple.address) {
+      return tenant.temple.address;
+    }
+  }
+  
+  if (tenant.Temple) {
+    if (tenant.Temple.City && tenant.Temple.State) {
+      return `${tenant.Temple.City}, ${tenant.Temple.State}`;
+    }
+    if (tenant.Temple.Address) {
+      return tenant.Temple.Address;
+    }
+  }
+  
+  if (tenant.EntityCity && tenant.EntityState) {
+    return `${tenant.EntityCity}, ${tenant.EntityState}`;
+  }
+  
+  if (tenant.EntityAddress) {
+    return tenant.EntityAddress;
+  }
+  
+  return "Location not available";
+};
+
 const fetchTenants = async () => {
   loading.value = true;
   try {
-    console.log('Fetching tenants...');
-    await superAdminStore.fetchTenants();
-    console.log(`Fetched ${superAdminStore.tenants.length} tenants`);
+    console.log('Fetching tenants for reports...');
+    
+    // First, fetch available tenants using the method that provides temple details
+    const response = await superAdminService.getAvailableTenants();
+    
+    if (response && response.success && response.data && response.data.length > 0) {
+      // Use the available tenants data which should include temple details
+      superAdminStore.tenants = response.data;
+      console.log(`Fetched ${superAdminStore.tenants.length} tenants with temple details`);
+      
+      // Map tenant temples for easy access
+      superAdminStore.tenants.forEach(tenant => {
+        if (tenant.temple) {
+          tenantTempleMap.value[tenant.id] = {
+            name: tenant.temple.name,
+            city: tenant.temple.city || (tenant.temple.address ? tenant.temple.address.split(',')[0]?.trim() : ''),
+            state: tenant.temple.state || (tenant.temple.address ? tenant.temple.address.split(',')[1]?.trim() : '')
+          };
+        }
+      });
+    } else {
+      // Fallback to regular tenants endpoint
+      const fallbackResponse = await superAdminStore.fetchTenantsForReports();
+      
+      if (fallbackResponse && fallbackResponse.success) {
+        console.log(`Fetched ${superAdminStore.tenants.length} tenants from reports endpoint`);
+        
+        // Now fetch temple details for each tenant
+        await fetchTempleDetailsForTenants();
+      } else {
+        throw new Error('Failed to fetch tenants');
+      }
+    }
   } catch (error) {
-    console.error('Error fetching tenants:', error);
-    toast.error('Failed to load tenants. Please try again.');
+    console.error('Error fetching tenants for reports:', error);
+    toast.error('Failed to load tenants with complete details');
+    
+    // Try one more fallback to standard tenants list
+    try {
+      await superAdminStore.fetchTenants();
+      
+      // Try to fetch temple details for the tenants we have
+      if (superAdminStore.tenants.length > 0) {
+        await fetchTempleDetailsForTenants();
+      }
+    } catch (fallbackError) {
+      console.error('Fallback tenant fetch also failed:', fallbackError);
+      toast.error('Using limited tenant data for demonstration');
+    }
   } finally {
     loading.value = false;
+  }
+};
+
+// Fetch temple details for all tenants
+const fetchTempleDetailsForTenants = async () => {
+  try {
+    // For each tenant, fetch their temple details if not already available
+    for (const tenant of superAdminStore.tenants) {
+      if (!tenant.temple && !tenantTempleMap.value[tenant.id || tenant.ID]) {
+        try {
+          // Try to get tenant details which may include temple info
+          const tenantDetailsResponse = await superAdminService.getTenantDetails(tenant.id || tenant.ID);
+          
+          if (tenantDetailsResponse.success && tenantDetailsResponse.data) {
+            const tenantData = tenantDetailsResponse.data;
+            
+            // Get temple info from the response
+            const templeInfo = tenantData.temple || tenantData.Temple || 
+                             (tenantDetailsResponse.temples && tenantDetailsResponse.temples.length > 0 
+                              ? tenantDetailsResponse.temples[0] : null);
+            
+            if (templeInfo) {
+              // Add temple info to our mapping
+              tenantTempleMap.value[tenant.id || tenant.ID] = {
+                name: templeInfo.name || templeInfo.Name || '',
+                city: templeInfo.city || templeInfo.City || 
+                      (templeInfo.address ? templeInfo.address.split(',')[0]?.trim() : '') ||
+                      (templeInfo.Address ? templeInfo.Address.split(',')[0]?.trim() : ''),
+                state: templeInfo.state || templeInfo.State || 
+                       (templeInfo.address ? templeInfo.address.split(',')[1]?.trim() : '') ||
+                       (templeInfo.Address ? templeInfo.Address.split(',')[1]?.trim() : '')
+              };
+              
+              // Also update the tenant object itself for consistency
+              tenant.temple = {
+                name: tenantTempleMap.value[tenant.id || tenant.ID].name,
+                city: tenantTempleMap.value[tenant.id || tenant.ID].city,
+                state: tenantTempleMap.value[tenant.id || tenant.ID].state
+              };
+            }
+          }
+        } catch (error) {
+          console.warn(`Could not fetch details for tenant ${tenant.id || tenant.ID}:`, error);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching temple details for tenants:', error);
   }
 };
 
@@ -393,7 +559,8 @@ const getStatusClass = (status) => {
   const statusMap = {
     'approved': 'bg-green-100 text-green-800',
     'pending': 'bg-yellow-100 text-yellow-800',
-    'rejected': 'bg-red-100 text-red-800'
+    'rejected': 'bg-red-100 text-red-800',
+    'active': 'bg-green-100 text-green-800'
   };
   
   return statusMap[status?.toLowerCase()] || 'bg-gray-100 text-gray-800';
@@ -401,7 +568,7 @@ const getStatusClass = (status) => {
 
 const getTenantName = (tenantId) => {
   const tenant = superAdminStore.tenants.find(t => t.id === tenantId);
-  return tenant ? tenant.name : `Tenant #${tenantId}`;
+  return tenant ? getTenantDisplayName(tenant) : `Tenant #${tenantId}`;
 };
 
 const getReportName = () => {

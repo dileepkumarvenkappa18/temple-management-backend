@@ -70,7 +70,7 @@
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-8">
         <div class="p-6">
           <h3 class="text-lg font-medium text-gray-900 mb-4">Select Report Type</h3>
-          <div class="flex space-x-4">
+          <div class="flex space-x-4 flex-wrap">
             <button 
               @click="activeReportType = 'birthdays'"
               :class="[
@@ -93,6 +93,39 @@
             >
               Devotee List
             </button>
+            <button 
+              @click="activeReportType = 'statusActive'"
+              :class="[
+                'px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200',
+                activeReportType === 'statusActive' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ]"
+            >
+              Active Devotees  
+            </button>
+            <button 
+              @click="activeReportType = 'statusInactive'"
+              :class="[
+                'px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200',
+                activeReportType === 'statusInactive' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ]"
+            >
+              Inactive Devotees
+            </button>
+            <button 
+              @click="activeReportType = 'profile'"
+              :class="[
+                'px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200',
+                activeReportType === 'profile' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ]"
+            >
+              Devotee Profile
+            </button>
           </div>
         </div>
       </div>
@@ -101,10 +134,10 @@
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-8">
         <div class="p-6 border-b border-gray-200">
           <h3 class="text-xl font-bold text-gray-900">
-            {{ activeReportType === 'birthdays' ? 'Devotee Birthdays' : 'Devotee List' }}
+            {{ getReportTypeTitle() }}
           </h3>
           <p class="text-gray-600 mt-1">
-            Configure filters and download {{ activeReportType === 'birthdays' ? 'devotee birthday data' : 'devotee list data' }}
+            Configure filters and download {{ getReportTypeDescription() }}
           </p>
         </div>
 
@@ -151,7 +184,7 @@
             </div>
           </div>
 
-          <div v-else>
+          <div v-else-if="['devotees', 'statusActive', 'statusInactive'].includes(activeReportType)">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <!-- Join Date Range Filter -->
               <div>
@@ -172,8 +205,8 @@
                 </div>
               </div>
               
-              <!-- Devotee Status Filter -->
-              <!-- <div>
+              <!-- Devotee Status Filter (only show for general devotee list) -->
+              <div v-if="activeReportType === 'devotees'">
                 <label class="block text-gray-700 font-medium mb-2">Devotee Status</label>
                 <div class="relative">
                   <select 
@@ -188,8 +221,23 @@
                   </select>
                   <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700"></div>
                 </div>
-              </div> -->
+              </div>
+              
+              <!-- Status Info for Active/Inactive buttons -->
+              <div v-else-if="activeReportType === 'statusActive' || activeReportType === 'statusInactive'">
+                <label class="block text-gray-700 font-medium mb-2">Status Filter</label>
+                <div class="bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+                  <span class="text-gray-700">
+                    {{ activeReportType === 'statusActive' ? 'Active Devotees Only' : 'Inactive Devotees Only' }}
+                  </span>
+                </div>
+              </div>
             </div>
+          </div>
+
+          <div v-else-if="activeReportType === 'profile'">
+            <!-- For profile, you may show different filters or info as needed -->
+            <p class="text-gray-600 mb-6">This report includes detailed profile information for devotees.</p>
           </div>
 
           <!-- Custom Date Range (shown only when custom date range is selected) -->
@@ -268,7 +316,7 @@
             <!-- Report Type Filter -->
             <div class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
               <span class="font-medium mr-1">Report Type:</span>
-              {{ activeReportType === 'birthdays' ? 'Devotee Birthdays' : 'Devotee List' }}
+              {{ getReportTypeTitle() }}
             </div>
             
             <!-- Tenant Filter (only in superadmin view with multiple tenants) -->
@@ -285,17 +333,17 @@
             
             <!-- Period Filter -->
             <div class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
-              <span class="font-medium mr-1">{{ activeReportType === 'birthdays' ? 'Birthday' : 'Join Date' }} Period:</span>
+              <span class="font-medium mr-1">{{ ['birthdays', 'profile'].includes(activeReportType) ? 'Birthday' : 'Join Date' }} Period:</span>
               {{ getTimeFilterLabel(activeFilter) }}
               <span v-if="activeFilter === 'custom'">
                 ({{ formatDate(startDate) }} - {{ formatDate(endDate) }})
               </span>
             </div>
 
-            <!-- Devotee Status Filter (only for Devotee List) -->
-            <div v-if="activeReportType === 'devotees'" class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
+            <!-- Devotee Status Filter -->
+            <div class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
               <span class="font-medium mr-1">Status:</span>
-              {{ getDevoteeStatusLabel(devoteeStatus) }}
+              {{ getActiveDevoteeStatusLabel() }}
             </div>
             
             <!-- Format -->
@@ -375,7 +423,7 @@ const reportsStore = useReportsStore();
 const { showToast } = useToast();
 
 // Reactive state
-const activeReportType = ref('birthdays'); // 'birthdays' or 'devotees'
+const activeReportType = ref('birthdays'); // 'birthdays', 'devotees', 'statusActive', 'statusInactive', 'profile'
 const selectedTemple = ref('all');
 const activeFilter = ref('monthly');
 const selectedFormat = ref('pdf');
@@ -419,6 +467,53 @@ const tenantIds = computed(() => {
 });
 
 // Methods
+const getReportTypeTitle = () => {
+  switch (activeReportType.value) {
+    case 'birthdays':
+      return 'Devotee Birthdays';
+    case 'devotees':
+      return 'Devotee List';
+    case 'statusActive':
+      return 'Active Devotees';
+    case 'statusInactive':
+      return 'Inactive Devotees';
+    case 'profile':
+      return 'Devotee Profile';
+    default:
+      return 'Report';
+  }
+};
+
+const getReportTypeDescription = () => {
+  switch (activeReportType.value) {
+    case 'birthdays':
+      return 'devotee birthday data';
+    case 'devotees':
+      return 'devotee list data';
+    case 'statusActive':
+      return 'active devotee data';
+    case 'statusInactive':
+      return 'inactive devotee data';
+    case 'profile':
+      return 'devotee profile data';
+    default:
+      return 'report data';
+  }
+};
+
+const getActiveDevoteeStatusLabel = () => {
+  switch (activeReportType.value) {
+    case 'statusActive':
+      return 'Active Only';
+    case 'statusInactive':
+      return 'Inactive Only';
+    case 'devotees':
+      return getDevoteeStatusLabel(devoteeStatus.value);
+    default:
+      return 'All';
+  }
+};
+
 const setActiveFilter = (filter) => {
   activeFilter.value = filter;
   
@@ -499,8 +594,12 @@ const buildReportParams = () => {
         format: selectedFormat.value
       };
   
-  // Add devotee status for Devotee List report
-  if (activeReportType.value === 'devotees') {
+  // Add devotee status based on report type
+  if (activeReportType.value === 'statusActive') {
+    params.status = 'active';
+  } else if (activeReportType.value === 'statusInactive') {
+    params.status = 'inactive';
+  } else if (activeReportType.value === 'devotees') {
     params.status = devoteeStatus.value;
   }
   
@@ -512,10 +611,29 @@ const fetchPreview = async () => {
     const params = buildReportParams();
     delete params.format; // Don't include format for preview
     
-    if (activeReportType.value === 'birthdays') {
-      await reportsStore.getDevoteeBirthdaysPreview(params);
-    } else {
-      await reportsStore.getDevoteeListPreview(params);
+    console.log('Fetching preview with params:', params);
+    console.log('Active report type:', activeReportType.value);
+    
+    switch (activeReportType.value) {
+      case 'birthdays':
+        await reportsStore.getDevoteeBirthdaysPreview(params);
+        break;
+      case 'devotees':
+      case 'statusActive':
+      case 'statusInactive':
+        await reportsStore.getDevoteeListPreview(params);
+        break;
+      case 'profile':
+        // Only call if the method exists
+        if (reportsStore.getDevoteeProfilePreview) {
+          await reportsStore.getDevoteeProfilePreview(params);
+        } else {
+          console.warn('getDevoteeProfilePreview method not available');
+        }
+        break;
+      default:
+        console.warn('Unknown report type:', activeReportType.value);
+        break;
     }
   } catch (error) {
     console.error('Error fetching preview:', error);
@@ -540,18 +658,34 @@ const downloadReport = async () => {
     }
 
     const params = buildReportParams();
-    
+
     console.log(`Downloading ${activeReportType.value} report with parameters:`, params);
     
     let result;
-    if (activeReportType.value === 'birthdays') {
-      result = await reportsStore.downloadDevoteeBirthdaysReport(params);
-    } else {
-      result = await reportsStore.downloadDevoteeListReport(params);
+    switch (activeReportType.value) {
+      case 'birthdays':
+        result = await reportsStore.downloadDevoteeBirthdaysReport(params);
+        break;
+      case 'devotees':
+      case 'statusActive':
+      case 'statusInactive':
+        result = await reportsStore.downloadDevoteeListReport(params);
+        break;
+      case 'profile':
+        // Only call if the method exists
+        if (reportsStore.downloadDevoteeProfileReport) {
+          result = await reportsStore.downloadDevoteeProfileReport(params);
+        } else {
+          throw new Error('Devotee profile download is not available');
+        }
+        break;
+      default:
+        throw new Error('Unknown report type selected');
     }
     
+    const reportTypeName = getReportTypeTitle();
     showToast(
-      `${activeReportType.value === 'birthdays' ? 'Devotee Birthdays' : 'Devotee List'} Report downloaded successfully in ${getFormatLabel(selectedFormat.value)} format`, 
+      `${reportTypeName} Report downloaded successfully in ${getFormatLabel(selectedFormat.value)} format`, 
       'success'
     );
     
@@ -565,8 +699,15 @@ const downloadReport = async () => {
 
 // Watch for report type changes
 watch(activeReportType, () => {
+  console.log('Report type changed to:', activeReportType.value);
+  
   // Clear any previous report data
   reportsStore.clearReportData();
+  
+  // Reset devotee status when switching to status-specific reports
+  if (activeReportType.value === 'statusActive' || activeReportType.value === 'statusInactive') {
+    devoteeStatus.value = 'all'; // This won't be used but keeps it consistent
+  }
   
   // Fetch new preview based on selected report type
   fetchPreview();
@@ -574,17 +715,27 @@ watch(activeReportType, () => {
 
 // Watch for filter changes
 watch([selectedTemple, devoteeStatus], () => {
+  console.log('Filters changed - Temple:', selectedTemple.value, 'Status:', devoteeStatus.value);
   fetchPreview();
+});
+
+// Watch for active filter changes (time period)
+watch(activeFilter, () => {
+  console.log('Active filter changed to:', activeFilter.value);
+  // fetchPreview is already called in setActiveFilter
 });
 
 // Lifecycle hooks
 onMounted(async () => {
+  console.log('Component mounted');
+  
   // Clear any previous report data
   reportsStore.clearReportData();
   
   // Fetch temples if not already loaded
   if (templeStore.temples.length === 0) {
     try {
+      console.log('Fetching temples for tenant:', tenantId.value);
       await templeStore.fetchTemples(tenantId.value);
     } catch (error) {
       console.error('Error loading temple data:', error);

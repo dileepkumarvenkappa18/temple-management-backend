@@ -45,6 +45,7 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
   const loadingUsers = ref(false)
   const loadingUserRoles = ref(false)
   const loadingUserAction = ref(false) // For create/update/delete operations
+  const loadingBulkUpload = ref(false) // For bulk upload operations
   
   // Error states
   const tenantError = ref(null)
@@ -57,6 +58,7 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
   const userError = ref(null)
   const userRolesError = ref(null)
   const userActionError = ref(null)
+  const bulkUploadError = ref(null)
   
   // Getters
   const pendingTenants = computed(() => 
@@ -253,6 +255,79 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
     }
   }
 
+  
+
+  // NEW: Fetch tenants for reports section
+  async function fetchTenantsForReports() {
+    loadingTenants.value = true
+    tenantError.value = null
+    
+    try {
+      console.log('Store: Fetching tenants for reports...')
+      const response = await superAdminService.getTempleadminsForReports()
+      console.log('Store: Got response for reports tenants:', response)
+      
+      if (response.success && Array.isArray(response.data)) {
+        console.log('Store: Setting', response.data.length, 'tenants for reports')
+        
+        tenants.value = response.data.map(tenant => {
+          // Extract temple information from the response
+          // Check for entity property which may contain temple data
+          const entityData = tenant.entity || tenant.Entity || {};
+          const templeInfo = tenant.temple || tenant.Temple || entityData || {};
+          
+          // Create the temple object properly from various possible sources
+          const temple = {
+            name: templeInfo.name || templeInfo.Name || entityData.name || entityData.Name || tenant.temple_name || tenant.templeName || 'N/A',
+            address: templeInfo.address || templeInfo.Address || entityData.address || entityData.Address || tenant.temple_address || tenant.templeAddress || 'N/A',
+            city: templeInfo.city || templeInfo.City || entityData.city || entityData.City || tenant.temple_city || tenant.city || tenant.City || 'N/A',
+            state: templeInfo.state || templeInfo.State || entityData.state || entityData.State || tenant.temple_state || tenant.state || tenant.State || 'N/A',
+            type: templeInfo.type || templeInfo.Type || entityData.type || entityData.Type || 'Hindu Temple'
+          };
+          
+          // Log detailed temple information for debugging
+          console.log('Temple data for tenant:', tenant.full_name || tenant.fullName || tenant.name, 'Temple:', temple);
+          
+          return {
+            id: tenant.id || tenant.ID,
+            fullName: tenant.full_name || tenant.fullName || tenant.FullName || tenant.name || '',
+            name: tenant.name || tenant.fullName || tenant.full_name || tenant.FullName || '',
+            email: tenant.email || tenant.Email || '',
+            phone: tenant.phone || tenant.Phone || '',
+            status: ((tenant.status || tenant.Status || 'active').toString()).toLowerCase(),
+            createdAt: tenant.created_at || tenant.createdAt || tenant.CreatedAt || new Date().toISOString(),
+            updatedAt: tenant.updated_at || tenant.updatedAt || tenant.UpdatedAt,
+            temple: temple
+          }
+        });
+        
+        return {
+          success: true,
+          data: tenants.value
+        }
+      } else {
+        console.log('Store: Empty or invalid response for reports tenants')
+        tenants.value = []
+        tenantError.value = 'No tenant data available for reports'
+        
+        return {
+          success: false,
+          error: 'No tenant data available for reports'
+        }
+      }
+    } catch (error) {
+      console.error('Store: Error fetching tenants for reports:', error)
+      tenantError.value = error.message
+      
+      return {
+        success: false,
+        error: error.message
+      }
+    } finally {
+      loadingTenants.value = false
+    }
+  }
+
   async function fetchPendingEntities() {
     loadingEntities.value = true
     entityError.value = null
@@ -365,6 +440,9 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
       return { success: false, error: error.message }
     }
   }
+
+  
+  
 
   // ==========================================
   // NEW: USER MANAGEMENT ACTIONS
@@ -570,6 +648,46 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
     }
   }
 
+  // NEW: Bulk create users from CSV
+  async function createBulkUsers(csvData) {
+    loadingBulkUpload.value = true
+    bulkUploadError.value = null
+    
+    try {
+      console.log('Store: Starting bulk upload of', csvData.length, 'users...')
+      const response = await superAdminService.bulkUploadUsers(csvData)
+      
+      if (response.success) {
+        // Refresh user list after successful bulk upload
+        await fetchUsers()
+        
+        return {
+          success: true,
+          data: response.data,
+          message: response.message || 'Bulk upload completed successfully'
+        }
+      } else {
+        bulkUploadError.value = response.message
+        return {
+          success: false,
+          data: response.data,
+          error: response.message
+        }
+      }
+    } catch (error) {
+      console.error('Store: Error during bulk upload:', error)
+      bulkUploadError.value = error.message
+      return {
+        success: false,
+        data: null,
+        error: error.message
+      }
+    } finally {
+      loadingBulkUpload.value = false
+    }
+  }
+
+  
   // UPDATED: Initialize with new count fetching
   function initialize() {
     // Fetch counts first (most important for dashboard)
@@ -623,6 +741,7 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
     loadingUsers,
     loadingUserRoles,
     loadingUserAction,
+    loadingBulkUpload,
     
     // Error states
     tenantError,
@@ -635,6 +754,7 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
     userError,
     userRolesError,
     userActionError,
+    bulkUploadError,
     
     // Getters
     pendingTenants,
@@ -664,6 +784,7 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
     rejectTenant,
     approveEntity,
     rejectEntity,
+    fetchTenantsForReports, // Added new method for reports section
     
     // NEW: User Management Actions
     fetchUserRoles,
@@ -672,9 +793,9 @@ export const useSuperAdminStore = defineStore('superadmin', () => {
     createUser,
     updateUser,
     updateUserStatus,
+    createBulkUsers, // NEW: Bulk upload method
     refreshUserData,
     
     initialize // UPDATED to include user management
   }
 })
-

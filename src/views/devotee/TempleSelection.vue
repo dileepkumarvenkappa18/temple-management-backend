@@ -357,6 +357,7 @@ const confirmJoinTemple = async () => {
   
   const templeId = selectedTemple.value.id || selectedTemple.value.ID
   isJoining.value = true
+  joiningTemple.value = templeId
   
   try {
     console.log(`Joining temple with ID: ${templeId}`)
@@ -389,10 +390,8 @@ const confirmJoinTemple = async () => {
       saveJoinedTemples()
     }
     
-    // Store selected temple info in localStorage
-    localStorage.setItem('selectedEntityId', templeId.toString())
-    localStorage.setItem('current_tenant_id', templeId.toString())
-    localStorage.setItem('selectedTempleName', selectedTemple.value.name || selectedTemple.value.Name)
+    // Store selected temple info in ALL possible localStorage keys
+    saveAllTempleIds(templeId)
     
     // Set join success to show the next options
     joinSuccess.value = true
@@ -404,18 +403,79 @@ const confirmJoinTemple = async () => {
     closeModal()
   } finally {
     isJoining.value = false
+    joiningTemple.value = null
   }
 }
 
-// Navigation functions
+// Function to save temple ID to all possible localStorage keys
+const saveAllTempleIds = (templeId) => {
+  if (!templeId) return
+  
+  console.log('Saving temple ID to all localStorage keys:', templeId)
+  localStorage.setItem('selectedEntityId', templeId.toString())
+  localStorage.setItem('current_entity_id', templeId.toString())
+  localStorage.setItem('current_tenant_id', templeId.toString())
+  localStorage.setItem('selectedTempleName', selectedTemple.value?.name || selectedTemple.value?.Name || '')
+  
+  // Update user data in localStorage
+  try {
+    const userData = JSON.parse(localStorage.getItem('user_data') || '{}')
+    userData.current_entity = {
+      id: templeId,
+      name: selectedTemple.value?.name || selectedTemple.value?.Name || 'Selected Temple'
+    }
+    userData.entityId = templeId
+    localStorage.setItem('user_data', JSON.stringify(userData))
+  } catch (err) {
+    console.error('Error updating user data in localStorage:', err)
+  }
+}
+
+// FIX: Updated navigation functions with direct window.location
 const navigateToProfileCreation = () => {
-  const templeId = selectedTemple.value.id || selectedTemple.value.ID
-  router.push(`/entity/${templeId}/devotee/profile/create`)
+  try {
+    const templeId = selectedTemple.value?.id || selectedTemple.value?.ID
+    
+    if (!templeId) {
+      console.error('Cannot navigate to profile creation: No temple ID available')
+      showToast('Temple information is missing. Please try rejoining the temple.', 'error')
+      return
+    }
+    
+    console.log('Navigating to profile creation with temple ID:', templeId)
+    
+    // Save all temple IDs before navigation
+    saveAllTempleIds(templeId)
+    
+    // Use direct window.location navigation
+    window.location.href = `/entity/${templeId}/devotee/profile/create`
+  } catch (error) {
+    console.error('Error navigating to profile creation:', error)
+    showToast('Navigation error. Please try again.', 'error')
+  }
 }
 
 const navigateToDashboard = () => {
-  const templeId = selectedTemple.value.id || selectedTemple.value.ID
-  router.push(`/entity/${templeId}/devotee/dashboard`)
+  try {
+    const templeId = selectedTemple.value?.id || selectedTemple.value?.ID
+    
+    if (!templeId) {
+      console.error('Cannot navigate to dashboard: No temple ID available')
+      showToast('Temple information is missing. Please try rejoining the temple.', 'error')
+      return
+    }
+    
+    console.log('Navigating to dashboard with temple ID:', templeId)
+    
+    // Save all temple IDs before navigation
+    saveAllTempleIds(templeId)
+    
+    // Use direct window.location navigation
+    window.location.href = `/entity/${templeId}/devotee/dashboard`
+  } catch (error) {
+    console.error('Error navigating to dashboard:', error)
+    showToast('Navigation error. Please try again.', 'error')
+  }
 }
 
 // Fetch temples from the backend
@@ -446,33 +506,3 @@ onMounted(() => {
   fetchTemples()
 })
 </script>
-
-<style scoped>
-/* Import Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-
-/* Custom font classes */
-.font-heading {
-  font-family: 'Roboto', sans-serif;
-}
-
-.font-side {
-  font-family: sans-serif;
-}
-
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2; /* Standard property for future compatibility */
-  overflow: hidden;
-}
-
-/* Animation for loading spinner */
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
-</style>

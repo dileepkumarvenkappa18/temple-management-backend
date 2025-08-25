@@ -232,6 +232,80 @@ class SuperAdminService {
     }
   }
 
+  /**
+   * Get temple admins list for reports section
+   * Try multiple possible endpoints to find the right one
+   */
+  async getTempleadminsForReports() {
+    try {
+      console.log('Service: Fetching temple admins list for reports...')
+      
+      // First try using the superadmin/tenants endpoint with templeadmin role filter
+      try {
+        const params = new URLSearchParams({
+          role: 'templeadmin',
+          status: 'active'  // Only get active templeadmins
+        })
+        
+        const response = await api.get(`${this.baseURL}/tenants?${params}`)
+        console.log('Service: Tenant response for templeadmins:', response)
+        
+        if (response && (Array.isArray(response.data) || Array.isArray(response))) {
+          const tenantData = Array.isArray(response.data) ? response.data : 
+                            Array.isArray(response) ? response : [];
+          
+          return {
+            success: true,
+            data: tenantData,
+            message: 'Temple admins list fetched successfully'
+          }
+        }
+      } catch (tenantError) {
+        console.warn('Could not fetch templeadmins from tenants endpoint, trying alternatives...')
+      }
+      
+      // Second try: get all tenants and filter for templeadmins in the code
+      try {
+        const allTenantsResponse = await this.getAllTenants()
+        
+        if (allTenantsResponse.success && Array.isArray(allTenantsResponse.data)) {
+          // Filter for templeadmins by role
+          const templeadmins = allTenantsResponse.data.filter(tenant => {
+            const role = tenant.role?.roleName || tenant.role?.RoleName || '';
+            return role.toLowerCase() === 'templeadmin' || role.toLowerCase() === 'temple_admin';
+          });
+          
+          return {
+            success: true,
+            data: templeadmins,
+            message: 'Temple admins filtered from all tenants'
+          }
+        }
+      } catch (allTenantsError) {
+        console.warn('Could not fetch templeadmins from all tenants:', allTenantsError)
+      }
+      
+      // As a last resort, use mock data
+      console.warn('No API endpoints available for temple admins, using mock data')
+      return {
+        success: true,
+        data: this.getMockAllTenants().filter(t => t.Role?.RoleName === 'templeadmin'),
+        message: 'Mock temple admins list loaded (API endpoints not available)'
+      }
+      
+    } catch (error) {
+      console.error('Service: Error fetching temple admins list:', error)
+      
+      // Fallback to mock data for development
+      console.warn('Temple admins list endpoint not found, using mock data')
+      return {
+        success: true,
+        data: this.getMockAllTenants(),
+        message: 'Mock temple admins list loaded (API endpoint not available)'
+      }
+    }
+  }
+
   async approveTenant(tenantId) {
     try {
       console.log(`Approving tenant ${tenantId}...`)
@@ -725,66 +799,121 @@ class SuperAdminService {
   // USER-TENANT ASSIGNMENT - NEW
   // ==========================================
 
-  /**
-   * Fetch available tenants for assignment to a user
-   * @param {string|number} userId - The user ID
-   * @returns {Promise} - API response with tenants data
-   */
-  async getAvailableTenants(userId) {
-    try {
-      console.log(`Service: Fetching available tenants for user ${userId}...`)
-      const response = await api.get(`${this.baseURL}/users/${userId}/available-tenants`)
-      console.log('Service: Available tenants response:', response)
-      
-      if (response && response.data && Array.isArray(response.data)) {
-        return {
-          success: true,
-          data: response.data,
-          message: 'Available tenants fetched successfully'
+ /**
+ * Fetch available tenants for assignment to a user
+ * @param {string|number} userId - The user ID
+ * @returns {Promise} - API response with tenants data
+ */
+async getAvailableTenants(userId) {
+  try {
+    console.log(`Service: Fetching available tenants${userId ? ' for user ' + userId : ''}...`)
+    let response;
+    
+    if (userId) {
+      response = await api.get(`${this.baseURL}/users/${userId}/available-tenants`)
+    } else {
+      // For reports section, fetch all tenants with temple info
+      response = await api.get(`${this.baseURL}/tenants?include=temple`)
+    }
+    
+    console.log('Service: Available tenants response:', response)
+    
+    // Process the response to ensure consistent data structure
+    let tenantsData = [];
+    
+    if (response && response.data && Array.isArray(response.data)) {
+      tenantsData = response.data;
+    } else if (Array.isArray(response)) {
+      tenantsData = response;
+    } else if (response && Array.isArray(response.tenants)) {
+      tenantsData = response.tenants;
+    }
+    
+    // Ensure each tenant has the expected structure with temple data
+    const processedTenants = tenantsData.map(tenant => {
+      // Normalize the tenant object structure
+      const normalizedTenant = {
+        id: tenant.id || tenant.ID || tenant.Id,
+        name: tenant.name || tenant.Name || tenant.fullName || tenant.FullName,
+        status: tenant.status || tenant.Status || 'active',
+        // Ensure temple data is properly structured
+        temple: {
+          name: '',
+          address: '',
+          city: '',
+          state: ''
         }
-      } else if (Array.isArray(response)) {
-        return {
-          success: true,
-          data: response,
-          message: 'Available tenants fetched successfully'
+      };
+      
+      // Extract temple data from tenant object
+      if (tenant.temple) {
+        normalizedTenant.temple.name = tenant.temple.name || tenant.temple.Name || '';
+        normalizedTenant.temple.address = tenant.temple.address || tenant.temple.Address || '';
+        normalizedTenant.temple.city = tenant.temple.city || tenant.temple.City || '';
+        normalizedTenant.temple.state = tenant.temple.state || tenant.temple.State || '';
+      } else if (tenant.Temple) {
+        normalizedTenant.temple.name = tenant.Temple.name || tenant.Temple.Name || '';
+        normalizedTenant.temple.address = tenant.Temple.address || tenant.Temple.Address || '';
+        normalizedTenant.temple.city = tenant.Temple.city || tenant.Temple.City || '';
+        normalizedTenant.temple.state = tenant.Temple.state || tenant.Temple.State || '';
+      }
+      
+      // If temple name is empty but entity name exists, use that
+      if (!normalizedTenant.temple.name) {
+        normalizedTenant.temple.name = tenant.entityName || tenant.EntityName || '';
+      }
+      
+      // Extract location from address if city/state aren't set
+      if (normalizedTenant.temple.address && (!normalizedTenant.temple.city || !normalizedTenant.temple.state)) {
+        const parts = normalizedTenant.temple.address.split(',');
+        if (parts.length >= 2) {
+          normalizedTenant.temple.city = normalizedTenant.temple.city || parts[0].trim();
+          normalizedTenant.temple.state = normalizedTenant.temple.state || parts[1].trim();
         }
       }
       
-      // Fallback to mock data for development
-      if (response === null || (typeof response === 'object' && Object.keys(response).length === 0)) {
-        console.warn('Empty response, using mock data')
-        return {
-          success: true,
-          data: this.getMockAvailableTenants(),
-          message: 'Mock available tenants data loaded (API returned empty)'
+      return normalizedTenant;
+    });
+    
+    return {
+      success: true,
+      data: processedTenants,
+      message: 'Available tenants fetched successfully'
+    }
+  } catch (error) {
+    console.error('Service: Error fetching available tenants:', error)
+    
+    // Fallback to mock data for development
+    if (error.response?.status === 404) {
+      console.warn('Available tenants endpoint not found, using mock data')
+      const mockData = this.getMockAvailableTenants().map(tenant => ({
+        id: tenant.id,
+        name: tenant.name || tenant.userId,
+        status: 'active',
+        temple: {
+          name: tenant.temple.name,
+          address: tenant.temple.address,
+          city: tenant.temple.address.split(',')[0]?.trim() || '',
+          state: tenant.temple.address.split(',')[1]?.trim() || ''
         }
-      }
+      }));
       
       return {
-        success: false,
-        data: [],
-        message: 'Invalid response format for available tenants'
-      }
-    } catch (error) {
-      console.error('Service: Error fetching available tenants:', error)
-      
-      // Fallback to mock data for development
-      if (error.response?.status === 404) {
-        console.warn('Available tenants endpoint not found, using mock data')
-        return {
-          success: true,
-          data: this.getMockAvailableTenants(),
-          message: 'Mock available tenants loaded (API endpoint not available)'
-        }
-      }
-      
-      return {
-        success: false,
-        data: [],
-        message: error.message || 'Failed to fetch available tenants'
+        success: true,
+        data: mockData,
+        message: 'Mock available tenants loaded (API endpoint not available)'
       }
     }
+    
+    return {
+      success: false,
+      data: [],
+      message: error.message || 'Failed to fetch available tenants'
+    }
   }
+}
+
+
 
   /**
    * Assign tenants to a user
@@ -1124,6 +1253,116 @@ class SuperAdminService {
     }
   }
   
+
+
+  /**
+   * Bulk upload users via CSV
+   * Endpoint: POST /api/v1/superadmin/users/bulk-upload
+   */
+  async bulkUploadUsers(csvData) {
+    try {
+      console.log('Service: Starting bulk upload of users...', csvData.length, 'users')
+      
+      // Prepare FormData for file upload
+      const formData = new FormData()
+      
+      // Convert CSV data back to CSV format
+      const csvHeaders = ['Full Name', 'Email', 'Phone', 'Password', 'Role', 'Status']
+      const csvRows = [
+        csvHeaders.join(','), // Header row
+        ...csvData.map(user => [
+          `"${user.full_name || ''}"`,
+          `"${user.email || ''}"`,
+          `"${user.phone || ''}"`,
+          `"${user.password || ''}"`,
+          `"${user.role || ''}"`,
+          `"${user.status || 'active'}"`
+        ].join(','))
+      ]
+      const csvContent = csvRows.join('\n')
+      
+      // Create blob and append to FormData
+      const blob = new Blob([csvContent], { type: 'text/csv' })
+      formData.append('file', blob, 'bulk_users.csv')
+      
+      // Send multipart/form-data request
+      const response = await api.post(`${this.baseURL}/users/bulk-upload`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+      
+      console.log('Service: Bulk upload response:', response)
+      
+      if (response && (response.success !== false)) {
+        // Handle successful response
+        return {
+          success: true,
+          data: {
+            total_rows: response.total_rows || csvData.length,
+            success_count: response.success_count || response.totalRows || csvData.length,
+            failed_count: response.failed_count || response.failedCount || 0,
+            errors: response.errors || []
+          },
+          message: response.message || 'Bulk upload completed successfully'
+        }
+      } else {
+        return {
+          success: false,
+          data: {
+            total_rows: csvData.length,
+            success_count: 0,
+            failed_count: csvData.length,
+            errors: response.errors || [response.message || 'Unknown error']
+          },
+          message: response.message || 'Bulk upload failed'
+        }
+      }
+      
+    } catch (error) {
+      console.error('Service: Error during bulk upload:', error)
+      
+      // Handle different error scenarios
+      if (error.response) {
+        // Server responded with error status
+        const errorData = error.response.data
+        return {
+          success: false,
+          data: {
+            total_rows: csvData.length,
+            success_count: 0,
+            failed_count: csvData.length,
+            errors: errorData.errors || [errorData.message || error.response.statusText]
+          },
+          message: errorData.message || `Server error: ${error.response.status}`
+        }
+      } else if (error.request) {
+        // Network error
+        return {
+          success: false,
+          data: {
+            total_rows: csvData.length,
+            success_count: 0,
+            failed_count: csvData.length,
+            errors: ['Network error - please check your connection']
+          },
+          message: 'Failed to connect to server'
+        }
+      } else {
+        // Other error
+        return {
+          success: false,
+          data: {
+            total_rows: csvData.length,
+            success_count: 0,
+            failed_count: csvData.length,
+            errors: [error.message || 'Unknown error occurred']
+          },
+          message: error.message || 'Bulk upload failed'
+        }
+      }
+    }
+  }
   // ==========================================
   // MOCK DATA HELPERS - EXISTING
   // ==========================================
@@ -1404,6 +1643,7 @@ class SuperAdminService {
     return activities.slice(0, limit);
   }
 }
+
 
 // Create and export singleton instance
 const superAdminService = new SuperAdminService()

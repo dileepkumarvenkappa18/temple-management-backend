@@ -106,7 +106,8 @@ export const useAuthStore = defineStore('auth', () => {
       const tenantId = user.value?.id || currentTenantId.value
       return tenantId ? `/tenant/${tenantId}/dashboard` : '/tenant/dashboard'
     } else if (role === 'devotee') {
-      return entityId ? `/entity/${entityId}/devotee/dashboard` : '/devotee/temple-selection'
+      // MODIFIED: Always redirect devotees to temple selection first
+      return '/devotee/temple-selection'
     } else if (role === 'volunteer') {
       return entityId ? `/entity/${entityId}/volunteer/dashboard` : '/volunteer/temple-selection'
     }

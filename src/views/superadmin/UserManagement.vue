@@ -5,16 +5,31 @@
         <h3 class="text-lg font-semibold text-gray-900 font-roboto">User Management</h3>
         <p class="text-sm text-gray-600 mt-1">Create and manage system users</p>
       </div>
-      <!-- Regular button instead of BaseButton to ensure it works -->
-      <button 
-        @click="openCreateModal" 
-        class="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-      >
-        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-        </svg>
-        Create User
-      </button>
+      
+      <!-- Action Buttons -->
+      <div class="flex space-x-3">
+        <!-- Bulk Upload CSV Button -->
+        <button 
+          @click="openBulkUploadModal" 
+          class="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+        >
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+          </svg>
+          Bulk Upload User
+        </button>
+        
+        <!-- Regular Create User Button -->
+        <button 
+          @click="openCreateModal" 
+          class="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+        >
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+          </svg>
+          Create User
+        </button>
+      </div>
     </div>
     
     <div class="p-6">
@@ -39,7 +54,7 @@
             </tr>
             <tr v-else-if="users.length === 0">
               <td colspan="6" class="px-6 py-4 text-center text-sm text-gray-500">
-                No users found. Create your first user by clicking the 'Create User' button.
+                No users found. Create your first user by clicking the 'Create User' button or upload users in bulk via CSV.
               </td>
             </tr>
             <tr v-for="user in users" :key="user.id" class="hover:bg-gray-50">
@@ -88,7 +103,215 @@
       </div>
     </div>
 
-    <!-- Direct Modal Implementation (use this if BaseModal doesn't work) -->
+    <!-- Bulk Upload CSV Modal -->
+    <div v-if="showBulkUploadModal" class="fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex items-center justify-center">
+      <div class="bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <!-- Modal Header -->
+        <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h3 class="text-lg font-medium text-gray-900">Bulk Upload Users via CSV</h3>
+          <button @click="closeBulkUploadModal" class="text-gray-400 hover:text-gray-500">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <!-- Modal Body -->
+        <div class="px-6 py-4">
+          <!-- Upload Result Alert -->
+          <div v-if="bulkUploadResult" class="mb-6 rounded-lg p-4" :class="bulkUploadResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'">
+            <div class="flex items-start">
+              <div class="flex-shrink-0">
+                <svg v-if="bulkUploadResult.success" class="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
+                <svg v-else class="h-5 w-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+              </div>
+              <div class="ml-3 w-full">
+                <h3 class="text-sm font-medium" :class="bulkUploadResult.success ? 'text-green-800' : 'text-red-800'">
+                  {{ bulkUploadResult.success ? 'Bulk Upload Completed!' : 'Bulk Upload Failed!' }}
+                </h3>
+                <div class="mt-2 text-sm" :class="bulkUploadResult.success ? 'text-green-700' : 'text-red-700'">
+                  <p v-if="bulkUploadResult.success">
+                    Successfully processed {{ bulkUploadResult.data?.total_rows || 0 }} rows.
+                    {{ bulkUploadResult.data?.success_count || 0 }} users created successfully.
+                    <span v-if="bulkUploadResult.data?.failed_count > 0">
+                      {{ bulkUploadResult.data.failed_count }} failed.
+                    </span>
+                  </p>
+                  <p v-else>{{ bulkUploadResult.message }}</p>
+                  
+                  <!-- Show errors if any -->
+                  <ul v-if="bulkUploadResult.data?.errors && bulkUploadResult.data.errors.length > 0" class="mt-2 list-disc list-inside">
+                    <li v-for="(error, index) in bulkUploadResult.data.errors" :key="index" class="text-xs">
+                      {{ error }}
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- File Upload Section -->
+          <div v-if="!csvData.length" class="space-y-6">
+            <!-- Instructions -->
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div class="flex items-start">
+                <svg class="h-5 w-5 text-blue-500 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                </svg>
+                <div>
+                  <h4 class="text-sm font-medium text-blue-800">CSV Upload Instructions</h4>
+                  <div class="mt-2 text-sm text-blue-700">
+                    <p>Please ensure your CSV file contains the following columns in exact order:</p>
+                    <ul class="list-disc list-inside mt-1 space-y-1">
+                      <li><strong>Full Name</strong> - User's complete name</li>
+                      <li><strong>Email</strong> - Valid email address</li>
+                      <li><strong>Phone</strong> - Phone number</li>
+                      <li><strong>Password</strong> - User password</li>
+                      <li><strong>Role</strong> - User role ({{ availableRoles.join(', ') }})</li>
+                      <li><strong>Status</strong> - active or inactive</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Download Sample CSV -->
+            <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div>
+                <h4 class="text-sm font-medium text-gray-800">Need a template?</h4>
+                <p class="text-sm text-gray-600">Download a sample CSV file with the correct format.</p>
+              </div>
+              <button 
+                @click="downloadSampleCSV"
+                class="flex items-center px-3 py-2 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                Download Sample
+              </button>
+            </div>
+
+            <!-- File Upload Area -->
+            <div class="mt-6">
+              <div 
+                @click="$refs.fileInput.click()"
+                @dragover.prevent
+                @drop.prevent="handleFileDrop"
+                class="relative border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-gray-400 cursor-pointer transition-colors"
+                :class="{ 'border-green-400 bg-green-50': isDragOver }"
+              >
+                <input
+                  ref="fileInput"
+                  type="file"
+                  accept=".csv"
+                  @change="handleFileSelect"
+                  class="hidden"
+                />
+                
+                <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                  <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                
+                <div class="mt-4">
+                  <p class="text-lg text-gray-600">Drop your CSV file here or click to browse</p>
+                  <p class="text-sm text-gray-500 mt-1">Only .csv files are accepted</p>
+                </div>
+              </div>
+              
+              <!-- File validation errors -->
+              <div v-if="fileError" class="mt-2 text-sm text-red-600">
+                {{ fileError }}
+              </div>
+            </div>
+          </div>
+
+          <!-- CSV Data Preview -->
+          <div v-if="csvData.length > 0" class="space-y-6">
+            <!-- Preview Header -->
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="text-lg font-medium text-gray-900">CSV Data Preview</h4>
+                <p class="text-sm text-gray-600">{{ csvData.length }} rows found. Review the data before uploading.</p>
+              </div>
+              <button 
+                @click="clearCsvData"
+                class="text-sm text-gray-500 hover:text-gray-700"
+              >
+                Upload Different File
+              </button>
+            </div>
+
+            <!-- Data Table -->
+            <div class="overflow-x-auto border border-gray-200 rounded-lg">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Full Name</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Password</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <tr v-for="(row, index) in csvData.slice(0, 10)" :key="index" class="hover:bg-gray-50">
+                    <td class="px-4 py-3 text-sm text-gray-900">{{ row.full_name }}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">{{ row.email }}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">{{ row.phone }}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">{{ row.password ? '****' : 'Missing' }}</td>
+                    <td class="px-4 py-3 text-sm">
+                      <span class="px-2 py-1 text-xs rounded-full" 
+                            :class="isValidRole(row.role) ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'">
+                        {{ row.role }}
+                      </span>
+                    </td>
+                    <td class="px-4 py-3 text-sm">
+                      <span class="px-2 py-1 text-xs rounded-full"
+                            :class="isValidStatus(row.status) ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'">
+                        {{ row.status }}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <p v-if="csvData.length > 10" class="text-sm text-gray-500 text-center">
+              Showing first 10 rows. {{ csvData.length - 10 }} more rows will be processed.
+            </p>
+
+            <!-- Upload Button -->
+            <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+              <button 
+                @click="clearCsvData"
+                class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                @click="uploadBulkUsers"
+                :disabled="isBulkUploading || !csvData.length"
+                class="flex items-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg v-if="isBulkUploading" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                {{ isBulkUploading ? 'Uploading...' : `Upload ${csvData.length} Users` }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Single User Create/Edit Modal (existing code) -->
     <div v-if="showCreateModal" class="fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex items-center justify-center">
       <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <!-- Modal Header -->
@@ -400,9 +623,20 @@ const showCreateModal = ref(false)
 const isEditing = ref(false)
 const editingUserId = ref(null)
 
+// Bulk upload state variables
+const showBulkUploadModal = ref(false)
+const csvData = ref([])
+const fileError = ref('')
+const isDragOver = ref(false)
+const isBulkUploading = ref(false)
+const bulkUploadResult = ref(null)
+
 // Reactive data from store
 const roles = computed(() => superAdminStore.userRoles)
 const users = computed(() => superAdminStore.users)
+
+// Available roles for validation
+const availableRoles = computed(() => roles.value.map(role => role.role_name))
 
 // Form state
 const form = ref({
@@ -429,6 +663,19 @@ const openCreateModal = () => {
   showCreateModal.value = true
 }
 
+// Bulk upload modal functions
+const openBulkUploadModal = () => {
+  console.log('Opening bulk upload modal')
+  showBulkUploadModal.value = true
+  bulkUploadResult.value = null
+}
+
+const closeBulkUploadModal = () => {
+  showBulkUploadModal.value = false
+  clearCsvData()
+  bulkUploadResult.value = null
+}
+
 // Fetch all data when component mounts
 onMounted(async () => {
   await superAdminStore.refreshUserData()
@@ -445,6 +692,212 @@ const getRoleDisplay = (role) => {
   // Fallback for string roles
   const roleObj = roles.value.find(r => r.role_name === role)
   return roleObj ? roleObj.description || roleObj.role_name : role
+}
+
+// CSV validation functions
+const isValidRole = (role) => {
+  return availableRoles.value.includes(role)
+}
+
+const isValidStatus = (status) => {
+  return ['active', 'inactive'].includes(status?.toLowerCase())
+}
+
+// Download sample CSV template
+const downloadSampleCSV = () => {
+  const csvContent = [
+    ['Full Name', 'Email', 'Phone', 'Password', 'Role', 'Status'],
+    ['John Doe', 'john.doe@example.com', '+1234567890', 'password123', 'user', 'active'],
+    ['Jane Smith', 'jane.smith@example.com', '+1234567891', 'password456', 'admin', 'active'],
+    ['Mike Johnson', 'mike.johnson@example.com', '+1234567892', 'password789', 'templeadmin', 'inactive']
+  ]
+  
+  const csvString = csvContent.map(row => row.map(field => `"${field}"`).join(',')).join('\n')
+  
+  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  const url = URL.createObjectURL(blob)
+  
+  link.setAttribute('href', url)
+  link.setAttribute('download', 'bulk_users_template.csv')
+  link.style.visibility = 'hidden'
+  
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+// File upload handlers
+const handleFileSelect = (event) => {
+  const file = event.target.files[0]
+  if (file) {
+    processFile(file)
+  }
+}
+
+const handleFileDrop = (event) => {
+  isDragOver.value = false
+  const files = event.dataTransfer.files
+  if (files.length > 0) {
+    processFile(files[0])
+  }
+}
+
+// Process uploaded CSV file
+const processFile = (file) => {
+  fileError.value = ''
+  
+  // Validate file type
+  if (!file.name.toLowerCase().endsWith('.csv')) {
+    fileError.value = 'Please upload a CSV file (.csv extension required)'
+    return
+  }
+  
+  // Validate file size (max 5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    fileError.value = 'File size must be less than 5MB'
+    return
+  }
+  
+  // Read and parse CSV
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    try {
+      const csvText = e.target.result
+      parseCsvData(csvText)
+    } catch (err) {
+      console.error('Error reading file:', err)
+      fileError.value = 'Error reading the file. Please try again.'
+    }
+  }
+  
+  reader.onerror = () => {
+    fileError.value = 'Error reading the file. Please try again.'
+  }
+  
+  reader.readAsText(file)
+}
+
+// Parse CSV content using simple parsing (you might want to use a library like Papa Parse)
+const parseCsvData = (csvText) => {
+  try {
+    const lines = csvText.split('\n').filter(line => line.trim())
+    
+    if (lines.length < 2) {
+      fileError.value = 'CSV file must contain at least a header row and one data row'
+      return
+    }
+    
+    // Parse header
+    const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim())
+    const expectedHeaders = ['Full Name', 'Email', 'Phone', 'Password', 'Role', 'Status']
+    
+    // Validate headers
+    const headerMismatch = expectedHeaders.some(expected => !headers.includes(expected))
+    if (headerMismatch) {
+      fileError.value = `CSV headers must match exactly: ${expectedHeaders.join(', ')}`
+      return
+    }
+    
+    // Parse data rows
+    const data = []
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim())
+      
+      if (values.length !== headers.length) {
+        fileError.value = `Row ${i + 1} has ${values.length} columns but expected ${headers.length}`
+        return
+      }
+      
+      const rowData = {
+        full_name: values[headers.indexOf('Full Name')],
+        email: values[headers.indexOf('Email')],
+        phone: values[headers.indexOf('Phone')],
+        password: values[headers.indexOf('Password')],
+        role: values[headers.indexOf('Role')],
+        status: values[headers.indexOf('Status')]
+      }
+      
+      // Basic validation
+      if (!rowData.full_name || !rowData.email || !rowData.phone || !rowData.password || !rowData.role) {
+        fileError.value = `Row ${i + 1} is missing required fields`
+        return
+      }
+      
+      data.push(rowData)
+    }
+    
+    csvData.value = data
+    console.log('Parsed CSV data:', data)
+    
+  } catch (err) {
+    console.error('Error parsing CSV:', err)
+    fileError.value = 'Error parsing CSV file. Please check the format and try again.'
+  }
+}
+
+// Clear CSV data
+const clearCsvData = () => {
+  csvData.value = []
+  fileError.value = ''
+  if (window.document.querySelector('input[type="file"]')) {
+    window.document.querySelector('input[type="file"]').value = ''
+  }
+}
+
+// Upload bulk users
+const uploadBulkUsers = async () => {
+  if (!csvData.value.length) {
+    error('No CSV data to upload')
+    return
+  }
+  
+  isBulkUploading.value = true
+  bulkUploadResult.value = null
+  
+  try {
+    console.log('Uploading bulk users:', csvData.value)
+    
+    // Call your store method to upload bulk users
+    const result = await superAdminStore.createBulkUsers(csvData.value)
+    
+    if (result.success) {
+      bulkUploadResult.value = {
+        success: true,
+        message: 'Bulk upload completed successfully',
+        data: result.data
+      }
+      
+      success(`Successfully uploaded ${result.data.success_count} out of ${result.data.total_rows} users`)
+      
+      // Refresh users list
+      await superAdminStore.refreshUserData()
+      
+      // Clear CSV data after successful upload
+      setTimeout(() => {
+        clearCsvData()
+      }, 3000)
+      
+    } else {
+      bulkUploadResult.value = {
+        success: false,
+        message: result.error || 'Bulk upload failed',
+        data: result.data
+      }
+      error(result.error || 'Failed to upload users')
+    }
+    
+  } catch (err) {
+    console.error('Error uploading bulk users:', err)
+    bulkUploadResult.value = {
+      success: false,
+      message: 'An error occurred during bulk upload',
+      data: null
+    }
+    error('Failed to upload users. Please try again.')
+  } finally {
+    isBulkUploading.value = false
+  }
 }
 
 // Form validation

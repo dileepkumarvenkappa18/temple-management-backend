@@ -83,8 +83,13 @@ export function useAuth() {
       return '/tenant-selection';
     }
 
-    // Replace :id with actual entity ID for end users
-    if (isEndUser.value && currentEntity.value) {
+    // For devotee role, always redirect to temple selection first
+    if (isDevotee.value) {
+      return '/devotee/temple-selection';
+    }
+
+    // Replace :id with actual entity ID for other end users
+    if (isVolunteer.value && currentEntity.value) {
       return roleConfig.dashboard.replace(':id', currentEntity.value.id)
     }
     

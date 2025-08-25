@@ -11,6 +11,11 @@ export const useReportsStore = defineStore('reports', () => {
   const currentReport = ref(null)
   const reportPreview = ref(null)
   const lastReportParams = ref(null)
+  
+  // MISSING REACTIVE VARIABLES - ADDED
+  const devoteeList = ref([])
+  const devoteeProfile = ref(null)
+  const devoteeListStatus = ref('all')
 
   // Getters
   const hasReportData = computed(() => {
@@ -28,6 +33,32 @@ export const useReportsStore = defineStore('reports', () => {
     }
   })
 
+  // MISSING COMPUTED - ADDED
+  const filteredDevoteeList = computed(() => {
+    if (!devoteeList.value || !Array.isArray(devoteeList.value)) {
+      return []
+    }
+    
+    if (devoteeListStatus.value === 'all') {
+      return devoteeList.value
+    }
+    
+    return devoteeList.value.filter(devotee => {
+      if (devoteeListStatus.value === 'active') {
+        return devotee.status === 'active' || devotee.is_active === true
+      } else if (devoteeListStatus.value === 'inactive') {
+        return devotee.status === 'inactive' || devotee.is_active === false
+      } else if (devoteeListStatus.value === 'new') {
+        // Assuming 'new' means recently joined (within last 30 days)
+        const thirtyDaysAgo = new Date()
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+        const joinDate = new Date(devotee.created_at || devotee.join_date)
+        return joinDate >= thirtyDaysAgo
+      }
+      return true
+    })
+  })
+
   // Actions
   const clearError = () => {
     error.value = null
@@ -38,6 +69,10 @@ export const useReportsStore = defineStore('reports', () => {
     reportPreview.value = null
     lastReportParams.value = null
     error.value = null
+    // ADDED: Clear devotee-specific data
+    devoteeList.value = []
+    devoteeProfile.value = null
+    devoteeListStatus.value = 'all'
   }
 
   /**
@@ -181,7 +216,7 @@ export const useReportsStore = defineStore('reports', () => {
     }
   }
 
-  // DEVOTEE BIRTHDAYS REPORT METHODS - NEW
+  // DEVOTEE BIRTHDAYS REPORT METHODS
   /**
    * Fetch devotee birthdays report data (JSON preview)
    */
@@ -251,6 +286,154 @@ export const useReportsStore = defineStore('reports', () => {
     } catch (err) {
       error.value = err.message || 'Failed to get devotee birthdays preview'
       console.error('Error in getDevoteeBirthdaysPreview:', err)
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // DEVOTEE LIST REPORT METHODS
+  const fetchDevoteeListReport = async (params) => {
+    try {
+      loading.value = true
+      error.value = null
+      const { entityId, status = 'all' } = params
+      lastReportParams.value = { ...params, type: 'devotee-list' }
+      
+      const response = await reportsService.getDevoteeList({ entityId, status })
+      currentReport.value = response
+      
+      // Handle nested response data
+      let responseData = response.data
+      if (responseData && responseData.data) {
+        responseData = responseData.data
+      }
+      
+      // FIXED: Set devoteeList properly
+      devoteeList.value = responseData.devotees || responseData || []
+      devoteeListStatus.value = status
+      
+      const preview = await reportsService.getDevoteeListPreview({ entityId, status })
+      reportPreview.value = preview
+      
+      return response
+    } catch (err) {
+      error.value = err.message || 'Failed to fetch devotee list report'
+      console.error('Error in fetchDevoteeListReport:', err)
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const downloadDevoteeListReport = async (params) => {
+    try {
+      downloadLoading.value = true
+      error.value = null
+      const { format } = params
+      if (!format) {
+        throw new Error('Format is required for download')
+      }
+      const result = await reportsService.downloadDevoteeListReport(params)
+      lastReportParams.value = { ...params, type: 'devotee-list' }
+      return result
+    } catch (err) {
+      error.value = err.message || 'Failed to download devotee list report'
+      console.error('Error in downloadDevoteeListReport:', err)
+      throw err
+    } finally {
+      downloadLoading.value = false
+    }
+  }
+
+  const setDevoteeListStatus = async (entityId, status) => {
+    try {
+      loading.value = true
+      error.value = null
+      devoteeListStatus.value = status
+      await fetchDevoteeListReport({ entityId, status })
+    } catch (err) {
+      error.value = err.message || 'Failed to filter devotee list'
+      console.error('Error in setDevoteeListStatus:', err)
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // DEVOTEE PROFILE METHODS
+  const fetchDevoteeProfile = async (params) => {
+    try {
+      loading.value = true
+      error.value = null
+      const { entityId } = params
+      lastReportParams.value = { ...params, type: 'devotee-profile' }
+      
+      const response = await reportsService.getDevoteeProfile({ entityId })
+      currentReport.value = response
+      
+      const preview = await reportsService.getDevoteeProfilePreview({ entityId })
+      devoteeProfile.value = preview
+      
+      return response
+    } catch (err) {
+      error.value = err.message || 'Failed to fetch devotee profile'
+      console.error('Error in fetchDevoteeProfile:', err)
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const downloadDevoteeProfileReport = async (params) => {
+    try {
+      downloadLoading.value = true
+      error.value = null
+      const { format } = params
+      if (!format) {
+        throw new Error('Format is required for download')
+      }
+      const result = await reportsService.downloadDevoteeProfileReport(params)
+      lastReportParams.value = { ...params, type: 'devotee-profile' }
+      return result
+    } catch (err) {
+      error.value = err.message || 'Failed to download devotee profile report'
+      console.error('Error in downloadDevoteeProfileReport:', err)
+      throw err
+    } finally {
+      downloadLoading.value = false
+    }
+  }
+
+  const getDevoteeListPreview = async (params) => {
+    try {
+      loading.value = true
+      error.value = null
+      const preview = await reportsService.getDevoteeListPreview(params)
+      reportPreview.value = preview
+      lastReportParams.value = { ...params, type: 'devotee-list' }
+      return preview
+    } catch (err) {
+      error.value = err.message || 'Failed to get devotee list preview'
+      console.error('Error in getDevoteeListPreview:', err)
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // ADDED: Missing getDevoteeProfilePreview method
+  const getDevoteeProfilePreview = async (params) => {
+    try {
+      loading.value = true
+      error.value = null
+      const preview = await reportsService.getDevoteeProfilePreview(params)
+      reportPreview.value = preview
+      lastReportParams.value = { ...params, type: 'devotee-profile' }
+      return preview
+    } catch (err) {
+      error.value = err.message || 'Failed to get devotee profile preview'
+      console.error('Error in getDevoteeProfilePreview:', err)
       throw err
     } finally {
       loading.value = false
@@ -348,6 +531,30 @@ export const useReportsStore = defineStore('reports', () => {
     }
   }
 
+  const buildDevoteeListParams = (componentState) => {
+    const {
+      selectedTemple,
+      selectedFormat,
+      status = 'all'
+    } = componentState
+    return {
+      entityId: selectedTemple === 'all' ? 'all' : selectedTemple.toString(),
+      status,
+      format: selectedFormat
+    }
+  }
+
+  const buildDevoteeProfileParams = (componentState) => {
+    const {
+      selectedTemple,
+      selectedFormat
+    } = componentState
+    return {
+      entityId: selectedTemple === 'all' ? 'all' : selectedTemple.toString(),
+      format: selectedFormat
+    }
+  }
+
   /**
    * Format report data for display
    */
@@ -408,10 +615,14 @@ export const useReportsStore = defineStore('reports', () => {
     currentReport,
     reportPreview,
     lastReportParams,
+    devoteeList,
+    devoteeProfile,
+    devoteeListStatus,
     
     // Getters
     hasReportData,
     reportSummary,
+    filteredDevoteeList,
     
     // Actions
     clearError,
@@ -422,14 +633,26 @@ export const useReportsStore = defineStore('reports', () => {
     // Temple registered methods
     fetchTempleRegisteredReport,
     downloadTempleRegisteredReport,
-    // Devotee birthdays methods - NEW
+    // Devotee birthdays methods
     fetchDevoteeBirthdaysReport,
     downloadDevoteeBirthdaysReport,
     getDevoteeBirthdaysPreview,
+    // Devotee list methods
+    fetchDevoteeListReport,
+    downloadDevoteeListReport,
+    getDevoteeListPreview,
+    setDevoteeListStatus,
+    // Devotee profile methods
+    fetchDevoteeProfile,
+    downloadDevoteeProfileReport,
+    getDevoteeProfilePreview,
+
     // Utility methods
     getDefaultDateRange,
     buildReportParams,
     buildDevoteeBirthdaysParams,
-    formatReportData
+    formatReportData,
+    buildDevoteeListParams,
+    buildDevoteeProfileParams
   }
 })
