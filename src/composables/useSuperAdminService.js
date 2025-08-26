@@ -16,11 +16,39 @@ export function useSuperAdminService() {
     return superAdminService.assignTenantsToUser(userId, tenantIds);
   };
 
-  // Add any additional methods from superadmin.service.js
+  /**
+   * Fetch reports for a specific tenant as a superadmin
+   * @param {Object} params Report parameters including entityId and type
+   * @returns {Promise} Promise resolving to report data
+   */
+  const fetchTenantReportPreview = (params) => {
+    return superAdminService.fetchTenantReportPreview(params);
+  };
+
+  /**
+   * Download reports for a specific tenant as a superadmin
+   * @param {Object} params Report parameters including entityId, type, and format
+   * @returns {Promise} Promise resolving to download result
+   */
+  const downloadTenantReport = (params) => {
+    return superAdminService.downloadTenantReport(params);
+  };
+
+  /**
+   * Get tenant entity details for reports
+   * @param {string|number} tenantId Tenant ID
+   * @returns {Promise} Promise resolving to tenant details
+   */
+  const getTenantEntityDetails = (tenantId) => {
+    return superAdminService.getTenantEntityDetails(tenantId);
+  };
 
   return {
     fetchUserById,
     fetchAvailableTenants,
-    assignTenantsToUser
+    assignTenantsToUser,
+    fetchTenantReportPreview,
+    downloadTenantReport,
+    getTenantEntityDetails
   };
 }

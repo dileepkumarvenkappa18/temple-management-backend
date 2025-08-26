@@ -12,8 +12,26 @@ const templeService = {
       
       let response
       
+      // Handle SuperAdmin temple fetching with fallback strategy
+      if (searchParams.superAdmin) {
+        console.log(`🔍 Using SuperAdmin endpoint for tenant ${searchParams.tenantId}`)
+        try {
+          // First attempt with standard format - FIXED URL PATH
+          response = await api.get(`/v1/superadmin/tenants/${searchParams.tenantId}/temples`)
+        } catch (err) {
+          console.log('⚠️ First SuperAdmin temple endpoint failed, trying fallback...')
+          try {
+            // Fallback to regular entities endpoint with tenant filter - FIXED URL PATH
+            response = await api.get(`/v1/superadmin/entities?tenant_id=${searchParams.tenantId}`)
+          } catch (err2) {
+            console.log('⚠️ Second SuperAdmin temple endpoint failed, using entity endpoint...')
+            // If superadmin endpoints fail, try the regular entity endpoint as a last resort
+            response = await api.get(`/v1/entities?tenant_id=${searchParams.tenantId}`)
+          }
+        }
+      }
       // NEW LOGIC: Special case for temple admin dashboard
-      if (currentPath.includes('/tenant/dashboard')) {
+      else if (currentPath.includes('/tenant/dashboard')) {
         // Use the special endpoint for temple admins to see their created temples
         console.log('🔑 Using temple admin special endpoint: /v1/entities/by-creator')
         response = await api.get('/v1/entities/by-creator')
@@ -67,6 +85,20 @@ const templeService = {
       // Return empty array instead of throwing error for better UI handling
       return []
     }
+  },
+
+  /**
+   * Get temples for a specific tenant when logged in as SuperAdmin
+   * This is a convenience method that calls getTemples with superAdmin flag
+   * @param {string|number} tenantId - The ID of the tenant to fetch temples for
+   * @returns {Array} - Normalized list of temples
+   */
+  async getSuperAdminTemples(tenantId) {
+    console.log(`📡 Making API call to fetch temples for SuperAdmin for tenant ${tenantId}`)
+    return this.getTemples({
+      tenantId: tenantId,
+      superAdmin: true
+    })
   },
 
   async createTemple(templeData) {

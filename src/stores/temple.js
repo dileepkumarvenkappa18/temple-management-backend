@@ -108,6 +108,37 @@ export const useTempleStore = defineStore('temple', () => {
     }
   }
 
+  const fetchTemplesForSuperAdmin = async (tenantId) => {
+  console.log(`🏛️ Fetching temples for SuperAdmin for tenant ID ${tenantId}...`);
+  temples.value = [];
+  loading.value = true;
+  error.value = null;
+  
+  try {
+    // Use the existing getTemples method but with a special flag
+    const response = await templeService.getTemples({
+      tenantId: tenantId,
+      superAdmin: true
+    });
+    
+    if (response && Array.isArray(response)) {
+      temples.value = response;
+      console.log(`🏛️ Temple service response for SuperAdmin:`, temples.value);
+    } else {
+      temples.value = [];
+      console.warn(`No temples returned for tenant ID ${tenantId}`);
+    }
+    
+    return temples.value;
+  } catch (err) {
+    console.error(`❌ Error fetching temples for SuperAdmin:`, err);
+    error.value = `Failed to fetch temples: ${err.message || 'Unknown error'}`;
+    return [];
+  } finally {
+    loading.value = false;
+  }
+};
+
   const createTemple = async (templeData) => {
     try {
       loading.value = true
@@ -383,6 +414,7 @@ export const useTempleStore = defineStore('temple', () => {
     updateFormField,
     searchTemples,
     clearError,
+    fetchTemplesForSuperAdmin,
     clearTempleData
   }
 })

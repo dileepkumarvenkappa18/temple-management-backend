@@ -5,10 +5,10 @@ class ReportsService {
    * Get activities report data (JSON preview)
    */
   async getActivitiesReport(params) {
-    const { entityId, type, dateRange = 'weekly', startDate, endDate } = params
+    const { entityId, entityIds, type, dateRange = 'weekly', startDate, endDate, isSuperAdmin } = params
     
-    if (!entityId || !type) {
-      throw new Error('Entity ID and type are required')
+    if ((!entityId && !entityIds) || !type) {
+      throw new Error('Entity ID (or IDs) and type are required')
     }
 
     const queryParams = new URLSearchParams({
@@ -21,26 +21,67 @@ class ReportsService {
       queryParams.append('end_date', endDate)
     }
 
-    try {
-      console.log('Making API request:', `/v1/entities/${entityId}/reports/activities?${queryParams}`)
-      const response = await api.get(`/v1/entities/${entityId}/reports/activities?${queryParams}`)
-      console.log('API Response received:', response)
-      
-      return response
-    } catch (error) {
-      console.error('Error fetching activities report:', error)
-      throw error
+    let url;
+    let response;
+    
+    // Choose the right API endpoint based on user role
+    if (isSuperAdmin) {
+      try {
+        // First try with superadmin/tenants endpoint
+        if (entityIds && entityIds.length > 1) {
+          url = `/v1/superadmin/reports/activities?${queryParams}&tenants=${entityIds.join(',')}`
+        } else {
+          url = `/v1/superadmin/tenants/${entityId}/reports/activities?${queryParams}`
+        }
+        
+        console.log('Making primary API request:', url)
+        response = await api.get(url)
+      } catch (error) {
+        console.log('Primary API endpoint failed, trying fallback:', error.message)
+        
+        // Fallback to alternative superadmin endpoint structure
+        try {
+          if (entityIds && entityIds.length > 1) {
+            url = `/v1/superadmin/activities/report?${queryParams}&tenants=${entityIds.join(',')}`
+          } else {
+            url = `/v1/superadmin/activities/report?${queryParams}&tenant_id=${entityId}`
+          }
+          
+          console.log('Making fallback API request:', url)
+          response = await api.get(url)
+        } catch (error2) {
+          console.log('Second fallback failed, trying third pattern:', error2.message)
+          
+          // Try one more pattern
+          if (entityIds && entityIds.length > 1) {
+            url = `/v1/superadmin/entities/reports/activities?${queryParams}&tenants=${entityIds.join(',')}`
+          } else {
+            url = `/v1/entities/${entityId}/reports/activities?${queryParams}`
+          }
+          
+          console.log('Making third fallback API request:', url)
+          response = await api.get(url)
+        }
+      }
+    } else {
+      // Regular entity endpoint
+      url = `/v1/entities/${entityId}/reports/activities?${queryParams}`
+      console.log('Making API request:', url)
+      response = await api.get(url)
     }
+    
+    console.log('API Response received:', response)
+    return response
   }
 
   /**
    * Download activities report in specified format
    */
   async downloadActivitiesReport(params) {
-    const { entityId, type, format, dateRange = 'weekly', startDate, endDate } = params
+    const { entityId, entityIds, type, format, dateRange = 'weekly', startDate, endDate, isSuperAdmin } = params
     
-    if (!entityId || !type || !format) {
-      throw new Error('Entity ID, type, and format are required')
+    if ((!entityId && !entityIds) || !type || !format) {
+      throw new Error('Entity ID (or IDs), type, and format are required')
     }
 
     const queryParams = new URLSearchParams({
@@ -54,34 +95,42 @@ class ReportsService {
       queryParams.append('end_date', endDate)
     }
 
-    try {
-      const response = await api.get(`/v1/entities/${entityId}/reports/activities?${queryParams}`, {
-        responseType: 'blob',
-        headers: {
-          'Accept': 'application/octet-stream'
-        }
-      })
-
-      const contentDisposition = response.headers['content-disposition']
-      let filename = `${type}_report.${format}`
-      
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename=(.+)/)
-        if (filenameMatch) {
-          filename = filenameMatch[1].replace(/"/g, '')
-        }
+    let url;
+    
+    // Choose the right API endpoint based on user role
+    if (isSuperAdmin) {
+      // Try the same pattern as getActivitiesReport for consistency
+      if (entityIds && entityIds.length > 1) {
+        url = `/v1/superadmin/reports/activities?${queryParams}&tenants=${entityIds.join(',')}`
+      } else {
+        url = `/v1/superadmin/tenants/${entityId}/reports/activities?${queryParams}`
       }
+      
+      // We'll rely on downloadReport's error handling to try alternative patterns if needed
+    } else {
+      // Regular entity endpoint
+      url = `/v1/entities/${entityId}/reports/activities?${queryParams}`
+    }
 
-      const url = window.URL.createObjectURL(new Blob([response.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', filename)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-
-      return { success: true, filename }
+    try {
+      return await this.downloadReport(url, { format }, `${type}_report`, async () => {
+        // Fallback function for alternative URLs if the first one fails
+        if (isSuperAdmin) {
+          // Try alternative patterns
+          const alternatives = [
+            entityIds && entityIds.length > 1 
+              ? `/v1/superadmin/activities/report?${queryParams}&tenants=${entityIds.join(',')}`
+              : `/v1/superadmin/activities/report?${queryParams}&tenant_id=${entityId}`,
+            
+            entityIds && entityIds.length > 1
+              ? `/v1/superadmin/entities/reports/activities?${queryParams}&tenants=${entityIds.join(',')}`
+              : `/v1/entities/${entityId}/reports/activities?${queryParams}`
+          ];
+          
+          return alternatives;
+        }
+        return null; // No alternatives for regular users
+      });
     } catch (error) {
       console.error('Error downloading activities report:', error)
       throw error
@@ -179,8 +228,8 @@ class ReportsService {
   validateReportParams(params) {
     const errors = []
 
-    if (!params.entityId) {
-      errors.push('Entity ID is required')
+    if (!params.entityId && !params.entityIds) {
+      errors.push('Entity ID or Entity IDs are required')
     }
 
     if (!params.type || !['events', 'sevas', 'bookings', 'donations', 'temple-registered', 'devotee-birthdays'].includes(params.type)) {
@@ -214,10 +263,10 @@ class ReportsService {
 
   // TEMPLE REGISTERED METHODS
   async getTempleRegisteredReport(params) {
-    const { entityId, status, dateRange = 'weekly', startDate, endDate } = params
+    const { entityId, entityIds, status, dateRange = 'weekly', startDate, endDate, isSuperAdmin } = params
 
-    if (!entityId) {
-      throw new Error('Entity ID is required')
+    if (!entityId && !entityIds) {
+      throw new Error('Entity ID or Entity IDs are required')
     }
 
     const queryParams = new URLSearchParams({
@@ -233,17 +282,115 @@ class ReportsService {
       queryParams.append('end_date', endDate)
     }
 
-    try {
-      const response = await api.get(`/v1/entities/${entityId}/reports/temple-registered?${queryParams}`)
-      return response
-    } catch (error) {
-      console.error('Error fetching temple-registered report:', error)
-      throw error
+    let url;
+    let response;
+    
+    // Choose the right API endpoint based on user role
+    if (isSuperAdmin) {
+      try {
+        // First try with superadmin/tenants endpoint
+        if (entityIds && entityIds.length > 1) {
+          url = `/v1/superadmin/reports/temple-registered?${queryParams}&tenants=${entityIds.join(',')}`
+        } else {
+          url = `/v1/superadmin/tenants/${entityId}/reports/temple-registered?${queryParams}`
+        }
+        
+        console.log('Making primary API request:', url)
+        response = await api.get(url)
+      } catch (error) {
+        console.log('Primary API endpoint failed, trying fallback:', error.message)
+        
+        // Fallback to alternative superadmin endpoint structure
+        try {
+          if (entityIds && entityIds.length > 1) {
+            url = `/v1/superadmin/temple-registered/report?${queryParams}&tenants=${entityIds.join(',')}`
+          } else {
+            url = `/v1/superadmin/temple-registered/report?${queryParams}&tenant_id=${entityId}`
+          }
+          
+          console.log('Making fallback API request:', url)
+          response = await api.get(url)
+        } catch (error2) {
+          console.log('Second fallback failed, trying third pattern:', error2.message)
+          
+          // Try one more pattern
+          if (entityIds && entityIds.length > 1) {
+            url = `/v1/superadmin/entities/reports/temple-registered?${queryParams}&tenants=${entityIds.join(',')}`
+          } else {
+            url = `/v1/entities/${entityId}/reports/temple-registered?${queryParams}`
+          }
+          
+          console.log('Making third fallback API request:', url)
+          response = await api.get(url)
+        }
+      }
+    } else {
+      // Regular entity endpoint
+      url = `/v1/entities/${entityId}/reports/temple-registered?${queryParams}`
+      console.log('Making API request:', url)
+      response = await api.get(url)
     }
+    
+    return response
   }
 
   async downloadTempleRegisteredReport(params) {
-    return this.downloadReport(`/v1/entities/${params.entityId}/reports/temple-registered`, params, 'temple_registered_report')
+    const { entityId, entityIds, status, dateRange = 'weekly', startDate, endDate, format, isSuperAdmin } = params
+
+    if ((!entityId && !entityIds) || !format) {
+      throw new Error('Entity ID (or IDs) and format are required')
+    }
+
+    const queryParams = new URLSearchParams({
+      date_range: dateRange,
+      format
+    })
+
+    if (status) {
+      queryParams.append('status', status)
+    }
+
+    if (dateRange === 'custom' && startDate && endDate) {
+      queryParams.append('start_date', startDate)
+      queryParams.append('end_date', endDate)
+    }
+
+    let url;
+    
+    // Choose the right API endpoint based on user role
+    if (isSuperAdmin) {
+      if (entityIds && entityIds.length > 1) {
+        url = `/v1/superadmin/reports/temple-registered?${queryParams}&tenants=${entityIds.join(',')}`
+      } else {
+        url = `/v1/superadmin/tenants/${entityId}/reports/temple-registered?${queryParams}`
+      }
+    } else {
+      url = `/v1/entities/${entityId}/reports/temple-registered?${queryParams}`
+    }
+
+    try {
+      return await this.downloadReport(url, { format }, 'temple_registered_report', async () => {
+        // Fallback function for alternative URLs if the first one fails
+        if (isSuperAdmin) {
+          // Try alternative patterns
+          const alternatives = [
+            entityIds && entityIds.length > 1 
+              ? `/v1/superadmin/temple-registered/report?${queryParams}&tenants=${entityIds.join(',')}`
+              : `/v1/superadmin/temple-registered/report?${queryParams}&tenant_id=${entityId}`,
+            
+            entityIds && entityIds.length > 1
+              ? `/v1/superadmin/entities/reports/temple-registered?${queryParams}&tenants=${entityIds.join(',')}`
+              : `/v1/entities/${entityId}/reports/temple-registered?${queryParams}`
+          ];
+          
+          return alternatives;
+        }
+        return null; // No alternatives for regular users
+      });
+    } catch (error) {
+      console.error('Error downloading temple-registered report:', error)
+      throw error
+    }
   }
 
   async getTempleRegisteredPreview(params) {
@@ -275,22 +422,19 @@ class ReportsService {
     }
   }
 
-  // DEVOTEE BIRTHDAYS METHODS - FIXED
-  /**
-   * Get devotee birthdays report data (JSON preview)
-   */
+  // DEVOTEE BIRTHDAYS METHODS
   async getDevoteeBirthdaysReport(params) {
-    const { entityId, dateRange = 'monthly', startDate, endDate } = params
+    const { entityId, entityIds, dateRange = 'monthly', startDate, endDate, isSuperAdmin } = params
 
-    if (!entityId) {
-      throw new Error('Entity ID is required')
+    if (!entityId && !entityIds) {
+      throw new Error('Entity ID or Entity IDs are required')
     }
 
     const queryParams = new URLSearchParams({
       date_range: dateRange,
     })
 
-    // FIXED: For birthdays, we need to handle date range differently
+    // For birthdays, we need to handle date range differently
     if (dateRange === 'custom' && startDate && endDate) {
       queryParams.append('start_date', startDate)
       queryParams.append('end_date', endDate)
@@ -324,25 +468,64 @@ class ReportsService {
       queryParams.append('end_date', calculatedEndDate.toISOString().split('T')[0])
     }
 
-    try {
-      console.log('🎂 Making devotee birthdays API request:', `/v1/entities/${entityId}/reports/devotee-birthdays?${queryParams}`)
-      const response = await api.get(`/v1/entities/${entityId}/reports/devotee-birthdays?${queryParams}`)
-      console.log('✅ Devotee birthdays API Response received:', response)
-      return response
-    } catch (error) {
-      console.error('❌ Error fetching devotee-birthdays report:', error)
-      throw error
+    let url;
+    let response;
+    
+    // Choose the right API endpoint based on user role
+    if (isSuperAdmin) {
+      try {
+        // First try with superadmin/tenants endpoint
+        if (entityIds && entityIds.length > 1) {
+          url = `/v1/superadmin/reports/devotee-birthdays?${queryParams}&tenants=${entityIds.join(',')}`
+        } else {
+          url = `/v1/superadmin/tenants/${entityId}/reports/devotee-birthdays?${queryParams}`
+        }
+        
+        console.log('🎂 Making primary devotee birthdays API request:', url)
+        response = await api.get(url)
+      } catch (error) {
+        console.log('Primary API endpoint failed, trying fallback:', error.message)
+        
+        // Fallback to alternative superadmin endpoint structure
+        try {
+          if (entityIds && entityIds.length > 1) {
+            url = `/v1/superadmin/devotee-birthdays/report?${queryParams}&tenants=${entityIds.join(',')}`
+          } else {
+            url = `/v1/superadmin/devotee-birthdays/report?${queryParams}&tenant_id=${entityId}`
+          }
+          
+          console.log('🎂 Making fallback devotee birthdays API request:', url)
+          response = await api.get(url)
+        } catch (error2) {
+          console.log('Second fallback failed, trying third pattern:', error2.message)
+          
+          // Try one more pattern
+          if (entityIds && entityIds.length > 1) {
+            url = `/v1/superadmin/entities/reports/devotee-birthdays?${queryParams}&tenants=${entityIds.join(',')}`
+          } else {
+            url = `/v1/entities/${entityId}/reports/devotee-birthdays?${queryParams}`
+          }
+          
+          console.log('🎂 Making third fallback devotee birthdays API request:', url)
+          response = await api.get(url)
+        }
+      }
+    } else {
+      // Regular entity endpoint
+      url = `/v1/entities/${entityId}/reports/devotee-birthdays?${queryParams}`
+      console.log('🎂 Making devotee birthdays API request:', url)
+      response = await api.get(url)
     }
+    
+    console.log('✅ Devotee birthdays API Response received:', response)
+    return response
   }
 
-  /**
-   * Download devotee birthdays report in specified format - FIXED
-   */
   async downloadDevoteeBirthdaysReport(params) {
-    const { entityId, format, dateRange = 'monthly', startDate, endDate } = params
+    const { entityId, entityIds, format, dateRange = 'monthly', startDate, endDate, isSuperAdmin } = params
 
-    if (!entityId || !format) {
-      throw new Error('Entity ID and format are required')
+    if ((!entityId && !entityIds) || !format) {
+      throw new Error('Entity ID (or IDs) and format are required')
     }
 
     const queryParams = new URLSearchParams({
@@ -350,7 +533,7 @@ class ReportsService {
       format
     })
 
-    // FIXED: Same date logic as preview method
+    // Same date logic as preview method
     if (dateRange === 'custom' && startDate && endDate) {
       queryParams.append('start_date', startDate)
       queryParams.append('end_date', endDate)
@@ -383,14 +566,44 @@ class ReportsService {
       queryParams.append('end_date', calculatedEndDate.toISOString().split('T')[0])
     }
 
-    const apiUrl = `/v1/entities/${entityId}/reports/devotee-birthdays?${queryParams}`
+    let url;
     
-    return this.downloadReport(apiUrl, { format }, 'devotee_birthdays_report')
+    // Choose the right API endpoint based on user role
+    if (isSuperAdmin) {
+      if (entityIds && entityIds.length > 1) {
+        url = `/v1/superadmin/reports/devotee-birthdays?${queryParams}&tenants=${entityIds.join(',')}`
+      } else {
+        url = `/v1/superadmin/tenants/${entityId}/reports/devotee-birthdays?${queryParams}`
+      }
+    } else {
+      url = `/v1/entities/${entityId}/reports/devotee-birthdays?${queryParams}`
+    }
+    
+    try {
+      return await this.downloadReport(url, { format }, 'devotee_birthdays_report', async () => {
+        // Fallback function for alternative URLs if the first one fails
+        if (isSuperAdmin) {
+          // Try alternative patterns
+          const alternatives = [
+            entityIds && entityIds.length > 1 
+              ? `/v1/superadmin/devotee-birthdays/report?${queryParams}&tenants=${entityIds.join(',')}`
+              : `/v1/superadmin/devotee-birthdays/report?${queryParams}&tenant_id=${entityId}`,
+            
+            entityIds && entityIds.length > 1
+              ? `/v1/superadmin/entities/reports/devotee-birthdays?${queryParams}&tenants=${entityIds.join(',')}`
+              : `/v1/entities/${entityId}/reports/devotee-birthdays?${queryParams}`
+          ];
+          
+          return alternatives;
+        }
+        return null; // No alternatives for regular users
+      });
+    } catch (error) {
+      console.error('Error downloading devotee-birthdays report:', error)
+      throw error
+    }
   }
 
-  /**
-   * Get devotee birthdays report preview data - FIXED
-   */
   async getDevoteeBirthdaysPreview(params) {
     try {
       const response = await this.getDevoteeBirthdaysReport(params)
@@ -417,7 +630,7 @@ class ReportsService {
         { key: 'upcoming_birthday', label: 'Upcoming Birthday' }
       ]
 
-      // FIXED: Handle different response formats more robustly
+      // Handle different response formats more robustly
       let previewData = []
       
       if (Array.isArray(responseData)) {
@@ -457,10 +670,10 @@ class ReportsService {
 
   // DEVOTEE LIST METHODS
   async getDevoteeList(params) {
-    const { entityId, status = 'all' } = params
+    const { entityId, entityIds, status = 'all', isSuperAdmin } = params
 
-    if (!entityId) {
-      throw new Error('Entity ID is required')
+    if (!entityId && !entityIds) {
+      throw new Error('Entity ID or Entity IDs are required')
     }
 
     const allowedStatuses = ['all', 'active', 'inactive']
@@ -473,22 +686,64 @@ class ReportsService {
       queryParams.append('status', status)
     }
 
-    try {
-      console.log('📋 Making devotee list API request:', `/v1/entities/${entityId}/reports/devotee-list?${queryParams}`)
-      const response = await api.get(`/v1/entities/${entityId}/reports/devotee-list?${queryParams}`)
-      console.log('✅ Devotee list API Response received:', response)
-      return response
-    } catch (error) {
-      console.error('❌ Error fetching devotee list:', error)
-      throw error
+    let url;
+    let response;
+    
+    // Choose the right API endpoint based on user role
+    if (isSuperAdmin) {
+      try {
+        // First try with superadmin/tenants endpoint
+        if (entityIds && entityIds.length > 1) {
+          url = `/v1/superadmin/reports/devotee-list?${queryParams}&tenants=${entityIds.join(',')}`
+        } else {
+          url = `/v1/superadmin/tenants/${entityId}/reports/devotee-list?${queryParams}`
+        }
+        
+        console.log('📋 Making primary devotee list API request:', url)
+        response = await api.get(url)
+      } catch (error) {
+        console.log('Primary API endpoint failed, trying fallback:', error.message)
+        
+        // Fallback to alternative superadmin endpoint structure
+        try {
+          if (entityIds && entityIds.length > 1) {
+            url = `/v1/superadmin/devotee-list/report?${queryParams}&tenants=${entityIds.join(',')}`
+          } else {
+            url = `/v1/superadmin/devotee-list/report?${queryParams}&tenant_id=${entityId}`
+          }
+          
+          console.log('📋 Making fallback devotee list API request:', url)
+          response = await api.get(url)
+        } catch (error2) {
+          console.log('Second fallback failed, trying third pattern:', error2.message)
+          
+          // Try one more pattern
+          if (entityIds && entityIds.length > 1) {
+            url = `/v1/superadmin/entities/reports/devotees?${queryParams}&tenants=${entityIds.join(',')}`
+          } else {
+            url = `/v1/entities/${entityId}/reports/devotees?${queryParams}`
+          }
+          
+          console.log('📋 Making third fallback devotee list API request:', url)
+          response = await api.get(url)
+        }
+      }
+    } else {
+      // Regular entity endpoint
+      url = `/v1/entities/${entityId}/reports/devotee-list?${queryParams}`
+      console.log('📋 Making devotee list API request:', url)
+      response = await api.get(url)
     }
+    
+    console.log('✅ Devotee list API Response received:', response)
+    return response
   }
 
   async downloadDevoteeListReport(params) {
-    const { entityId, status = 'all', format } = params
+    const { entityId, entityIds, status = 'all', format, isSuperAdmin } = params
 
-    if (!entityId || !format) {
-      throw new Error('Entity ID and format are required')
+    if ((!entityId && !entityIds) || !format) {
+      throw new Error('Entity ID (or IDs) and format are required')
     }
 
     const queryParams = new URLSearchParams({ format })
@@ -496,8 +751,42 @@ class ReportsService {
       queryParams.append('status', status)
     }
 
-    const apiUrl = `/v1/entities/${entityId}/reports/devotee-list?${queryParams}`
-    return this.downloadReport(apiUrl, { format }, `devotee_list_${status}_report`)
+    let url;
+    
+    // Choose the right API endpoint based on user role
+    if (isSuperAdmin) {
+      if (entityIds && entityIds.length > 1) {
+        url = `/v1/superadmin/reports/devotee-list?${queryParams}&tenants=${entityIds.join(',')}`
+      } else {
+        url = `/v1/superadmin/tenants/${entityId}/reports/devotee-list?${queryParams}`
+      }
+    } else {
+      url = `/v1/entities/${entityId}/reports/devotee-list?${queryParams}`
+    }
+    
+    try {
+      return await this.downloadReport(url, { format }, `devotee_list_${status}_report`, async () => {
+        // Fallback function for alternative URLs if the first one fails
+        if (isSuperAdmin) {
+          // Try alternative patterns
+          const alternatives = [
+            entityIds && entityIds.length > 1 
+              ? `/v1/superadmin/devotee-list/report?${queryParams}&tenants=${entityIds.join(',')}`
+              : `/v1/superadmin/devotee-list/report?${queryParams}&tenant_id=${entityId}`,
+            
+            entityIds && entityIds.length > 1
+              ? `/v1/superadmin/entities/reports/devotees?${queryParams}&tenants=${entityIds.join(',')}`
+              : `/v1/entities/${entityId}/reports/devotees?${queryParams}`
+          ];
+          
+          return alternatives;
+        }
+        return null; // No alternatives for regular users
+      });
+    } catch (error) {
+      console.error('Error downloading devotee list report:', error)
+      throw error
+    }
   }
 
   async getDevoteeListPreview(params) {
@@ -533,33 +822,110 @@ class ReportsService {
 
   // DEVOTEE PROFILE METHODS
   async getDevoteeProfile(params) {
-    const { entityId } = params
+    const { entityId, entityIds, isSuperAdmin } = params
 
-    if (!entityId) {
-      throw new Error('Entity ID is required')
+    if (!entityId && !entityIds) {
+      throw new Error('Entity ID or Entity IDs are required')
     }
 
-    try {
-      console.log('👤 Making devotee profile API request:', `/v1/entities/${entityId}/reports/devotee-profile`)
-      const response = await api.get(`/v1/entities/${entityId}/reports/devotee-profile`)
-      console.log('✅ Devotee profile API Response received:', response)
-      return response
-    } catch (error) {
-      console.error('❌ Error fetching devotee profile:', error)
-      throw error
+    let url;
+    let response;
+    
+    // Choose the right API endpoint based on user role
+    if (isSuperAdmin) {
+      try {
+        // First try with superadmin/tenants endpoint
+        if (entityIds && entityIds.length > 1) {
+          url = `/v1/superadmin/reports/devotee-profile?tenants=${entityIds.join(',')}`
+        } else {
+          url = `/v1/superadmin/tenants/${entityId}/reports/devotee-profile`
+        }
+        
+        console.log('👤 Making primary devotee profile API request:', url)
+        response = await api.get(url)
+      } catch (error) {
+        console.log('Primary API endpoint failed, trying fallback:', error.message)
+        
+        // Fallback to alternative superadmin endpoint structure
+        try {
+          if (entityIds && entityIds.length > 1) {
+            url = `/v1/superadmin/devotee-profile/report?tenants=${entityIds.join(',')}`
+          } else {
+            url = `/v1/superadmin/devotee-profile/report?tenant_id=${entityId}`
+          }
+          
+          console.log('👤 Making fallback devotee profile API request:', url)
+          response = await api.get(url)
+        } catch (error2) {
+          console.log('Second fallback failed, trying third pattern:', error2.message)
+          
+          // Try one more pattern
+          if (entityIds && entityIds.length > 1) {
+            url = `/v1/superadmin/entities/reports/devotee-profile?tenants=${entityIds.join(',')}`
+          } else {
+            url = `/v1/entities/${entityId}/reports/devotee-profile`
+          }
+          
+          console.log('👤 Making third fallback devotee profile API request:', url)
+          response = await api.get(url)
+        }
+      }
+    } else {
+      // Regular entity endpoint
+      url = `/v1/entities/${entityId}/reports/devotee-profile`
+      console.log('👤 Making devotee profile API request:', url)
+      response = await api.get(url)
     }
+    
+    console.log('✅ Devotee profile API Response received:', response)
+    return response
   }
 
   async downloadDevoteeProfileReport(params) {
-    const { entityId, format } = params
+    const { entityId, entityIds, format, isSuperAdmin } = params
 
-    if (!entityId || !format) {
-      throw new Error('Entity ID and format are required')
+    if ((!entityId && !entityIds) || !format) {
+      throw new Error('Entity ID (or IDs) and format are required')
     }
 
     const queryParams = new URLSearchParams({ format })
-    const apiUrl = `/v1/entities/${entityId}/reports/devotee-profile?${queryParams}`
-    return this.downloadReport(apiUrl, { format }, 'devotee_profile_report')
+    
+    let url;
+    
+    // Choose the right API endpoint based on user role
+    if (isSuperAdmin) {
+      if (entityIds && entityIds.length > 1) {
+        url = `/v1/superadmin/reports/devotee-profile?${queryParams}&tenants=${entityIds.join(',')}`
+      } else {
+        url = `/v1/superadmin/tenants/${entityId}/reports/devotee-profile?${queryParams}`
+      }
+    } else {
+      url = `/v1/entities/${entityId}/reports/devotee-profile?${queryParams}`
+    }
+    
+    try {
+      return await this.downloadReport(url, { format }, 'devotee_profile_report', async () => {
+        // Fallback function for alternative URLs if the first one fails
+        if (isSuperAdmin) {
+          // Try alternative patterns
+          const alternatives = [
+            entityIds && entityIds.length > 1 
+              ? `/v1/superadmin/devotee-profile/report?${queryParams}&tenants=${entityIds.join(',')}`
+              : `/v1/superadmin/devotee-profile/report?${queryParams}&tenant_id=${entityId}`,
+            
+            entityIds && entityIds.length > 1
+              ? `/v1/superadmin/entities/reports/devotee-profile?${queryParams}&tenants=${entityIds.join(',')}`
+              : `/v1/entities/${entityId}/reports/devotee-profile?${queryParams}`
+          ];
+          
+          return alternatives;
+        }
+        return null; // No alternatives for regular users
+      });
+    } catch (error) {
+      console.error('Error downloading devotee profile report:', error)
+      throw error
+    }
   }
 
   async getDevoteeProfilePreview(params) {
@@ -580,319 +946,446 @@ class ReportsService {
     }
   }
 
-/**
- * Get audit logs report data (preview) - FIXED ENDPOINT
- */
-async getAuditLogsReport(params) {
-  const {
-    entityId,
-    dateRange = 'weekly',
-    startDate,
-    endDate,
-    userId,
-    actionType
-  } = params
+  // AUDIT LOGS REPORT METHODS
+  async getAuditLogsReport(params) {
+    const {
+      entityId,
+      entityIds,
+      dateRange = 'weekly',
+      startDate,
+      endDate,
+      userId,
+      actionType,
+      isSuperAdmin
+    } = params
 
-  if (!entityId) {
-    throw new Error('Entity ID is required')
-  }
-
-  const queryParams = new URLSearchParams({ date_range: dateRange })
-
-  // Handle date range (custom or preset)
-  let finalStartDate, finalEndDate
-  const today = new Date()
-
-  if (dateRange === 'custom' && startDate && endDate) {
-    finalStartDate = startDate
-    finalEndDate = endDate
-  } else {
-    finalEndDate = today.toISOString().split('T')[0]
-    const start = new Date(today)
-
-    switch (dateRange) {
-      case 'daily':
-        break // today only
-      case 'weekly':
-        start.setDate(today.getDate() - 7)
-        break
-      case 'monthly':
-        start.setMonth(today.getMonth() - 1)
-        break
-      default:
-        start.setDate(today.getDate() - 7)
+    if (!entityId && !entityIds) {
+      throw new Error('Entity ID or Entity IDs are required')
     }
 
-    finalStartDate = start.toISOString().split('T')[0]
-  }
+    const queryParams = new URLSearchParams({ date_range: dateRange })
 
-  queryParams.set('start_date', finalStartDate)
-  queryParams.set('end_date', finalEndDate)
+    // Handle date range (custom or preset)
+    let finalStartDate, finalEndDate
+    const today = new Date()
 
-  if (userId) queryParams.set('user_id', userId)
-  if (actionType) queryParams.set('action_type', actionType)
+    if (dateRange === 'custom' && startDate && endDate) {
+      finalStartDate = startDate
+      finalEndDate = endDate
+    } else {
+      finalEndDate = today.toISOString().split('T')[0]
+      const start = new Date(today)
 
-  // FIXED: Ensure correct endpoint format
-  const url = `/v1/entities/${entityId}/reports/audit-logs?${queryParams.toString()}`
+      switch (dateRange) {
+        case 'daily':
+          break // today only
+        case 'weekly':
+          start.setDate(today.getDate() - 7)
+          break
+        case 'monthly':
+          start.setMonth(today.getMonth() - 1)
+          break
+        default:
+          start.setDate(today.getDate() - 7)
+      }
 
-  try {
-    console.log('🔍 Making audit logs API request:', url)
-    const response = await api.get(url)
+      finalStartDate = start.toISOString().split('T')[0]
+    }
+
+    queryParams.set('start_date', finalStartDate)
+    queryParams.set('end_date', finalEndDate)
+
+    if (userId) queryParams.set('user_id', userId)
+    if (actionType) queryParams.set('action_type', actionType)
+
+    let url;
+    let response;
+    
+    // Choose the right API endpoint based on user role
+    if (isSuperAdmin) {
+      try {
+        // First try with superadmin/tenants endpoint
+        if (entityIds && entityIds.length > 1) {
+          url = `/v1/superadmin/reports/audit-logs?${queryParams}&tenants=${entityIds.join(',')}`
+        } else {
+          url = `/v1/superadmin/tenants/${entityId}/reports/audit-logs?${queryParams}`
+        }
+        
+        console.log('🔍 Making primary audit logs API request:', url)
+        response = await api.get(url)
+      } catch (error) {
+        console.log('Primary API endpoint failed, trying fallback:', error.message)
+        
+        // Fallback to alternative superadmin endpoint structure
+        try {
+          if (entityIds && entityIds.length > 1) {
+            url = `/v1/superadmin/audit-logs/report?${queryParams}&tenants=${entityIds.join(',')}`
+          } else {
+            url = `/v1/superadmin/audit-logs/report?${queryParams}&tenant_id=${entityId}`
+          }
+          
+          console.log('🔍 Making fallback audit logs API request:', url)
+          response = await api.get(url)
+        } catch (error2) {
+          console.log('Second fallback failed, trying third pattern:', error2.message)
+          
+          // Try one more pattern
+          if (entityIds && entityIds.length > 1) {
+            url = `/v1/superadmin/entities/reports/audit-logs?${queryParams}&tenants=${entityIds.join(',')}`
+          } else {
+            url = `/v1/entities/${entityId}/reports/audit-logs?${queryParams}`
+          }
+          
+          console.log('🔍 Making third fallback audit logs API request:', url)
+          response = await api.get(url)
+        }
+      }
+    } else {
+      // Regular entity endpoint
+      url = `/v1/entities/${entityId}/reports/audit-logs?${queryParams}`
+      console.log('🔍 Making audit logs API request:', url)
+      response = await api.get(url)
+    }
+    
     console.log('✅ Audit logs API Response received:', response)
     return response
-  } catch (error) {
-    console.error('❌ Error fetching audit logs report:', error)
-    throw error
-  }
-}
-
-/**
- * Download audit logs report (CSV, PDF, etc.) - FIXED ENDPOINT
- */
-async downloadAuditLogsReport(params) {
-  const {
-    entityId,
-    format = 'csv',
-    dateRange = 'weekly',
-    startDate,
-    endDate,
-    userId,
-    actionType
-  } = params
-
-  if (!entityId || !format) {
-    throw new Error('Entity ID and format are required')
   }
 
-  const queryParams = new URLSearchParams({ date_range: dateRange, format })
+  async downloadAuditLogsReport(params) {
+    const {
+      entityId,
+      entityIds,
+      format = 'csv',
+      dateRange = 'weekly',
+      startDate,
+      endDate,
+      userId,
+      actionType,
+      isSuperAdmin
+    } = params
 
-  // Handle date range
-  let finalStartDate, finalEndDate
-  const today = new Date()
-
-  if (dateRange === 'custom' && startDate && endDate) {
-    finalStartDate = startDate
-    finalEndDate = endDate
-  } else {
-    finalEndDate = today.toISOString().split('T')[0]
-    const start = new Date(today)
-
-    switch (dateRange) {
-      case 'daily':
-        break // today only
-      case 'weekly':
-        start.setDate(today.getDate() - 7)
-        break
-      case 'monthly':
-        start.setMonth(today.getMonth() - 1)
-        break
-      default:
-        start.setDate(today.getDate() - 7)
+    if ((!entityId && !entityIds) || !format) {
+      throw new Error('Entity ID (or IDs) and format are required')
     }
 
-    finalStartDate = start.toISOString().split('T')[0]
-  }
+    const queryParams = new URLSearchParams({ date_range: dateRange, format })
 
-  queryParams.set('start_date', finalStartDate)
-  queryParams.set('end_date', finalEndDate)
+    // Handle date range
+    let finalStartDate, finalEndDate
+    const today = new Date()
 
-  if (userId) queryParams.set('user_id', userId)
-  if (actionType) queryParams.set('action_type', actionType)
-
-  // FIXED: Ensure correct endpoint format
-  const url = `/v1/entities/${entityId}/reports/audit-logs?${queryParams.toString()}`
-
-  try {
-    console.log('📥 Making audit logs download request:', url)
-    return await this.downloadReport(url, { format }, 'audit_logs_report')
-  } catch (error) {
-    console.error('❌ Error downloading audit logs report:', error)
-    throw error
-  }
-}
-
-/**
- * Get audit logs report preview data - NEW METHOD
- */
-async getAuditLogsPreview(params) {
-  try {
-    const response = await this.getAuditLogsReport(params)
-
-    console.log('🔍 Audit logs preview response:', response)
-
-    let responseData = response.data
-    
-    // Handle different response structures
-    if (responseData && responseData.data) {
-      responseData = responseData.data
-    }
-
-    console.log('📊 Processed audit logs data:', responseData)
-
-    const columns = [
-      { key: 'timestamp', label: 'Timestamp' },
-      { key: 'user_name', label: 'User' },
-      { key: 'action_type', label: 'Action' },
-      { key: 'resource_type', label: 'Resource Type' },
-      { key: 'resource_id', label: 'Resource ID' },
-      { key: 'description', label: 'Description' },
-      { key: 'ip_address', label: 'IP Address' },
-      { key: 'user_agent', label: 'User Agent' }
-    ]
-
-    // Handle different response formats
-    let previewData = []
-    
-    if (Array.isArray(responseData)) {
-      previewData = responseData
-    } else if (responseData && responseData.audit_logs) {
-      previewData = responseData.audit_logs
-    } else if (responseData && responseData.logs) {
-      previewData = responseData.logs
-    } else if (responseData && Array.isArray(responseData.data)) {
-      previewData = responseData.data
+    if (dateRange === 'custom' && startDate && endDate) {
+      finalStartDate = startDate
+      finalEndDate = endDate
     } else {
-      console.warn('⚠️ No valid audit logs data found in response:', responseData)
-      previewData = []
+      finalEndDate = today.toISOString().split('T')[0]
+      const start = new Date(today)
+
+      switch (dateRange) {
+        case 'daily':
+          break // today only
+        case 'weekly':
+          start.setDate(today.getDate() - 7)
+          break
+        case 'monthly':
+          start.setMonth(today.getMonth() - 1)
+          break
+        default:
+          start.setDate(today.getDate() - 7)
+      }
+
+      finalStartDate = start.toISOString().split('T')[0]
     }
 
-    // Format timestamp for better display
-    previewData = previewData.map(item => ({
-      ...item,
-      timestamp: item.timestamp ? this.formatDateTime(item.timestamp) : '-',
-      description: item.description || item.details || '-',
-      user_agent: item.user_agent ? this.truncateText(item.user_agent, 50) : '-'
-    }))
+    queryParams.set('start_date', finalStartDate)
+    queryParams.set('end_date', finalEndDate)
 
-    console.log('📋 Final audit logs preview data:', previewData)
+    if (userId) queryParams.set('user_id', userId)
+    if (actionType) queryParams.set('action_type', actionType)
 
-    return {
-      data: previewData,
-      columns,
-      totalRecords: previewData.length || 0
+    let url;
+    
+    // Choose the right API endpoint based on user role
+    if (isSuperAdmin) {
+      if (entityIds && entityIds.length > 1) {
+        url = `/v1/superadmin/reports/audit-logs?${queryParams}&tenants=${entityIds.join(',')}`
+      } else {
+        url = `/v1/superadmin/tenants/${entityId}/reports/audit-logs?${queryParams}`
+      }
+    } else {
+      url = `/v1/entities/${entityId}/reports/audit-logs?${queryParams}`
     }
-  } catch (error) {
-    console.error('❌ Error getting audit logs preview:', error)
-    throw error
+
+    try {
+      return await this.downloadReport(url, { format }, 'audit_logs_report', async () => {
+        // Fallback function for alternative URLs if the first one fails
+        if (isSuperAdmin) {
+          // Try alternative patterns
+          const alternatives = [
+            entityIds && entityIds.length > 1 
+              ? `/v1/superadmin/audit-logs/report?${queryParams}&tenants=${entityIds.join(',')}`
+              : `/v1/superadmin/audit-logs/report?${queryParams}&tenant_id=${entityId}`,
+            
+            entityIds && entityIds.length > 1
+              ? `/v1/superadmin/entities/reports/audit-logs?${queryParams}&tenants=${entityIds.join(',')}`
+              : `/v1/entities/${entityId}/reports/audit-logs?${queryParams}`
+          ];
+          
+          return alternatives;
+        }
+        return null; // No alternatives for regular users
+      });
+    } catch (error) {
+      console.error('❌ Error downloading audit logs report:', error)
+      throw error
+    }
   }
-}
 
-/**
- * Format datetime helper for audit logs
- */
-formatDateTime(dateString) {
-  if (!dateString) return '-'
-  try {
-    const date = new Date(dateString)
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })
-  } catch (error) {
-    console.warn('Invalid datetime format:', dateString)
-    return dateString
+  async getAuditLogsPreview(params) {
+    try {
+      const response = await this.getAuditLogsReport(params)
+
+      console.log('🔍 Audit logs preview response:', response)
+
+      let responseData = response.data
+      
+      // Handle different response structures
+      if (responseData && responseData.data) {
+        responseData = responseData.data
+      }
+
+      console.log('📊 Processed audit logs data:', responseData)
+
+      const columns = [
+        { key: 'timestamp', label: 'Timestamp' },
+        { key: 'user_name', label: 'User' },
+        { key: 'action_type', label: 'Action' },
+        { key: 'resource_type', label: 'Resource Type' },
+        { key: 'resource_id', label: 'Resource ID' },
+        { key: 'description', label: 'Description' },
+        { key: 'ip_address', label: 'IP Address' },
+        { key: 'user_agent', label: 'User Agent' }
+      ]
+
+      // Handle different response formats
+      let previewData = []
+      
+      if (Array.isArray(responseData)) {
+        previewData = responseData
+      } else if (responseData && responseData.audit_logs) {
+        previewData = responseData.audit_logs
+      } else if (responseData && responseData.logs) {
+        previewData = responseData.logs
+      } else if (responseData && Array.isArray(responseData.data)) {
+        previewData = responseData.data
+      } else {
+        console.warn('⚠️ No valid audit logs data found in response:', responseData)
+        previewData = []
+      }
+
+      // Format timestamp for better display
+      previewData = previewData.map(item => ({
+        ...item,
+        timestamp: item.timestamp ? this.formatDateTime(item.timestamp) : '-',
+        description: item.description || item.details || '-',
+        user_agent: item.user_agent ? this.truncateText(item.user_agent, 50) : '-'
+      }))
+
+      console.log('📋 Final audit logs preview data:', previewData)
+
+      return {
+        data: previewData,
+        columns,
+        totalRecords: previewData.length || 0
+      }
+    } catch (error) {
+      console.error('❌ Error getting audit logs preview:', error)
+      throw error
+    }
   }
-}
 
-/**
- * Truncate text helper
- */
-truncateText(text, maxLength) {
-  if (!text || text.length <= maxLength) return text
-  return text.substring(0, maxLength) + '...'
-}
+  // UTILITY METHODS
+  formatDateTime(dateString) {
+    if (!dateString) return '-'
+    try {
+      const date = new Date(dateString)
+      return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+    } catch (error) {
+      console.warn('Invalid datetime format:', dateString)
+      return dateString
+    }
+  }
 
+  truncateText(text, maxLength) {
+    if (!text || text.length <= maxLength) return text
+    return text.substring(0, maxLength) + '...'
+  }
 
-  // UTILITY METHODS - FIXED AND CONSOLIDATED
-
-  /**
-   * Generic download method - FIXED
-   */
-  async downloadReport(apiUrl, params, defaultFilename) {
+  async downloadReport(apiUrl, params, defaultFilename, getFallbackUrls = null) {
     try {
       console.log('🔄 Making download request:', apiUrl)
       console.log('📋 Request parameters:', params)
 
-      const response = await api.get(apiUrl, {
-        responseType: 'blob',
-        headers: {
-          'Accept': this.getAcceptHeader(params.format),
-          'Cache-Control': 'no-cache'
-        }
-      })
-
-      console.log('✅ Download response received:', {
-        status: response.status,
-        contentType: response.headers['content-type'],
-        contentLength: response.headers['content-length'],
-        contentDisposition: response.headers['content-disposition']
-      })
-
-      // Validate response
-      if (!response.data || response.data.size === 0) {
-        throw new Error('Empty file received from server')
-      }
-
-      // Check for error responses disguised as success
-      const contentType = response.headers['content-type']
-      if (contentType?.includes('text/html') || contentType?.includes('application/json')) {
-        const text = await response.data.text()
-        console.error('❌ Server returned error response:', text)
-        throw new Error(`Server error: ${text.substring(0, 200)}`)
-      }
-
-      // Extract filename
-      let filename = `${defaultFilename}.${params.format}`
-      const contentDisposition = response.headers['content-disposition']
-      
-      if (contentDisposition) {
-        const patterns = [
-          /filename[^;=\n]*=\s*"([^"]+)"/i,
-          /filename[^;=\n]*=\s*'([^']+)'/i,
-          /filename[^;=\n]*=\s*([^;\n]+)/i,
-          /filename\*=UTF-8''([^;\n]+)/i
-        ]
+      try {
+        const response = await api.get(apiUrl, {
+          responseType: 'blob',
+          headers: {
+            'Accept': this.getAcceptHeader(params.format),
+            'Cache-Control': 'no-cache'
+          }
+        })
         
-        for (const pattern of patterns) {
-          const match = contentDisposition.match(pattern)
-          if (match) {
-            filename = decodeURIComponent(match[1].trim())
-            break
+        console.log('✅ Download response received:', {
+          status: response.status,
+          contentType: response.headers['content-type'],
+          contentLength: response.headers['content-length'],
+          contentDisposition: response.headers['content-disposition']
+        })
+
+        // Validate response
+        if (!response.data || response.data.size === 0) {
+          throw new Error('Empty file received from server')
+        }
+
+        // Check for error responses disguised as success
+        const contentType = response.headers['content-type']
+        if (contentType?.includes('text/html') || contentType?.includes('application/json')) {
+          const text = await response.data.text()
+          console.error('❌ Server returned error response:', text)
+          throw new Error(`Server error: ${text.substring(0, 200)}`)
+        }
+
+        // Extract filename
+        let filename = `${defaultFilename}.${params.format}`
+        const contentDisposition = response.headers['content-disposition']
+        
+        if (contentDisposition) {
+          const patterns = [
+            /filename[^;=\n]*=\s*"([^"]+)"/i,
+            /filename[^;=\n]*=\s*'([^']+)'/i,
+            /filename[^;=\n]*=\s*([^;\n]+)/i,
+            /filename\*=UTF-8''([^;\n]+)/i
+          ]
+          
+          for (const pattern of patterns) {
+            const match = contentDisposition.match(pattern)
+            if (match) {
+              filename = decodeURIComponent(match[1].trim())
+              break
+            }
           }
         }
+
+        // Create and trigger download
+        const blob = new Blob([response.data], {
+          type: this.getBlobType(params.format)
+        })
+        
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', filename)
+        link.style.display = 'none'
+        
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url)
+        }, 1000)
+
+        console.log('✅ Download completed successfully')
+        return { 
+          success: true, 
+          filename, 
+          size: blob.size,
+          contentType: contentType
+        }
+      } catch (error) {
+        // Try fallback URLs if provided
+        if (getFallbackUrls) {
+          const fallbackUrls = await getFallbackUrls()
+          if (fallbackUrls && fallbackUrls.length > 0) {
+            console.log('Trying fallback URLs:', fallbackUrls)
+            
+            // Try each fallback URL
+            for (const fbUrl of fallbackUrls) {
+              try {
+                console.log('Trying fallback URL:', fbUrl)
+                const response = await api.get(fbUrl, {
+                  responseType: 'blob',
+                  headers: {
+                    'Accept': this.getAcceptHeader(params.format),
+                    'Cache-Control': 'no-cache'
+                  }
+                })
+                
+                // Extract filename
+                let filename = `${defaultFilename}.${params.format}`
+                const contentDisposition = response.headers['content-disposition']
+                
+                if (contentDisposition) {
+                  const patterns = [
+                    /filename[^;=\n]*=\s*"([^"]+)"/i,
+                    /filename[^;=\n]*=\s*'([^']+)'/i,
+                    /filename[^;=\n]*=\s*([^;\n]+)/i,
+                    /filename\*=UTF-8''([^;\n]+)/i
+                  ]
+                  
+                  for (const pattern of patterns) {
+                    const match = contentDisposition.match(pattern)
+                    if (match) {
+                      filename = decodeURIComponent(match[1].trim())
+                      break
+                    }
+                  }
+                }
+
+                // Create and trigger download
+                const blob = new Blob([response.data], {
+                  type: this.getBlobType(params.format)
+                })
+                
+                const url = window.URL.createObjectURL(blob)
+                const link = document.createElement('a')
+                link.href = url
+                link.setAttribute('download', filename)
+                link.style.display = 'none'
+                
+                document.body.appendChild(link)
+                link.click()
+                document.body.removeChild(link)
+                
+                setTimeout(() => {
+                  window.URL.revokeObjectURL(url)
+                }, 1000)
+
+                console.log('✅ Download completed successfully with fallback URL')
+                return { 
+                  success: true, 
+                  filename, 
+                  size: blob.size,
+                  contentType: response.headers['content-type']
+                }
+              } catch (fbError) {
+                console.error('❌ Fallback URL failed:', fbUrl, fbError)
+                // Continue to the next fallback URL
+              }
+            }
+          }
+        }
+        
+        // If we reach here, all fallbacks failed
+        throw error
       }
-
-      // Create and trigger download
-      const blob = new Blob([response.data], {
-        type: this.getBlobType(params.format)
-      })
-      
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', filename)
-      link.style.display = 'none'
-      
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url)
-      }, 1000)
-
-      console.log('✅ Download completed successfully')
-      return { 
-        success: true, 
-        filename, 
-        size: blob.size,
-        contentType: contentType
-      }
-
     } catch (error) {
       console.error('❌ Error in download:', error)
       
@@ -919,9 +1412,6 @@ truncateText(text, maxLength) {
     }
   }
 
-  /**
-   * Format date helper
-   */
   formatDate(dateString) {
     if (!dateString) return '-'
     try {
@@ -937,9 +1427,6 @@ truncateText(text, maxLength) {
     }
   }
 
-  /**
-   * Get accept header based on format
-   */
   getAcceptHeader(format) {
     switch (format?.toLowerCase()) {
       case 'pdf':
@@ -954,10 +1441,6 @@ truncateText(text, maxLength) {
     }
   }
   
-
-  /**
-   * Get blob MIME type based on format
-   */
   getBlobType(format) {
     switch (format?.toLowerCase()) {
       case 'pdf':

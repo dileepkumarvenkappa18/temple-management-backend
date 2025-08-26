@@ -1,4 +1,5 @@
 import api, { endpoints } from './api.js'
+import reportsService from '@/services/reports.service'
 
 class SuperAdminService {
   constructor() {
@@ -956,6 +957,147 @@ async getAvailableTenants(userId) {
         data: null,
         message: error.response?.data?.error || error.message || 'Failed to assign tenants'
       }
+    }
+  }
+
+  // ==========================================
+  // REPORT ACCESS FOR SUPERADMIN - NEW
+  // ==========================================
+
+  /**
+   * Fetch report preview for a specific tenant as a superadmin
+   * @param {Object} params Report parameters
+   * @returns {Promise} Promise resolving to report preview data
+   */
+  async fetchTenantReportPreview(params) {
+    try {
+      console.log('SuperAdmin Service: Fetching tenant report preview...', params);
+      
+      // Always set the isSuperAdmin flag to true
+      const superadminParams = {
+        ...params,
+        isSuperAdmin: true
+      };
+      
+      // Use the reports service which already has fallback logic for different API patterns
+      const preview = await reportsService.getReportPreview(superadminParams);
+      
+      return {
+        success: true,
+        data: preview,
+        message: 'Report preview fetched successfully'
+      };
+    } catch (error) {
+      console.error('SuperAdmin Service: Error fetching tenant report preview:', error);
+      return {
+        success: false,
+        data: null,
+        message: error.message || 'Failed to fetch report preview'
+      };
+    }
+  }
+
+  /**
+   * Download a report for a specific tenant as a superadmin
+   * @param {Object} params Report parameters
+   * @returns {Promise} Promise resolving to download result
+   */
+  async downloadTenantReport(params) {
+    try {
+      console.log('SuperAdmin Service: Downloading tenant report...', params);
+      
+      // Always set the isSuperAdmin flag to true
+      const superadminParams = {
+        ...params,
+        isSuperAdmin: true
+      };
+      
+      // Use the appropriate reports service method based on report type
+      let result;
+      
+      switch (params.type) {
+        case 'events':
+        case 'sevas':
+        case 'bookings':
+        case 'donations':
+          result = await reportsService.downloadActivitiesReport(superadminParams);
+          break;
+        case 'temple-registered':
+          result = await reportsService.downloadTempleRegisteredReport(superadminParams);
+          break;
+        case 'devotee-birthdays':
+          result = await reportsService.downloadDevoteeBirthdaysReport(superadminParams);
+          break;
+        case 'devotee-list':
+          result = await reportsService.downloadDevoteeListReport(superadminParams);
+          break;
+        case 'devotee-profile':
+          result = await reportsService.downloadDevoteeProfileReport(superadminParams);
+          break;
+        case 'audit-logs':
+          result = await reportsService.downloadAuditLogsReport(superadminParams);
+          break;
+        default:
+          throw new Error(`Unsupported report type: ${params.type}`);
+      }
+      
+      return {
+        success: true,
+        data: result,
+        message: 'Report downloaded successfully'
+      };
+    } catch (error) {
+      console.error('SuperAdmin Service: Error downloading tenant report:', error);
+      return {
+        success: false,
+        data: null,
+        message: error.message || 'Failed to download report'
+      };
+    }
+  }
+
+  /**
+   * Get tenant entity details for reports
+   * @param {string|number} tenantId Tenant ID
+   * @returns {Promise} Promise resolving to tenant details
+   */
+  async getTenantEntityDetails(tenantId) {
+    try {
+      console.log(`SuperAdmin Service: Fetching entity details for tenant ${tenantId}...`);
+      
+      // Try to get tenant details from superadmin endpoint
+      const response = await api.get(`${this.baseURL}/tenants/${tenantId}`);
+      
+      let entityDetails = null;
+      
+      // Extract entity/temple details from the response
+      if (response && response.data && response.data.tenant) {
+        entityDetails = response.data.tenant;
+      } else if (response && response.data) {
+        entityDetails = response.data;
+      } else if (response) {
+        entityDetails = response;
+      }
+      
+      // Extract temple information if available
+      const temples = (response && response.data && response.data.temples) || 
+                     (response && response.temples) || 
+                     [];
+      
+      return {
+        success: true,
+        data: entityDetails,
+        temples: temples,
+        message: 'Tenant entity details fetched successfully'
+      };
+    } catch (error) {
+      console.error('SuperAdmin Service: Error fetching tenant entity details:', error);
+      return {
+        success: false,
+        data: null,
+        temples: [],
+        message: error.message || 'Failed to fetch tenant entity details'
+      };
     }
   }
 
