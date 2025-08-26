@@ -1,238 +1,253 @@
 package reports
 
 import (
-    "bytes"
-    "encoding/csv"
-    "fmt"
-    "strconv"
-    "time"
+	"bytes"
+	"encoding/csv"
+	"fmt"
+	"strconv"
+	"time"
 
-    "github.com/jung-kurt/gofpdf"
-    "github.com/xuri/excelize/v2"
+	"github.com/jung-kurt/gofpdf"
+	"github.com/xuri/excelize/v2"
 )
 
 // ReportExporter defines the interface for exporting reports in different formats
 type ReportExporter interface {
-    Export(reportType, format string, data ReportData) ([]byte, string, string, error)
+	Export(reportType, format string, data ReportData) ([]byte, string, string, error)
 }
 
 type reportExporter struct{}
 
 func NewReportExporter() ReportExporter {
-    return &reportExporter{}
+	return &reportExporter{}
 }
 
 // Export handles exporting different report types and formats
 func (e *reportExporter) Export(reportType, format string, data ReportData) ([]byte, string, string, error) {
-    timestamp := time.Now().Format("20060102_150405")
-    
-    switch reportType {
-    case ReportTypeEvents:
-        return e.exportEventsByFormat(format, timestamp, data.Events)
-    case ReportTypeSevas:
-        return e.exportSevasByFormat(format, timestamp, data.Sevas)
-    case ReportTypeBookings:
-        return e.exportBookingsByFormat(format, timestamp, data.Bookings)
-    case ReportTypeDonations:
-        return e.exportDonationsByFormat(format, timestamp, data.Donations)
-    case ReportTypeTempleRegistered:
-        return e.exportTemplesRegistered(data.TemplesRegistered)
-    case ReportTypeTempleRegisteredPDF:
-        return e.exportTemplesRegisteredPDF(data.TemplesRegistered)
-    case ReportTypeTempleRegisteredExcel:
-        return e.exportTemplesRegisteredExcel(data.TemplesRegistered)
-    case ReportTypeDevoteeBirthdays:
-        return e.exportDevoteeBirthdays(data.DevoteeBirthdays)
-    case ReportTypeDevoteeBirthdaysPDF:
-        return e.exportDevoteeBirthdaysPDF(data.DevoteeBirthdays)
-    case ReportTypeDevoteeBirthdaysExcel:
-        return e.exportDevoteeBirthdaysExcel(data.DevoteeBirthdays)
-    case ReportTypeDevoteeListCSV:
-        return e.exportDevoteeListCSV(data.DevoteeList)
-    case ReportTypeDevoteeListExcel:
-        return e.exportDevoteeListExcel(data.DevoteeList)
-    case ReportTypeDevoteeListPDF:
-        return e.exportDevoteeListPDF(data.DevoteeList)
-    case ReportTypeDevoteeProfile:
-        return e.exportDevoteeProfileByFormat(format, data.DevoteeProfiles)
-    case ReportTypeDevoteeList:
-        return e.exportDevoteeListByFormat(format, data.DevoteeList)
-    case ReportTypeDevoteeProfileCSV:
-        return e.exportDevoteeProfileCSV(data.DevoteeProfiles)
-    case ReportTypeDevoteeProfileExcel:
-        return e.exportDevoteeProfileExcel(data.DevoteeProfiles)
-    case ReportTypeDevoteeProfilePDF:
-        return e.exportDevoteeProfilePDF(data.DevoteeProfiles)
-    case ReportTypeAuditLogs:
-        return e.exportAuditLogsByFormat(format, timestamp, data.AuditLogs)
-    case ReportTypeAuditLogsExcel:
-        return e.exportAuditLogsByFormat("excel", timestamp, data.AuditLogs)
-    case ReportTypeAuditLogsCSV:
-        return e.exportAuditLogsByFormat("csv", timestamp, data.AuditLogs)
-    case ReportTypeAuditLogsPDF:
-        return e.exportAuditLogsByFormat("pdf", timestamp, data.AuditLogs)
-    default:
-        return nil, "", "", fmt.Errorf("unsupported report type: %s", reportType)
-    }
+	timestamp := time.Now().Format("20060102_150405")
+
+	switch reportType {
+	case ReportTypeEvents:
+		return e.exportEventsByFormat(format, timestamp, data.Events)
+
+	case ReportTypeSevas:
+		return e.exportSevasByFormat(format, timestamp, data.Sevas)
+
+	case ReportTypeBookings:
+		return e.exportBookingsByFormat(format, timestamp, data.Bookings)
+
+	case ReportTypeDonations:
+		return e.exportDonationsByFormat(format, timestamp, data.Donations)
+
+	case ReportTypeTempleRegistered:
+		return e.exportTemplesRegistered(data.TemplesRegistered)
+	case ReportTypeTempleRegisteredPDF:
+		return e.exportTemplesRegisteredPDF(data.TemplesRegistered)
+	case ReportTypeTempleRegisteredExcel:
+		return e.exportTemplesRegisteredExcel(data.TemplesRegistered)
+
+	case ReportTypeDevoteeBirthdays:
+		return e.exportDevoteeBirthdays(data.DevoteeBirthdays)
+	case ReportTypeDevoteeBirthdaysPDF:
+		return e.exportDevoteeBirthdaysPDF(data.DevoteeBirthdays)
+	case ReportTypeDevoteeBirthdaysExcel:
+		return e.exportDevoteeBirthdaysExcel(data.DevoteeBirthdays)
+
+	case ReportTypeDevoteeList:
+		return e.exportDevoteeListByFormat(format, data.DevoteeList)
+	case ReportTypeDevoteeListCSV:
+		return e.exportDevoteeListCSV(data.DevoteeList)
+	case ReportTypeDevoteeListExcel:
+		return e.exportDevoteeListExcel(data.DevoteeList)
+	case ReportTypeDevoteeListPDF:
+		return e.exportDevoteeListPDF(data.DevoteeList)
+
+	case ReportTypeDevoteeProfile:
+		return e.exportDevoteeProfileByFormat(format, data.DevoteeProfiles)
+	case ReportTypeDevoteeProfileCSV:
+		return e.exportDevoteeProfileCSV(data.DevoteeProfiles)
+	case ReportTypeDevoteeProfileExcel:
+		return e.exportDevoteeProfileExcel(data.DevoteeProfiles)
+	case ReportTypeDevoteeProfilePDF:
+		return e.exportDevoteeProfilePDF(data.DevoteeProfiles)
+
+	case ReportTypeAuditLogs:
+		return e.exportAuditLogsByFormat(format, timestamp, data.AuditLogs)
+	case ReportTypeAuditLogsExcel:
+		return e.exportAuditLogsByFormat(FormatExcel, timestamp, data.AuditLogs)
+	case ReportTypeAuditLogsCSV:
+		return e.exportAuditLogsByFormat(FormatCSV, timestamp, data.AuditLogs)
+	case ReportTypeAuditLogsPDF:
+		return e.exportAuditLogsByFormat(FormatPDF, timestamp, data.AuditLogs)
+
+	default:
+		return nil, "", "", fmt.Errorf("unsupported report type: %s", reportType)
+	}
 }
+
+//// ============================
+/// AUDIT LOGS EXPORTS
+//// ============================
 
 // exportAuditLogsByFormat chooses export format for audit logs
 func (e *reportExporter) exportAuditLogsByFormat(format, timestamp string, logs []AuditLogReportRow) ([]byte, string, string, error) {
-    switch format {
-    case FormatExcel:
-        data, err := e.exportAuditLogsExcel(logs)
-        if err != nil {
-            return nil, "", "", err
-        }
-        filename := fmt.Sprintf("audit_logs_report_%s.xlsx", timestamp)
-        return data, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nil
-        
-    case FormatCSV:
-        data, err := e.exportAuditLogsCSV(logs)
-        if err != nil {
-            return nil, "", "", err
-        }
-        filename := fmt.Sprintf("audit_logs_report_%s.csv", timestamp)
-        return data, filename, "text/csv", nil
-        
-    case FormatPDF:
-        data, err := e.exportAuditLogsPDF(logs)
-        if err != nil {
-            return nil, "", "", err
-        }
-        filename := fmt.Sprintf("audit_logs_report_%s.pdf", timestamp)
-        return data, filename, "application/pdf", nil
-        
-    default:
-        return nil, "", "", fmt.Errorf("unsupported format for audit logs: %s", format)
-    }
+	switch format {
+	case FormatExcel:
+		data, err := e.exportAuditLogsExcel(logs)
+		if err != nil {
+			return nil, "", "", err
+		}
+		filename := fmt.Sprintf("audit_logs_report_%s.xlsx", timestamp)
+		return data, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nil
+
+	case FormatCSV:
+		data, err := e.exportAuditLogsCSV(logs)
+		if err != nil {
+			return nil, "", "", err
+		}
+		filename := fmt.Sprintf("audit_logs_report_%s.csv", timestamp)
+		return data, filename, "text/csv", nil
+
+	case FormatPDF:
+		data, err := e.exportAuditLogsPDF(logs)
+		if err != nil {
+			return nil, "", "", err
+		}
+		filename := fmt.Sprintf("audit_logs_report_%s.pdf", timestamp)
+		return data, filename, "application/pdf", nil
+
+	default:
+		return nil, "", "", fmt.Errorf("unsupported format for audit logs: %s", format)
+	}
 }
 
 // exportAuditLogsCSV exports audit logs to CSV format
 func (e *reportExporter) exportAuditLogsCSV(logs []AuditLogReportRow) ([]byte, error) {
-    var buf bytes.Buffer
-    writer := csv.NewWriter(&buf)
+	var buf bytes.Buffer
+	writer := csv.NewWriter(&buf)
 
-    headers := []string{"ID", "Action", "User ID", "User Role", "Table Name", "Record ID", "Timestamp", "Details"}
-    if err := writer.Write(headers); err != nil {
-        return nil, err
-    }
+	headers := []string{"ID", "Entity", "User ID", "User Name", "User Role", "Action", "Status", "IP Address", "Timestamp", "Details"}
+	if err := writer.Write(headers); err != nil {
+		return nil, err
+	}
 
-    for _, log := range logs {
-        userID := uint64(0)
-        if log.UserID != nil {
-            userID = uint64(*log.UserID)
-        }
+	for _, log := range logs {
+		userID := ""
+		if log.UserID != nil {
+			userID = strconv.FormatUint(uint64(*log.UserID), 10)
+		}
 
-        recordID, err := strconv.ParseUint(log.RecordID, 10, 64)
-        if err != nil {
-            recordID = 0
-        }
+		record := []string{
+			strconv.FormatUint(uint64(log.ID), 10),
+			log.EntityName,
+			userID,
+			log.UserName,
+			log.UserRole,
+			log.Action,
+			log.Status,
+			log.IPAddress,
+			log.Timestamp.Format("2006-01-02 15:04:05"),
+			log.Details,
+		}
+		if err := writer.Write(record); err != nil {
+			return nil, err
+		}
+	}
 
-        record := []string{
-            strconv.FormatUint(uint64(log.ID), 10),
-            log.Action,
-            strconv.FormatUint(userID, 10),
-            log.UserRole,
-            log.TableName,
-            strconv.FormatUint(recordID, 10),
-            log.Timestamp.Format("2006-01-02 15:04:05"),
-            log.Details,
-        }
-        if err := writer.Write(record); err != nil {
-            return nil, err
-        }
-    }
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return nil, err
+	}
 
-    writer.Flush()
-    if err := writer.Error(); err != nil {
-        return nil, err
-    }
-
-    return buf.Bytes(), nil
+	return buf.Bytes(), nil
 }
 
 // exportAuditLogsPDF exports audit logs in PDF format
 func (e *reportExporter) exportAuditLogsPDF(logs []AuditLogReportRow) ([]byte, error) {
-    pdf := gofpdf.New("L", "mm", "A4", "")
-    pdf.AddPage()
-    pdf.SetFont("Arial", "B", 16)
-    pdf.Cell(0, 10, "Audit Logs Report")
-    pdf.Ln(20)
+	pdf := gofpdf.New("L", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Arial", "B", 16)
+	pdf.Cell(0, 10, "Audit Logs Report")
+	pdf.Ln(20)
 
-    pdf.SetFont("Arial", "B", 10)
-    widths := []float64{15, 30, 20, 20, 25, 20, 30, 60}
-    headers := []string{"ID", "Action", "User ID", "User Role", "Table", "Record ID", "Timestamp", "Details"}
+	pdf.SetFont("Arial", "B", 9)
+	widths := []float64{12, 25, 20, 30, 25, 25, 20, 25, 30, 50}
+	headers := []string{"ID", "Entity", "User ID", "User Name", "User Role", "Action", "Status", "IP Address", "Timestamp", "Details"}
 
-    for i, h := range headers {
-        pdf.CellFormat(widths[i], 7, h, "1", 0, "C", false, 0, "")
-    }
-    pdf.Ln(-1)
+	for i, h := range headers {
+		pdf.CellFormat(widths[i], 7, h, "1", 0, "C", false, 0, "")
+	}
+	pdf.Ln(-1)
 
-    pdf.SetFont("Arial", "", 8)
-    for _, log := range logs {
-        userID := uint64(0)
-        if log.UserID != nil {
-            userID = uint64(*log.UserID)
-        }
+	pdf.SetFont("Arial", "", 8)
+	for _, log := range logs {
+		userID := ""
+		if log.UserID != nil {
+			userID = strconv.FormatUint(uint64(*log.UserID), 10)
+		}
 
-        recordID, err := strconv.ParseUint(log.RecordID, 10, 64)
-        if err != nil {
-            recordID = 0
-        }
+		values := []string{
+			strconv.FormatUint(uint64(log.ID), 10),
+			log.EntityName,
+			userID,
+			log.UserName,
+			log.UserRole,
+			log.Action,
+			log.Status,
+			log.IPAddress,
+			log.Timestamp.Format("2006-01-02 15:04:05"),
+			log.Details,
+		}
 
-        pdf.CellFormat(widths[0], 6, strconv.FormatUint(uint64(log.ID), 10), "1", 0, "C", false, 0, "")
-        pdf.CellFormat(widths[1], 6, log.Action, "1", 0, "L", false, 0, "")
-        pdf.CellFormat(widths[2], 6, strconv.FormatUint(userID, 10), "1", 0, "C", false, 0, "")
-        pdf.CellFormat(widths[3], 6, log.UserRole, "1", 0, "L", false, 0, "")
-        pdf.CellFormat(widths[4], 6, log.TableName, "1", 0, "L", false, 0, "")
-        pdf.CellFormat(widths[5], 6, strconv.FormatUint(recordID, 10), "1", 0, "C", false, 0, "")
-        pdf.CellFormat(widths[6], 6, log.Timestamp.Format("2006-01-02 15:04:05"), "1", 0, "C", false, 0, "")
-        pdf.CellFormat(widths[7], 6, log.Details, "1", 0, "L", false, 0, "")
-        pdf.Ln(-1)
-    }
+		for i, v := range values {
+			pdf.CellFormat(widths[i], 6, v, "1", 0, "L", false, 0, "")
+		}
+		pdf.Ln(-1)
+	}
 
-    var buf bytes.Buffer
-    if err := pdf.Output(&buf); err != nil {
-        return nil, err
-    }
-    return buf.Bytes(), nil
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
+// exportAuditLogsExcel exports audit logs to Excel format
 func (e *reportExporter) exportAuditLogsExcel(logs []AuditLogReportRow) ([]byte, error) {
-    f := excelize.NewFile()
-    sheetName := "Audit Logs"
-    f.SetSheetName("Sheet1", sheetName)
+	f := excelize.NewFile()
+	sheetName := "Audit Logs"
+	f.SetSheetName("Sheet1", sheetName)
 
-    // Headers without "User ID"
-    headers := []string{"ID", "Action", "User Role", "Table Name", "Record ID", "Timestamp", "Details"}
-    for i, header := range headers {
-        cell := fmt.Sprintf("%c1", 'A'+i)
-        f.SetCellValue(sheetName, cell, header)
-    }
+	headers := []string{"ID", "Entity", "User ID", "User Name", "User Role", "Action", "Status", "IP Address", "Timestamp", "Details"}
+	for i, header := range headers {
+		cell := fmt.Sprintf("%c1", 'A'+i)
+		f.SetCellValue(sheetName, cell, header)
+	}
 
-    for i, log := range logs {
-        row := i + 2
+	for i, log := range logs {
+		row := i + 2
+		userID := ""
+		if log.UserID != nil {
+			userID = strconv.FormatUint(uint64(*log.UserID), 10)
+		}
 
-        recordID, err := strconv.ParseUint(log.RecordID, 10, 64)
-        if err != nil {
-            recordID = 0
-        }
+		f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), log.ID)
+		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), log.EntityName)
+		f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), userID)
+		f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), log.UserName)
+		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), log.UserRole)
+		f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), log.Action)
+		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), log.Status)
+		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), log.IPAddress)
+		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), log.Timestamp.Format("2006-01-02 15:04:05"))
+		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), log.Details)
+	}
 
-        f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), log.ID)
-        f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), log.Action)
-        f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), log.UserRole)  // No UserID
-        f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), log.TableName)
-        f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), recordID)
-        f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), log.Timestamp.Format("2006-01-02 15:04:05"))
-        f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), log.Details)
-    }
-
-    var buf bytes.Buffer
-    if err := f.Write(&buf); err != nil {
-        return nil, err
-    }
-    return buf.Bytes(), nil
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 

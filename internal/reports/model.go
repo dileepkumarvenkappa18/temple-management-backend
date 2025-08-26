@@ -238,19 +238,17 @@ type AuditLogReportRequest struct {
     Format    string    `json:"format"`
 }
 
-
-
 type AuditLogReportRow struct {
     ID         uint      `json:"id"`
-    EntityID   uint      `json:"entity_id"`
-    EntityName string    `json:"entity_name"`
     UserID     *uint     `json:"user_id"`
     UserName   string    `json:"user_name"`
-    UserRole   string    `json:"user_role"`
-    TableName  string    `json:"table_name"`
-    RecordID   string    `json:"record_id"`
+    UserRole   string    `json:"user_role"`   // ✅ Added
+    EntityID   uint      `json:"entity_id"`
+    EntityName string    `json:"entity_name"`
+    Action     string    `json:"action"`
+    Status     string    `json:"status"`
+    IPAddress  string    `json:"ip_address"`
     Timestamp  time.Time `json:"timestamp"`
     Details    string    `json:"details"`
-    Action     string    `json:"action"`
     CreatedAt  time.Time `json:"created_at"`
 }

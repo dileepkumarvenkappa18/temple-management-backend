@@ -11,20 +11,21 @@ import (
 type ReportService interface {
     GetActivities(req ActivitiesReportRequest) (ReportData, error)
     ExportActivities(ctx context.Context, req ActivitiesReportRequest, userID *uint, ip string) ([]byte, string, string, error)
+
     GetTempleRegisteredReport(req TempleRegisteredReportRequest, entityIDs []string) ([]TempleRegisteredReportRow, error)
     ExportTempleRegisteredReport(ctx context.Context, req TempleRegisteredReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error)
+
     GetDevoteeBirthdaysReport(req DevoteeBirthdaysReportRequest, entityIDs []string) ([]DevoteeBirthdayReportRow, error)
     ExportDevoteeBirthdaysReport(ctx context.Context, req DevoteeBirthdaysReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error)
+
     GetDevoteeListReport(req DevoteeListReportRequest, entityIDs []string) ([]DevoteeListReportRow, error)
     ExportDevoteeListReport(ctx context.Context, req DevoteeListReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error)
 
-    // Fix the audit logs methods - these were incorrect in your code
-    GetAuditLogsReport(req AuditLogReportRequest, entityIDs []string) ([]AuditLogReportRow, error)
-    ExportAuditLogsReport(ctx context.Context, req AuditLogReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error)
-
-    // New methods for devotee profile report
     GetDevoteeProfileReport(req DevoteeProfileReportRequest, entityIDs []string) ([]DevoteeProfileReportRow, error)
     ExportDevoteeProfileReport(ctx context.Context, req DevoteeProfileReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error)
+
+    GetAuditLogsReport(req AuditLogReportRequest, entityIDs []string) ([]AuditLogReportRow, error)
+    ExportAuditLogsReport(ctx context.Context, req AuditLogReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error)
 }
 
 type reportService struct {
@@ -41,8 +42,27 @@ func NewReportService(repo ReportRepository, exporter ReportExporter, auditSvc a
     }
 }
 
+// ===============================
+// Utility
+// ===============================
+
+func convertUintSlice(strs []string) []uint {
+    out := make([]uint, 0, len(strs))
+    for _, s := range strs {
+        var id uint
+        _, err := fmt.Sscan(s, &id)
+        if err == nil {
+            out = append(out, id)
+        }
+    }
+    return out
+}
+
+// ===============================
+// Activities Reports
+// ===============================
+
 func (s *reportService) GetActivities(req ActivitiesReportRequest) (ReportData, error) {
-    // validate request
     if req.Type != ReportTypeEvents && req.Type != ReportTypeSevas &&
         req.Type != ReportTypeBookings && req.Type != ReportTypeDonations {
         return ReportData{}, fmt.Errorf("invalid report type: %s", req.Type)
@@ -66,10 +86,8 @@ func (s *reportService) GetActivities(req ActivitiesReportRequest) (ReportData, 
 }
 
 func (s *reportService) ExportActivities(ctx context.Context, req ActivitiesReportRequest, userID *uint, ip string) ([]byte, string, string, error) {
-    // fetch data first
     data, err := s.GetActivities(req)
     if err != nil {
-        // Log failed export attempt
         details := map[string]interface{}{
             "report_type": req.Type,
             "format":      req.Format,
@@ -79,10 +97,8 @@ func (s *reportService) ExportActivities(ctx context.Context, req ActivitiesRepo
         return nil, "", "", err
     }
 
-    // use exporter with format
     bytes, filename, mimeType, err := s.exporter.Export(req.Type, req.Format, data)
     if err != nil {
-        // Log failed export
         details := map[string]interface{}{
             "report_type": req.Type,
             "format":      req.Format,
@@ -92,7 +108,6 @@ func (s *reportService) ExportActivities(ctx context.Context, req ActivitiesRepo
         return nil, "", "", err
     }
 
-    // Log successful export
     details := map[string]interface{}{
         "report_type": req.Type,
         "format":      req.Format,
@@ -105,31 +120,17 @@ func (s *reportService) ExportActivities(ctx context.Context, req ActivitiesRepo
     return bytes, filename, mimeType, nil
 }
 
-// convert slice of string ids to []uint
-func convertUintSlice(strs []string) []uint {
-    out := make([]uint, 0, len(strs))
-    for _, s := range strs {
-        var id uint
-        _, err := fmt.Sscan(s, &id)
-        if err == nil {
-            out = append(out, id)
-        }
-    }
-    return out
-}
+// ===============================
+// Temple Registered Reports
+// ===============================
 
 func (s *reportService) GetTempleRegisteredReport(req TempleRegisteredReportRequest, entityIDs []string) ([]TempleRegisteredReportRow, error) {
-    status := req.Status
-    start := req.StartDate
-    end := req.EndDate
-
-    return s.repo.GetTemplesRegistered(convertUintSlice(entityIDs), start, end, status)
+    return s.repo.GetTemplesRegistered(convertUintSlice(entityIDs), req.StartDate, req.EndDate, req.Status)
 }
 
 func (s *reportService) ExportTempleRegisteredReport(ctx context.Context, req TempleRegisteredReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error) {
     rows, err := s.GetTempleRegisteredReport(req, entityIDs)
     if err != nil {
-        // Log failed export attempt
         details := map[string]interface{}{
             "report_type": "temple_registered",
             "format":      req.Format,
@@ -139,15 +140,9 @@ func (s *reportService) ExportTempleRegisteredReport(ctx context.Context, req Te
         return nil, "", "", err
     }
 
-    // Pass rows to ReportData.TemplesRegistered
-    data := ReportData{
-        TemplesRegistered: rows,
-    }
-
-    // Pass the reportType parameter to the exporter
+    data := ReportData{TemplesRegistered: rows}
     bytes, filename, mimeType, err := s.exporter.Export(reportType, req.Format, data)
     if err != nil {
-        // Log failed export
         details := map[string]interface{}{
             "report_type": "temple_registered",
             "format":      req.Format,
@@ -157,7 +152,6 @@ func (s *reportService) ExportTempleRegisteredReport(ctx context.Context, req Te
         return nil, "", "", err
     }
 
-    // Log successful export
     details := map[string]interface{}{
         "report_type":  "temple_registered",
         "format":       req.Format,
@@ -172,11 +166,12 @@ func (s *reportService) ExportTempleRegisteredReport(ctx context.Context, req Te
     return bytes, filename, mimeType, nil
 }
 
-func (s *reportService) GetDevoteeBirthdaysReport(req DevoteeBirthdaysReportRequest, entityIDs []string) ([]DevoteeBirthdayReportRow, error) {
-    start := req.StartDate
-    end := req.EndDate
+// ===============================
+// Devotee Reports
+// ===============================
 
-    return s.repo.GetDevoteeBirthdays(convertUintSlice(entityIDs), start, end)
+func (s *reportService) GetDevoteeBirthdaysReport(req DevoteeBirthdaysReportRequest, entityIDs []string) ([]DevoteeBirthdayReportRow, error) {
+    return s.repo.GetDevoteeBirthdays(convertUintSlice(entityIDs), req.StartDate, req.EndDate)
 }
 
 func (s *reportService) ExportDevoteeBirthdaysReport(ctx context.Context, req DevoteeBirthdaysReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error) {
@@ -191,10 +186,7 @@ func (s *reportService) ExportDevoteeBirthdaysReport(ctx context.Context, req De
         return nil, "", "", err
     }
 
-    data := ReportData{
-        DevoteeBirthdays: rows,
-    }
-
+    data := ReportData{DevoteeBirthdays: rows}
     bytes, filename, mimeType, err := s.exporter.Export(reportType, req.Format, data)
     if err != nil {
         details := map[string]interface{}{
@@ -236,10 +228,7 @@ func (s *reportService) ExportDevoteeListReport(ctx context.Context, req Devotee
         return nil, "", "", err
     }
 
-    data := ReportData{
-        DevoteeList: rows,
-    }
-
+    data := ReportData{DevoteeList: rows}
     bytes, filename, mimeType, err := s.exporter.Export(reportType, req.Format, data)
     if err != nil {
         details := map[string]interface{}{
@@ -267,7 +256,7 @@ func (s *reportService) ExportDevoteeListReport(ctx context.Context, req Devotee
 }
 
 // ===============================
-// New Devotee Profile Report Methods
+// Devotee Profile Reports
 // ===============================
 
 func (s *reportService) GetDevoteeProfileReport(req DevoteeProfileReportRequest, entityIDs []string) ([]DevoteeProfileReportRow, error) {
@@ -287,10 +276,7 @@ func (s *reportService) ExportDevoteeProfileReport(ctx context.Context, req Devo
         return nil, "", "", err
     }
 
-    data := ReportData{
-        DevoteeProfiles: rows,
-    }
-
+    data := ReportData{DevoteeProfiles: rows}
     bytes, filename, mimeType, err := s.exporter.Export(reportType, req.Format, data)
     if err != nil {
         details := map[string]interface{}{
@@ -317,19 +303,20 @@ func (s *reportService) ExportDevoteeProfileReport(ctx context.Context, req Devo
     return bytes, filename, mimeType, nil
 }
 
-// Fixed method to satisfy ReportService interface: GetAuditLogsReport
+// ===============================
+// Audit Logs Reports
+// ===============================
+
 func (s *reportService) GetAuditLogsReport(req AuditLogReportRequest, entityIDs []string) ([]AuditLogReportRow, error) {
     ids := convertUintSlice(entityIDs)
 
-    filters := []string{}
+    var actionFilters []string
     if req.Action != "" {
-        filters = append(filters, req.Action)
-    }
-    if req.Status != "" {
-        filters = append(filters, req.Status)
+        actionFilters = append(actionFilters, req.Action)
     }
 
-    return s.repo.GetAuditLogs(ids, req.StartDate, req.EndDate, filters)
+    // Pass status separately to repo
+    return s.repo.GetAuditLogs(ids, req.StartDate, req.EndDate, actionFilters, req.Status)
 }
 
 func (s *reportService) ExportAuditLogsReport(ctx context.Context, req AuditLogReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error) {
@@ -346,10 +333,7 @@ func (s *reportService) ExportAuditLogsReport(ctx context.Context, req AuditLogR
         return nil, "", "", err
     }
 
-    data := ReportData{
-        AuditLogs: rows,
-    }
-
+    data := ReportData{AuditLogs: rows}
     bytes, filename, mimeType, err := s.exporter.Export(reportType, req.Format, data)
     if err != nil {
         details := map[string]interface{}{

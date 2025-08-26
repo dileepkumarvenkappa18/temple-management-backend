@@ -706,7 +706,7 @@ func (h *Handler) GetAuditLogsReport(c *gin.Context) {
         Format:    format,
     }
 
-    // 7️⃣ Handle JSON preview
+    // 7️⃣ Handle JSON preview (return rows with new fields)
     if format == "" {
         data, err := h.service.GetAuditLogsReport(req, entityIDs)
         if err != nil {
@@ -717,12 +717,21 @@ func (h *Handler) GetAuditLogsReport(c *gin.Context) {
         details := map[string]interface{}{
             "report_type": "audit_logs",
             "format":      "json_preview",
-            "entity_ids":  entityIDs,
+           // "entity_ids":  entityIDs,
             "action":      action,
             "status":      status,
             "date_range":  dateRange,
+            "ip_address":  ip, // ✅ log IP for audit trail
         }
-        h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "AUDIT_LOGS_REPORT_VIEWED", details, ip, "success")
+        h.auditSvc.LogAction(
+            c.Request.Context(),
+            &ctx.UserID,
+            nil,
+            "AUDIT_LOGS_REPORT_VIEWED",
+            details,
+            ip,
+            "success",
+        )
         c.JSON(http.StatusOK, data)
         return
     }
@@ -741,7 +750,14 @@ func (h *Handler) GetAuditLogsReport(c *gin.Context) {
         return
     }
 
-    bytes, fname, mime, err := h.service.ExportAuditLogsReport(c.Request.Context(), req, entityIDs, reportType, &ctx.UserID, ip)
+    bytes, fname, mime, err := h.service.ExportAuditLogsReport(
+        c.Request.Context(),
+        req,
+        entityIDs,
+        reportType,
+        &ctx.UserID,
+        ip,
+    )
     if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
         return
