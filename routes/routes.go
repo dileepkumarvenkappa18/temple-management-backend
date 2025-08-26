@@ -203,7 +203,7 @@ devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
 	devoteeSevaRoutes.GET("/", sevaHandler.GetSevas) // Devotee view: Paginated & Filterable Sevas
 }
 
-	// ========== Entity ==========
+// ========== Entity ==========
 	{
 		entityRepo := entity.NewRepository(database.DB)
 		// donationRepo := donation.NewRepository(database.DB)
@@ -214,6 +214,31 @@ devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
 		entityService := entity.NewService(entityRepo, profileService, auditSvc)
 		entityHandler := entity.NewHandler(entityService)
 
+		// Add special endpoint for templeadmins to view their created entities
+		protected.GET("/entities/by-creator", middleware.RBACMiddleware("templeadmin"), func(c *gin.Context) {
+			// Get user ID from context
+			userVal, exists := c.Get("user")
+			if !exists {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+				return
+			}
+			
+			user, ok := userVal.(auth.User)
+			if !ok {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user object"})
+				return
+			}
+			
+			// Call repository to get entities created by this user
+			entities, err := entityRepo.GetEntitiesByCreator(user.ID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch temples", "details": err.Error()})
+				return
+			}
+			
+			c.JSON(http.StatusOK, entities)
+		})
+
 		// In routes.go - update the entity routes section
 entityRoutes := protected.Group("/entities")
 // Allow templeadmin, standarduser, monitoringuser to access entity routes
@@ -223,22 +248,26 @@ entityRoutes.Use(middleware.RequireTempleAccess())
     writeRoutes := entityRoutes.Group("")
     writeRoutes.Use(middleware.RequireWriteAccess())
     {
-        writeRoutes.POST("/", entityHandler.CreateEntity)
+        // This line should be REMOVED since we moved it out of this group
+        // writeRoutes.POST("/", entityHandler.CreateEntity)
         writeRoutes.PUT("/:id", entityHandler.UpdateEntity)
         writeRoutes.DELETE("/:id", entityHandler.DeleteEntity)
         writeRoutes.PATCH("/:entityID/devotees/:userID/status", entityHandler.UpdateDevoteeMembershipStatus)
     }
     
     // Read operations - all three roles can access
-    entityRoutes.GET("/", entityHandler.GetAllEntities)
+    // This line should be REMOVED since we moved it out of this group
+    // entityRoutes.GET("/", entityHandler.GetAllEntities)
     entityRoutes.GET("/:id", entityHandler.GetEntityByID)
     entityRoutes.GET("/:id/devotees", entityHandler.GetDevoteesByEntity)
     entityRoutes.GET("/:id/devotee-stats", entityHandler.GetDevoteeStats)
     entityRoutes.GET("/dashboard-summary", entityHandler.GetDashboardSummary)
 }
 
+		// Special endpoints that bypass temple access check
+		protected.POST("/entities", middleware.RBACMiddleware("templeadmin"), entityHandler.CreateEntity)
+		protected.GET("/entities", middleware.RBACMiddleware("templeadmin"), entityHandler.GetAllEntities)
 	}
-
 // ========== Event & RSVP ==========
 eventRepo := event.NewRepository(database.DB)
 eventService := event.NewService(eventRepo, auditSvc) // ✅ INJECT AUDIT SERVICE

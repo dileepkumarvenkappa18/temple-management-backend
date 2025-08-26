@@ -1,6 +1,7 @@
 package superadmin
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -35,12 +36,16 @@ func (h *Handler) GetTenantsWithFilters(c *gin.Context) {
 		page = 1
 	}
 
+	log.Printf("Fetching tenants with status: %s, limit: %d, page: %d", status, limit, page)
+
 	tenants, total, err := h.service.GetTenantsWithFilters(c.Request.Context(), status, limit, page)
 	if err != nil {
+		log.Printf("Error fetching tenants: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tenants"})
 		return
 	}
 
+	log.Printf("Successfully fetched %d tenants (total: %d)", len(tenants), total)
 	c.JSON(http.StatusOK, gin.H{
 		"data":  tenants,
 		"total": total,
@@ -98,7 +103,8 @@ func (h *Handler) UpdateTenantApprovalStatus(c *gin.Context) {
 
 // GET /superadmin/entities?status=pending&limit=10&page=1
 func (h *Handler) GetEntitiesWithFilters(c *gin.Context) {
-	status := strings.ToUpper(c.DefaultQuery("status", "PENDING"))
+	// IMPORTANT CHANGE: Don't force status to uppercase, accept any case
+	status := c.DefaultQuery("status", "pending")
 	limitStr := c.DefaultQuery("limit", "10")
 	pageStr := c.DefaultQuery("page", "1")
 
@@ -111,12 +117,16 @@ func (h *Handler) GetEntitiesWithFilters(c *gin.Context) {
 		page = 1
 	}
 
+	log.Printf("Fetching entities with status: %s, limit: %d, page: %d", status, limit, page)
+
 	entities, total, err := h.service.GetEntitiesWithFilters(c.Request.Context(), status, limit, page)
 	if err != nil {
+		log.Printf("Error fetching entities: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch entities"})
 		return
 	}
 
+	log.Printf("Successfully fetched %d entities (total: %d)", len(entities), total)
 	c.JSON(http.StatusOK, gin.H{
 		"data":  entities,
 		"total": total,
@@ -176,6 +186,7 @@ func (h *Handler) GetTenantApprovalCounts(c *gin.Context) {
 
 	counts, err := h.service.GetTenantApprovalCounts(ctx)
 	if err != nil {
+		log.Printf("Error fetching tenant approval counts: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tenant approval counts"})
 		return
 	}
@@ -189,6 +200,7 @@ func (h *Handler) GetTempleApprovalCounts(c *gin.Context) {
 
 	counts, err := h.service.GetTempleApprovalCounts(ctx)
 	if err != nil {
+		log.Printf("Error fetching temple approval counts: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch temple approval counts"})
 		return
 	}
@@ -595,7 +607,6 @@ func (h *Handler) AssignUsersToTenant(c *gin.Context) {
 // Alternative handler implementation if userRole is not available in context
 // Replace the previous handler method with this one:
 
-// NEW: GET /tenants/selection - Get tenants for selection based on user role
 // NEW: GET /tenants/selection - Get tenants for selection based on user role
 func (h *Handler) GetTenantsForSelection(c *gin.Context) {
 	// Get the user object from context (set by AuthMiddleware)
