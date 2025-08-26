@@ -114,6 +114,8 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		// 🔁 Paginated list of all tenants with optional ?status=pending&limit=10&page=1
 		superadminRoutes.GET("/tenants", superadminHandler.GetTenantsWithFilters)
 		superadminRoutes.PATCH("/tenants/:id/approval", superadminHandler.UpdateTenantApprovalStatus)
+		
+		
 
 		// ================ ENTITY APPROVAL MANAGEMENT ================
 		// 🔁 Paginated list of entities with optional ?status=pending&limit=10&page=1
@@ -161,6 +163,8 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		superadminRoutes.POST("/users/assign", superadminHandler.AssignUsersToTenant)
 		// Bulk upload users via CSV
         superadminRoutes.POST("/users/bulk-upload", superadminHandler.BulkUploadUsers)
+		
+		
 
 	}
 
@@ -265,8 +269,8 @@ entityRoutes.Use(middleware.RequireTempleAccess())
 }
 
 		// Special endpoints that bypass temple access check
-		protected.POST("/entities", middleware.RBACMiddleware(middleware.RoleTempleAdmin, middleware.RoleSuperAdmin), entityHandler.CreateEntity)
-protected.GET("/entities", middleware.RBACMiddleware(middleware.RoleTempleAdmin, middleware.RoleSuperAdmin), entityHandler.GetAllEntities)
+		protected.POST("/entities", middleware.RBACMiddleware("templeadmin", "superadmin"), entityHandler.CreateEntity)
+		protected.GET("/entities", middleware.RBACMiddleware("templeadmin", "superadmin"), entityHandler.GetAllEntities)
 	}
 // ========== Event & RSVP ==========
 eventRepo := event.NewRepository(database.DB)
@@ -432,7 +436,7 @@ eventRoutes.Use(middleware.RequireTempleAccess())
 		reportsRoutes.GET("/devotee-birthdays", reportsHandler.GetDevoteeBirthdaysReport)
 		reportsRoutes.GET("/devotee-list", reportsHandler.GetDevoteeListReport)
 		reportsRoutes.GET("/devotee-profile", reportsHandler.GetDevoteeProfileReport)
-		 reportsRoutes.GET("/audit-logs", reportsHandler.GetAuditLogsReport)  // fixed typo
+		reportsRoutes.GET("/audit-logs", reportsHandler.GetAuditLogsReport)  // fixed typo
 		
 		// If you want to restrict export functionality to only users with write access, 
 		// you can create a separate group with write access requirement:

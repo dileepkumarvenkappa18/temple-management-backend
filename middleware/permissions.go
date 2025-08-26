@@ -1,4 +1,3 @@
-
 package middleware
 
 import (
@@ -82,13 +81,4 @@ func ExtractTenantIDFromContext(c *gin.Context) *uint {
 	id := uint(tenantID)
 	return &id
 }
-
-
-
-
-
-
-
-
-
 
