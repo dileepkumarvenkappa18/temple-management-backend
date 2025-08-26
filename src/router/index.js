@@ -1,11 +1,10 @@
-// src/router/index.js - FIXED VERSION
+// src/router/index.js - UPDATED VERSION WITH AUDIT LOGS REPORT
 import { createRouter, createWebHistory } from 'vue-router'
 import { checkProfileCompleted, requireAuth } from './guards'
 import superadminRoutes from './routes/superadmin'
 import MessageComposer from '@/components/communication/MessageComposer.vue'
 import { useAuthStore } from '@/stores/auth'
 import { setupRouteGuards } from './guards';
-
 
 // Layouts
 import PublicLayout from '@/layouts/PublicLayout.vue'
@@ -35,6 +34,7 @@ import TenantSelectionView from '@/views/tenant/TenantSelectionView.vue'
 import TempleRegisterReport from '@/views/tenant/reports/TempleRegisterReport.vue'
 import TempleActivitiesReport from '@/views/tenant/reports/TempleActivitiesReport.vue'
 import BirthdaysReport from '@/views/tenant/reports/BirthdaysReport.vue'
+import AuditLogsReport from '@/views/tenant/reports/AuditLogsView.vue'
 
 // Entity (Temple Admin) Views - Phase 5
 import EntityDashboard from '@/views/entity/EntityDashboard.vue'
@@ -284,7 +284,7 @@ const routes = [
           title: 'Temple Register Report',
           breadcrumb: 'Temple Register',
           requiresAuth: true,
-          role: 'tenant'
+          allowedRoles: ['tenant', 'templeadmin']
         }
       },
       {
@@ -295,7 +295,7 @@ const routes = [
           title: 'Temple Activities Report',
           breadcrumb: 'Temple Activities',
           requiresAuth: true,
-          role: 'tenant'
+          allowedRoles: ['tenant', 'templeadmin']
         }
       },
       {
@@ -306,7 +306,19 @@ const routes = [
           title: 'Birthdays Report',
           breadcrumb: 'Birthdays',
           requiresAuth: true,
-          role: 'tenant'
+          allowedRoles: ['tenant', 'templeadmin']
+        }
+      },
+      // NEW: Audit Logs Report Route
+      {
+        path: 'reports/audit-logs',
+        name: 'AuditLogsReport',
+        component: AuditLogsReport,
+        meta: {
+          title: 'Audit Logs Report',
+          breadcrumb: 'Audit Logs',
+          requiresAuth: true,
+          allowedRoles: ['tenant', 'templeadmin']
         }
       }
     ]

@@ -12,8 +12,14 @@ const templeService = {
       
       let response
       
-      // SIMPLE LOGIC: If on tenant or admin path, use entities endpoint
-      if (currentPath.includes('/tenant/') || 
+      // NEW LOGIC: Special case for temple admin dashboard
+      if (currentPath.includes('/tenant/dashboard')) {
+        // Use the special endpoint for temple admins to see their created temples
+        console.log('🔑 Using temple admin special endpoint: /v1/entities/by-creator')
+        response = await api.get('/v1/entities/by-creator')
+      }
+      // For other admin paths
+      else if (currentPath.includes('/tenant/') || 
           currentPath.includes('/entity/') || 
           currentPath.includes('/admin/') || 
           currentPath.includes('/superadmin/')) {

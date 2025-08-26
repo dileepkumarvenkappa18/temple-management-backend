@@ -1,4 +1,3 @@
-// src/services/reports.service.js - FIXED VERSION
 import api from '@/plugins/axios'
 
 class ReportsService {
@@ -581,6 +580,233 @@ class ReportsService {
     }
   }
 
+/**
+ * Get audit logs report data (preview) - FIXED ENDPOINT
+ */
+async getAuditLogsReport(params) {
+  const {
+    entityId,
+    dateRange = 'weekly',
+    startDate,
+    endDate,
+    userId,
+    actionType
+  } = params
+
+  if (!entityId) {
+    throw new Error('Entity ID is required')
+  }
+
+  const queryParams = new URLSearchParams({ date_range: dateRange })
+
+  // Handle date range (custom or preset)
+  let finalStartDate, finalEndDate
+  const today = new Date()
+
+  if (dateRange === 'custom' && startDate && endDate) {
+    finalStartDate = startDate
+    finalEndDate = endDate
+  } else {
+    finalEndDate = today.toISOString().split('T')[0]
+    const start = new Date(today)
+
+    switch (dateRange) {
+      case 'daily':
+        break // today only
+      case 'weekly':
+        start.setDate(today.getDate() - 7)
+        break
+      case 'monthly':
+        start.setMonth(today.getMonth() - 1)
+        break
+      default:
+        start.setDate(today.getDate() - 7)
+    }
+
+    finalStartDate = start.toISOString().split('T')[0]
+  }
+
+  queryParams.set('start_date', finalStartDate)
+  queryParams.set('end_date', finalEndDate)
+
+  if (userId) queryParams.set('user_id', userId)
+  if (actionType) queryParams.set('action_type', actionType)
+
+  // FIXED: Ensure correct endpoint format
+  const url = `/v1/entities/${entityId}/reports/audit-logs?${queryParams.toString()}`
+
+  try {
+    console.log('🔍 Making audit logs API request:', url)
+    const response = await api.get(url)
+    console.log('✅ Audit logs API Response received:', response)
+    return response
+  } catch (error) {
+    console.error('❌ Error fetching audit logs report:', error)
+    throw error
+  }
+}
+
+/**
+ * Download audit logs report (CSV, PDF, etc.) - FIXED ENDPOINT
+ */
+async downloadAuditLogsReport(params) {
+  const {
+    entityId,
+    format = 'csv',
+    dateRange = 'weekly',
+    startDate,
+    endDate,
+    userId,
+    actionType
+  } = params
+
+  if (!entityId || !format) {
+    throw new Error('Entity ID and format are required')
+  }
+
+  const queryParams = new URLSearchParams({ date_range: dateRange, format })
+
+  // Handle date range
+  let finalStartDate, finalEndDate
+  const today = new Date()
+
+  if (dateRange === 'custom' && startDate && endDate) {
+    finalStartDate = startDate
+    finalEndDate = endDate
+  } else {
+    finalEndDate = today.toISOString().split('T')[0]
+    const start = new Date(today)
+
+    switch (dateRange) {
+      case 'daily':
+        break // today only
+      case 'weekly':
+        start.setDate(today.getDate() - 7)
+        break
+      case 'monthly':
+        start.setMonth(today.getMonth() - 1)
+        break
+      default:
+        start.setDate(today.getDate() - 7)
+    }
+
+    finalStartDate = start.toISOString().split('T')[0]
+  }
+
+  queryParams.set('start_date', finalStartDate)
+  queryParams.set('end_date', finalEndDate)
+
+  if (userId) queryParams.set('user_id', userId)
+  if (actionType) queryParams.set('action_type', actionType)
+
+  // FIXED: Ensure correct endpoint format
+  const url = `/v1/entities/${entityId}/reports/audit-logs?${queryParams.toString()}`
+
+  try {
+    console.log('📥 Making audit logs download request:', url)
+    return await this.downloadReport(url, { format }, 'audit_logs_report')
+  } catch (error) {
+    console.error('❌ Error downloading audit logs report:', error)
+    throw error
+  }
+}
+
+/**
+ * Get audit logs report preview data - NEW METHOD
+ */
+async getAuditLogsPreview(params) {
+  try {
+    const response = await this.getAuditLogsReport(params)
+
+    console.log('🔍 Audit logs preview response:', response)
+
+    let responseData = response.data
+    
+    // Handle different response structures
+    if (responseData && responseData.data) {
+      responseData = responseData.data
+    }
+
+    console.log('📊 Processed audit logs data:', responseData)
+
+    const columns = [
+      { key: 'timestamp', label: 'Timestamp' },
+      { key: 'user_name', label: 'User' },
+      { key: 'action_type', label: 'Action' },
+      { key: 'resource_type', label: 'Resource Type' },
+      { key: 'resource_id', label: 'Resource ID' },
+      { key: 'description', label: 'Description' },
+      { key: 'ip_address', label: 'IP Address' },
+      { key: 'user_agent', label: 'User Agent' }
+    ]
+
+    // Handle different response formats
+    let previewData = []
+    
+    if (Array.isArray(responseData)) {
+      previewData = responseData
+    } else if (responseData && responseData.audit_logs) {
+      previewData = responseData.audit_logs
+    } else if (responseData && responseData.logs) {
+      previewData = responseData.logs
+    } else if (responseData && Array.isArray(responseData.data)) {
+      previewData = responseData.data
+    } else {
+      console.warn('⚠️ No valid audit logs data found in response:', responseData)
+      previewData = []
+    }
+
+    // Format timestamp for better display
+    previewData = previewData.map(item => ({
+      ...item,
+      timestamp: item.timestamp ? this.formatDateTime(item.timestamp) : '-',
+      description: item.description || item.details || '-',
+      user_agent: item.user_agent ? this.truncateText(item.user_agent, 50) : '-'
+    }))
+
+    console.log('📋 Final audit logs preview data:', previewData)
+
+    return {
+      data: previewData,
+      columns,
+      totalRecords: previewData.length || 0
+    }
+  } catch (error) {
+    console.error('❌ Error getting audit logs preview:', error)
+    throw error
+  }
+}
+
+/**
+ * Format datetime helper for audit logs
+ */
+formatDateTime(dateString) {
+  if (!dateString) return '-'
+  try {
+    const date = new Date(dateString)
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+  } catch (error) {
+    console.warn('Invalid datetime format:', dateString)
+    return dateString
+  }
+}
+
+/**
+ * Truncate text helper
+ */
+truncateText(text, maxLength) {
+  if (!text || text.length <= maxLength) return text
+  return text.substring(0, maxLength) + '...'
+}
+
+
   // UTILITY METHODS - FIXED AND CONSOLIDATED
 
   /**
@@ -727,6 +953,7 @@ class ReportsService {
         return 'application/octet-stream'
     }
   }
+  
 
   /**
    * Get blob MIME type based on format

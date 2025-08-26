@@ -161,6 +161,53 @@ export const useReportsStore = defineStore('reports', () => {
       loading.value = false
     }
   }
+/**
+ * Fetch audit logs report data (JSON preview)
+ */
+const fetchAuditLogsReport = async (params) => {
+  try {
+    loading.value = true
+    error.value = null
+
+    // Add report type for summary
+    lastReportParams.value = { ...params, type: 'audit-logs' }
+
+    const response = await reportsService.getAuditLogsReport(params)
+    currentReport.value = response
+
+    const preview = await reportsService.getAuditLogsPreview(params)
+    reportPreview.value = preview
+
+    return response
+  } catch (err) {
+    error.value = err.message || 'Failed to fetch audit logs report'
+    console.error('Error in fetchAuditLogsReport:', err)
+    throw err
+  } finally {
+    loading.value = false
+  }
+}
+
+/**
+ * Download audit logs report in specified format
+ */
+const downloadAuditLogsReport = async (params) => {
+  try {
+    downloadLoading.value = true
+    error.value = null
+
+    const result = await reportsService.downloadAuditLogsReport(params)
+    lastReportParams.value = { ...params, type: 'audit-logs' }
+
+    return result
+  } catch (err) {
+    error.value = err.message || 'Failed to download audit logs report'
+    console.error('Error in downloadAuditLogsReport:', err)
+    throw err
+  } finally {
+    downloadLoading.value = false
+  }
+}
 
   // TEMPLE REGISTERED REPORT METHODS
   /**
@@ -623,6 +670,10 @@ export const useReportsStore = defineStore('reports', () => {
     hasReportData,
     reportSummary,
     filteredDevoteeList,
+
+    //audit lgs
+    fetchAuditLogsReport,
+  downloadAuditLogsReport,
     
     // Actions
     clearError,

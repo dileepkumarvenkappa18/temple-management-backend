@@ -2,17 +2,17 @@
   <div class="space-y-6">
     <!-- Heading Section -->
     <div class="border-b border-gray-200 pb-4">
-      <h1 class="text-2xl font-bold text-gray-900 font-roboto">Tenant Approvals</h1>
-      <p class="mt-1 text-sm text-gray-500">Review and manage tenant registration requests</p>
+      <h1 class="text-2xl font-bold text-gray-900 font-roboto">Temple Approvals</h1>
+      <p class="mt-1 text-sm text-gray-500">Review and manage temple registration requests</p>
     </div>
 
     <!-- Debug Info (remove in production) -->
     <div class="bg-gray-100 p-4 rounded-lg mb-4 text-xs font-mono overflow-auto max-h-40" v-if="debugMode">
       <div class="mb-2 font-bold">Debug Information:</div>
-      <div v-if="selectedTenant">Selected Tenant: ID={{ selectedTenant.id || selectedTenant.ID }}, Name={{ getTenantName(selectedTenant) }}</div>
-      <div>Tenant Count: {{ Array.isArray(allTenants) ? allTenants.length : 0 }}</div>
+      <div v-if="selectedEntity">Selected Temple: ID={{ selectedEntity.id || selectedEntity.ID }}, Name={{ getEntityName(selectedEntity) }}</div>
+      <div>Temple Count: {{ Array.isArray(allEntities) ? allEntities.length : 0 }}</div>
       <div class="mt-2 flex gap-2">
-        <button @click="debugTenantData" class="px-3 py-1 bg-gray-200 rounded text-xs">Run API Debug</button>
+        <button @click="debugEntityData" class="px-3 py-1 bg-gray-200 rounded text-xs">Run API Debug</button>
       </div>
     </div>
 
@@ -48,17 +48,17 @@
         </select>
         
         <!-- Debug Mode Toggle -->
-        <!-- <button 
+        <button 
           @click="debugMode = !debugMode" 
           class="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm"
         >
           {{ debugMode ? 'Hide Debug' : 'Debug Mode' }}
-        </button> -->
+        </button>
       </div>
       
       <!-- Refresh Button -->
       <button 
-        @click="loadTenants" 
+        @click="loadEntities" 
         class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm"
       >
         Refresh Data
@@ -70,18 +70,18 @@
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
     </div>
 
-    <!-- Tenant Applications List -->
-    <div v-if="!loading && Array.isArray(filteredTenants) && filteredTenants.length > 0" class="space-y-4">
+    <!-- Temple Applications List -->
+    <div v-if="!loading && Array.isArray(filteredEntities) && filteredEntities.length > 0" class="space-y-4">
       <div
-        v-for="(tenant, idx) in paginatedTenants"
-        :key="tenant.id || tenant.ID || idx"
+        v-for="(entity, idx) in paginatedEntities"
+        :key="entity.id || entity.ID || idx"
         class="bg-white rounded-xl shadow-md border border-gray-200 hover:shadow-lg transition-all duration-200"
       >
         <div class="p-6">
-          <!-- Tenant ID Debug (remove in production) -->
+          <!-- Entity ID Debug (remove in production) -->
           <div v-if="debugMode" class="bg-gray-100 p-2 mb-3 rounded text-xs">
-            <span class="font-bold">ID:</span> {{ tenant.id || tenant.ID || 'Not available' }} |
-            <span class="font-bold">Status:</span> {{ tenant.status || tenant.Status || 'Not available' }}
+            <span class="font-bold">ID:</span> {{ entity.id || entity.ID || 'Not available' }} |
+            <span class="font-bold">Status:</span> {{ entity.status || entity.Status || 'Not available' }}
           </div>
           
           <!-- Header Row -->
@@ -90,29 +90,29 @@
               <!-- Avatar -->
               <div class="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
                 <span class="text-indigo-600 font-semibold text-lg">
-                  {{ getTenantInitial(tenant) }}
+                  {{ getEntityInitial(entity) }}
                 </span>
               </div>
               
-              <!-- Basic Info - Only name and email -->
+              <!-- Basic Info - Temple name and main deity -->
               <div class="flex-1 min-w-0">
                 <h3 class="text-lg font-semibold text-gray-900 font-roboto">
-                  {{ getTenantName(tenant) }}
+                  {{ getEntityName(entity) }}
                 </h3>
-                <p class="text-sm text-gray-600">{{ getTenantEmail(tenant) }}</p>
+                <p class="text-sm text-gray-600">{{ getMainDeity(entity) }}</p>
               </div>
             </div>
 
             <!-- Status & Date -->
             <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
               <span
-                :class="getStatusBadgeClass(tenant.status || tenant.Status)"
+                :class="getStatusBadgeClass(entity.status || entity.Status)"
                 class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium"
               >
-                {{ tenant.status || tenant.Status || 'pending' }}
+                {{ entity.status || entity.Status || 'pending' }}
               </span>
               <span class="text-xs text-gray-500">
-                Applied: {{ formatDate(tenant.created_at || tenant.CreatedAt) }}
+                Created: {{ formatDate(entity.created_at || entity.CreatedAt) }}
               </span>
             </div>
           </div>
@@ -121,7 +121,7 @@
           <div class="flex flex-col sm:flex-row gap-3">
             <!-- View Details Button (Always visible) -->
             <button
-              @click="handleViewDetails(tenant)"
+              @click="handleViewDetails(entity)"
               class="flex-1 sm:flex-none px-6 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
             >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -131,10 +131,10 @@
               View Details
             </button>
             
-            <!-- Approval/Rejection Buttons (Only for pending tenants) -->
-            <div v-if="isStatusPending(tenant)" class="flex flex-col sm:flex-row gap-3 flex-1">
+            <!-- Approval/Rejection Buttons (Only for pending temples) -->
+            <div v-if="isStatusPending(entity)" class="flex flex-col sm:flex-row gap-3 flex-1">
               <button
-                @click="handleApprove(tenant)"
+                @click="handleApprove(entity)"
                 class="flex-1 sm:flex-none px-6 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
                 :disabled="isProcessing"
               >
@@ -145,7 +145,7 @@
               </button>
               
               <button
-                @click="handleRejectClick(tenant)"
+                @click="handleRejectClick(entity)"
                 class="flex-1 sm:flex-none px-6 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
                 :disabled="isProcessing"
               >
@@ -158,7 +158,7 @@
               <!-- Direct API call debug button (remove in production) -->
               <button 
                 v-if="debugMode"
-                @click="testApprovalApi(tenant)"
+                @click="testApprovalApi(entity)"
                 class="flex-1 sm:flex-none px-6 py-2 bg-gray-600 text-white text-sm font-medium rounded-xl flex items-center justify-center gap-2"
               >
                 Test API Call
@@ -173,7 +173,7 @@
         <div class="text-sm text-gray-700 mb-3 sm:mb-0">
           Showing <span class="font-medium">{{ paginationStart }}</span> to 
           <span class="font-medium">{{ paginationEnd }}</span> of 
-          <span class="font-medium">{{ Array.isArray(filteredTenants) ? filteredTenants.length : 0 }}</span> results
+          <span class="font-medium">{{ Array.isArray(filteredEntities) ? filteredEntities.length : 0 }}</span> results
         </div>
         
         <div class="flex space-x-2">
@@ -217,24 +217,24 @@
       <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
       </svg>
-      <h3 class="mt-4 text-lg font-medium text-gray-900">No tenant applications found</h3>
+      <h3 class="mt-4 text-lg font-medium text-gray-900">No temple applications found</h3>
       <p class="mt-2 text-sm text-gray-500">
-        {{ statusFilter ? `No tenants with "${statusFilter}" status found` : 'Try refreshing or checking back later' }}
+        {{ statusFilter ? `No temples with "${statusFilter}" status found` : 'Try refreshing or checking back later' }}
       </p>
     </div>
 
     <!-- Rejection Modal -->
     <div v-if="showRejectModal" class="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center">
       <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-        <h3 class="text-lg font-semibold mb-4">Reject Tenant</h3>
+        <h3 class="text-lg font-semibold mb-4">Reject Temple</h3>
         
         <!-- Debug info -->
         <div v-if="debugMode" class="bg-gray-100 p-2 mb-3 rounded text-xs">
-          <div><span class="font-bold">Selected Tenant ID:</span> {{ selectedTenant?.id || selectedTenant?.ID }}</div>
-          <div><span class="font-bold">Selected Tenant Name:</span> {{ getTenantName(selectedTenant) }}</div>
+          <div><span class="font-bold">Selected Temple ID:</span> {{ selectedEntity?.id || selectedEntity?.ID }}</div>
+          <div><span class="font-bold">Selected Temple Name:</span> {{ getEntityName(selectedEntity) }}</div>
         </div>
         
-        <p class="mb-4">Please provide a reason for rejecting <span class="font-medium">{{ selectedTenant ? getTenantName(selectedTenant) : '' }}</span>:</p>
+        <p class="mb-4">Please provide a reason for rejecting <span class="font-medium">{{ selectedEntity ? getEntityName(selectedEntity) : '' }}</span>:</p>
         <textarea 
           v-model="rejectReason" 
           class="w-full border border-gray-300 rounded-lg p-3 mb-4 min-h-[100px] focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
@@ -259,11 +259,11 @@
       </div>
     </div>
 
-    <!-- Tenant Details Modal -->
+    <!-- Temple Details Modal -->
     <div v-if="showDetailsModal" class="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center">
       <div class="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-auto">
         <div class="flex justify-between items-center border-b border-gray-200 pb-4 mb-5">
-          <h3 class="text-xl font-bold text-gray-900">Tenant Details</h3>
+          <h3 class="text-xl font-bold text-gray-900">Temple Details</h3>
           <button 
             @click="showDetailsModal = false"
             class="text-gray-400 hover:text-gray-600"
@@ -274,101 +274,101 @@
           </button>
         </div>
         
-        <div v-if="selectedTenant" class="space-y-5">
+        <div v-if="selectedEntity" class="space-y-5">
           <!-- Basic Info -->
           <div>
             <div class="flex items-center gap-4 mb-4">
               <div class="h-16 w-16 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
                 <span class="text-indigo-600 font-semibold text-2xl">
-                  {{ getTenantInitial(selectedTenant) }}
+                  {{ getEntityInitial(selectedEntity) }}
                 </span>
               </div>
               <div>
                 <h4 class="text-xl font-semibold text-gray-900">
-                  {{ getTenantName(selectedTenant) }}
+                  {{ getEntityName(selectedEntity) }}
                 </h4>
-                <p class="text-gray-600">{{ getTenantEmail(selectedTenant) }}</p>
+                <p class="text-gray-600">{{ getMainDeity(selectedEntity) }}</p>
               </div>
             </div>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <!-- First Column -->
+              <!-- First Column - Temple Info -->
               <div class="space-y-4">
                 <div class="border-b border-gray-100 pb-3">
                   <div class="text-sm font-medium text-gray-500">Status</div>
                   <div class="text-base text-gray-900 mt-1">
-                    <span :class="getStatusBadgeClass(selectedTenant.status || selectedTenant.Status)" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium">
-                      {{ selectedTenant.status || selectedTenant.Status || 'pending' }}
+                    <span :class="getStatusBadgeClass(selectedEntity.status || selectedEntity.Status)" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium">
+                      {{ selectedEntity.status || selectedEntity.Status || 'pending' }}
                     </span>
                   </div>
                 </div>
                 
                 <div class="border-b border-gray-100 pb-3">
-                  <div class="text-sm font-medium text-gray-500">Application Date</div>
+                  <div class="text-sm font-medium text-gray-500">Temple Type</div>
                   <div class="text-base text-gray-900 mt-1">
-                    {{ formatDate(selectedTenant.created_at || selectedTenant.CreatedAt) }}
+                    {{ selectedEntity.temple_type || selectedEntity.TempleType || 'Not specified' }}
                   </div>
                 </div>
                 
                 <div class="border-b border-gray-100 pb-3">
-                  <div class="text-sm font-medium text-gray-500">Phone Number</div>
+                  <div class="text-sm font-medium text-gray-500">Established Year</div>
                   <div class="text-base text-gray-900 mt-1">
-                    {{ selectedTenant.phone || selectedTenant.Phone || 'Not provided' }}
+                    {{ selectedEntity.established_year || selectedEntity.EstablishedYear || 'Not specified' }}
                   </div>
                 </div>
                 
                 <div class="border-b border-gray-100 pb-3">
-                  <div class="text-sm font-medium text-gray-500">User ID</div>
+                  <div class="text-sm font-medium text-gray-500">Created By</div>
                   <div class="text-base text-gray-900 mt-1">
-                    {{ selectedTenant.id || selectedTenant.ID || 'Not available' }}
+                    {{ selectedEntity.created_by || selectedEntity.CreatedBy || 'Unknown' }}
                   </div>
                 </div>
               </div>
               
-              <!-- Second Column - FIXED TEMPLE DETAILS -->
+              <!-- Second Column - Contact Info -->
               <div class="space-y-4">
                 <div class="border-b border-gray-100 pb-3">
-                  <div class="text-sm font-medium text-gray-500">Temple Name</div>
+                  <div class="text-sm font-medium text-gray-500">Phone</div>
                   <div class="text-base text-gray-900 mt-1">
-                    {{ getTempleDetail(selectedTenant, 'temple_name') }}
+                    {{ selectedEntity.phone || selectedEntity.Phone || 'Not provided' }}
                   </div>
                 </div>
                 
                 <div class="border-b border-gray-100 pb-3">
-                  <div class="text-sm font-medium text-gray-500">Temple Location</div>
+                  <div class="text-sm font-medium text-gray-500">Email</div>
                   <div class="text-base text-gray-900 mt-1">
-                    {{ getTempleDetail(selectedTenant, 'temple_place') }}
+                    {{ selectedEntity.email || selectedEntity.Email || 'Not provided' }}
                   </div>
                 </div>
                 
                 <div class="border-b border-gray-100 pb-3">
-                  <div class="text-sm font-medium text-gray-500">Temple Address</div>
+                  <div class="text-sm font-medium text-gray-500">Address</div>
                   <div class="text-base text-gray-900 mt-1">
-                    {{ getTempleDetail(selectedTenant, 'temple_address') }}
+                    {{ getFullAddress(selectedEntity) }}
                   </div>
                 </div>
                 
                 <div class="border-b border-gray-100 pb-3">
-                  <div class="text-sm font-medium text-gray-500">Temple Phone</div>
+                  <div class="text-sm font-medium text-gray-500">Entity ID</div>
                   <div class="text-base text-gray-900 mt-1">
-                    {{ getTempleDetail(selectedTenant, 'temple_phone_no') }}
+                    {{ selectedEntity.id || selectedEntity.ID || 'Not available' }}
                   </div>
                 </div>
               </div>
             </div>
             
-            <!-- Description Section - FIXED -->
+            <!-- Description Section -->
             <div class="mt-5 border-t border-gray-100 pt-4">
               <div class="text-sm font-medium text-gray-500 mb-2">Temple Description</div>
               <div class="text-base text-gray-900 bg-gray-50 p-4 rounded-lg">
-                {{ getTempleDescription(selectedTenant) }}
+                {{ selectedEntity.description || selectedEntity.Description || 'No description provided.' }}
               </div>
             </div>
 
             <!-- Debug Section -->
             <div v-if="debugMode" class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
               <button 
-                @click="debugTenantDetails(selectedTenant)"
+                @click="debugEntityDetails(selectedEntity)"
                 class="px-3 py-1 bg-yellow-200 hover:bg-yellow-300 text-yellow-800 rounded text-sm"
               >
                 Debug Temple Details
@@ -386,7 +386,7 @@
             Close
           </button>
           
-          <div v-if="isStatusPending(selectedTenant)">
+          <div v-if="isStatusPending(selectedEntity)">
             <button
               @click="handleApproveFromDetails"
               class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50"
@@ -426,13 +426,13 @@ import superAdminService from '@/services/superadmin.service'
 import api from '@/services/api'
 
 export default {
-  name: 'TenantApprovals',
+  name: 'TempleApprovals',
   emits: ['updated'],
   setup(props, { emit }) {
-    // Data - FIXED initialization
+    // Data
     const loading = ref(true)
-    const tenants = ref([])
-    const allTenants = ref([]) // Store all tenants for "View All" functionality
+    const entities = ref([])
+    const allEntities = ref([]) // Store all entities for "View All" functionality
     const toast = useToast()
     const isProcessing = ref(false)
     
@@ -443,7 +443,7 @@ export default {
     
     // Simple rejection modal
     const showRejectModal = ref(false)
-    const selectedTenant = ref(null)
+    const selectedEntity = ref(null)
     const rejectReason = ref('')
     
     // Details modal
@@ -456,169 +456,82 @@ export default {
     const currentPage = ref(1)
     const itemsPerPage = ref(5)
     
-    // ==================== NEW TEMPLE DETAILS HELPERS ====================
-    
-    // Helper methods for temple details - FIXED to access nested temple_details
-    const getTempleDetail = (tenant, field, fallback = 'Not provided') => {
-      if (!tenant) return fallback;
-      
-      // Check if temple_details exists and has the field
-      if (tenant.temple_details && tenant.temple_details[field]) {
-        return tenant.temple_details[field];
-      }
-      
-      // Fallback to direct property access (for backward compatibility)
-      if (tenant[field]) {
-        return tenant[field];
-      }
-      
-      // Check different case variations
-      const variations = [
-        field,
-        field.toLowerCase(),
-        field.toUpperCase(),
-        // Convert snake_case to camelCase
-        field.replace(/_([a-z])/g, (match, letter) => letter.toUpperCase()),
-        // Convert camelCase to PascalCase
-        field.charAt(0).toUpperCase() + field.slice(1)
-      ];
-      
-      for (const variation of variations) {
-        if (tenant[variation]) {
-          return tenant[variation];
-        }
-      }
-      
-      return fallback;
-    };
-
-    const getTempleDescription = (tenant) => {
-      if (!tenant) return 'No additional details provided.';
-      
-      // Check temple_details first
-      if (tenant.temple_details) {
-        if (tenant.temple_details.temple_description) {
-          return tenant.temple_details.temple_description;
-        }
-      }
-      
-      // Fallback checks
-      const descriptionFields = [
-        'temple_description', 'templeDescription', 'TempleDescription',
-        'description', 'Description'
-      ];
-      
-      for (const field of descriptionFields) {
-        if (tenant[field]) {
-          return tenant[field];
-        }
-      }
-      
-      return 'No additional details provided.';
-    };
-
-    // Add a debug method to see what data is available
-    const debugTenantDetails = (tenant) => {
-      if (!tenant) return;
-      
-      console.log('=== TENANT DEBUG ===');
-      console.log('Full tenant object:', tenant);
-      console.log('Temple details object:', tenant.temple_details);
-      
-      if (tenant.temple_details) {
-        console.log('Temple name:', tenant.temple_details.temple_name);
-        console.log('Temple place:', tenant.temple_details.temple_place);
-        console.log('Temple address:', tenant.temple_details.temple_address);
-        console.log('Temple phone:', tenant.temple_details.temple_phone_no);
-        console.log('Temple description:', tenant.temple_details.temple_description);
-      }
-      
-      // Show all available keys
-      console.log('Available keys on tenant:', Object.keys(tenant));
-      if (tenant.temple_details) {
-        console.log('Available keys on temple_details:', Object.keys(tenant.temple_details));
-      }
-      console.log('==================');
-    };
-    
-    // ===================================================================
-    
-    // Computed properties - FIXED with array checks
+    // Computed properties
     const pendingCount = computed(() => 
-      Array.isArray(allTenants.value) ? allTenants.value.filter(t => isStatusPending(t)).length : 0
+      Array.isArray(allEntities.value) ? allEntities.value.filter(e => isStatusPending(e)).length : 0
     )
     
     const approvedCount = computed(() => 
-      Array.isArray(allTenants.value) ? allTenants.value.filter(t => isStatusApproved(t)).length : 0
+      Array.isArray(allEntities.value) ? allEntities.value.filter(e => isStatusApproved(e)).length : 0
     )
     
     const rejectedCount = computed(() => 
-      Array.isArray(allTenants.value) ? allTenants.value.filter(t => isStatusRejected(t)).length : 0
+      Array.isArray(allEntities.value) ? allEntities.value.filter(e => isStatusRejected(e)).length : 0
     )
     
-    // Status check helpers - Updated to check both uppercase and lowercase properties
-    const isStatusPending = (tenant) => {
-      if (!tenant) return false;
-      const status = (tenant.status || tenant.Status || '').toLowerCase();
+    // Status check helpers
+    const isStatusPending = (entity) => {
+      if (!entity) return false;
+      const status = (entity.status || entity.Status || '').toLowerCase();
       return status === 'pending' || status === 'pending approval' || status === '';
     }
     
-    const isStatusApproved = (tenant) => {
-      if (!tenant) return false;
-      const status = (tenant.status || tenant.Status || '').toLowerCase();
+    const isStatusApproved = (entity) => {
+      if (!entity) return false;
+      const status = (entity.status || entity.Status || '').toLowerCase();
       return status === 'active' || status === 'approved';
     }
     
-    const isStatusRejected = (tenant) => {
-      if (!tenant) return false;
-      const status = (tenant.status || tenant.Status || '').toLowerCase();
+    const isStatusRejected = (entity) => {
+      if (!entity) return false;
+      const status = (entity.status || entity.Status || '').toLowerCase();
       return status === 'rejected' || status === 'declined';
     }
     
-    // Filtered tenants based on status - FIXED with array checks
-    const filteredTenants = computed(() => {
+    // Filtered entities based on status
+    const filteredEntities = computed(() => {
       // Ensure we always work with arrays
-      const allTenantsArray = Array.isArray(allTenants.value) ? allTenants.value : [];
+      const allEntitiesArray = Array.isArray(allEntities.value) ? allEntities.value : [];
       
       if (!statusFilter.value) {
-        return allTenantsArray; // Show all tenants when "View All" is selected
+        return allEntitiesArray; // Show all entities when "View All" is selected
       }
       
       switch (statusFilter.value.toLowerCase()) {
         case 'pending':
-          return allTenantsArray.filter(tenant => isStatusPending(tenant));
+          return allEntitiesArray.filter(entity => isStatusPending(entity));
         case 'approved':
-          return allTenantsArray.filter(tenant => isStatusApproved(tenant));
+          return allEntitiesArray.filter(entity => isStatusApproved(entity));
         case 'rejected':
-          return allTenantsArray.filter(tenant => isStatusRejected(tenant));
+          return allEntitiesArray.filter(entity => isStatusRejected(entity));
         default:
-          return allTenantsArray;
+          return allEntitiesArray;
       }
     })
     
-    // Paginated tenants - FIXED with array checks
-    const paginatedTenants = computed(() => {
-      const filtered = Array.isArray(filteredTenants.value) ? filteredTenants.value : [];
+    // Paginated entities
+    const paginatedEntities = computed(() => {
+      const filtered = Array.isArray(filteredEntities.value) ? filteredEntities.value : [];
       const start = (currentPage.value - 1) * itemsPerPage.value
       const end = start + itemsPerPage.value
       return filtered.slice(start, end)
     })
     
-    // Pagination helpers - FIXED with array checks
+    // Pagination helpers
     const totalPages = computed(() => {
-      const filtered = Array.isArray(filteredTenants.value) ? filteredTenants.value : [];
+      const filtered = Array.isArray(filteredEntities.value) ? filteredEntities.value : [];
       return Math.ceil(filtered.length / itemsPerPage.value) || 1
     })
     
     const paginationStart = computed(() => {
-      const filtered = Array.isArray(filteredTenants.value) ? filteredTenants.value : [];
+      const filtered = Array.isArray(filteredEntities.value) ? filteredEntities.value : [];
       return filtered.length === 0 
         ? 0 
         : (currentPage.value - 1) * itemsPerPage.value + 1
     })
     
     const paginationEnd = computed(() => {
-      const filtered = Array.isArray(filteredTenants.value) ? filteredTenants.value : [];
+      const filtered = Array.isArray(filteredEntities.value) ? filteredEntities.value : [];
       return Math.min(currentPage.value * itemsPerPage.value, filtered.length)
     })
     
@@ -664,47 +577,64 @@ export default {
       return pages
     })
     
-    // Helper methods for displaying tenant information
-    const getTenantName = (tenant) => {
-      if (!tenant) return 'Unknown Tenant';
+    // Helper methods for displaying entity information
+    const getEntityName = (entity) => {
+      if (!entity) return 'Unknown Temple';
       
-      // Check both uppercase and lowercase properties
-      if (tenant.full_name) return tenant.full_name;
-      if (tenant.FullName) return tenant.FullName;
-      if (tenant.fullName) return tenant.fullName;
-      if (tenant.name) return tenant.name;
-      if (tenant.Name) return tenant.Name;
+      if (entity.name) return entity.name;
+      if (entity.Name) return entity.Name;
       
-      // Check email as fallback
-      if (tenant.email) return tenant.email.split('@')[0];
-      if (tenant.Email) return tenant.Email.split('@')[0];
-      
-      // Return ID if available
-      return (tenant.id || tenant.ID) ? `User ${tenant.id || tenant.ID}` : 'Unknown Tenant';
+      return (entity.id || entity.ID) ? `Temple ${entity.id || entity.ID}` : 'Unknown Temple';
     }
     
-    const getTenantEmail = (tenant) => {
-      if (!tenant) return 'No email provided';
+    const getMainDeity = (entity) => {
+      if (!entity) return 'No deity specified';
       
-      if (tenant.email) return tenant.email;
-      if (tenant.Email) return tenant.Email;
-      if (tenant.email_address) return tenant.email_address;
-      if (tenant.EmailAddress) return tenant.EmailAddress;
+      if (entity.main_deity) return entity.main_deity;
+      if (entity.MainDeity) return entity.MainDeity;
       
-      return 'No email provided';
+      return 'No deity specified';
     }
     
-    const getTenantInitial = (tenant) => {
-      if (!tenant) return 'T';
+    const getFullAddress = (entity) => {
+      if (!entity) return 'No address provided';
       
-      const name = getTenantName(tenant);
-      if (name && name !== 'Unknown Tenant' && name.length > 0) {
-        return name.charAt(0).toUpperCase();
+      const addressParts = [];
+      
+      // Street address
+      if (entity.street_address || entity.StreetAddress) {
+        addressParts.push(entity.street_address || entity.StreetAddress);
       }
       
-      const email = getTenantEmail(tenant);
-      if (email && email !== 'No email provided' && email.length > 0) {
-        return email.charAt(0).toUpperCase();
+      // City
+      if (entity.city || entity.City) {
+        addressParts.push(entity.city || entity.City);
+      }
+      
+      // District
+      if (entity.district || entity.District) {
+        addressParts.push(entity.district || entity.District);
+      }
+      
+      // State
+      if (entity.state || entity.State) {
+        addressParts.push(entity.state || entity.State);
+      }
+      
+      // Pincode
+      if (entity.pincode || entity.Pincode) {
+        addressParts.push(entity.pincode || entity.Pincode);
+      }
+      
+      return addressParts.length > 0 ? addressParts.join(', ') : 'No address provided';
+    }
+    
+    const getEntityInitial = (entity) => {
+      if (!entity) return 'T';
+      
+      const name = getEntityName(entity);
+      if (name && name !== 'Unknown Temple' && name.length > 0) {
+        return name.charAt(0).toUpperCase();
       }
       
       return 'T';
@@ -743,44 +673,50 @@ export default {
       }
     }
     
-    // Updated filter function to properly apply filters
+    // Apply filters
     const applyFilters = () => {
-      // Reset to first page when filter changes
       currentPage.value = 1
       
-      // If "View All" is selected, load all tenants
       if (statusFilter.value === '') {
-        loadAllTenants()
+        loadAllEntities()
       }
     }
     
-    // Handle View Details button click - UPDATED WITH DEBUG
-    const handleViewDetails = (tenant) => {
-      selectedTenant.value = tenant;
-      
-      // Add debug logging
-      console.log('Opening details for tenant:', tenant);
-      debugTenantDetails(tenant);
-      
+    // Handle View Details
+    const handleViewDetails = (entity) => {
+      selectedEntity.value = entity;
+      console.log('Opening details for entity:', entity);
       showDetailsModal.value = true;
     }
     
     // Handle Approve from Details modal
     const handleApproveFromDetails = () => {
-      handleApprove(selectedTenant.value);
+      handleApprove(selectedEntity.value);
       showDetailsModal.value = false;
     }
     
-    // Load pending tenants (default view)
-    const loadTenants = async () => {
+    // Debug entity details
+    const debugEntityDetails = (entity) => {
+      if (!entity) return;
+      
+      console.log('=== ENTITY DEBUG ===');
+      console.log('Full entity object:', entity);
+      
+      // Show all available keys
+      console.log('Available keys on entity:', Object.keys(entity));
+      console.log('==================');
+    };
+    
+    // Load pending entities (default view)
+    const loadEntities = async () => {
       loading.value = true
       
       try {
-        console.log('Loading tenant data...')
+        console.log('Loading temple entities data...')
         
         try {
           // First try the correct API endpoint
-          const response = await fetch('/api/v1/superadmin/tenants?status=pending', {
+          const response = await fetch('/api/v1/superadmin/entities?status=pending', {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
             }
@@ -795,114 +731,182 @@ export default {
           
           if (data && data.data) {
             // Ensure data.data is an array
-            const tenantsData = Array.isArray(data.data) ? data.data : [];
-            tenants.value = tenantsData
-            allTenants.value = tenantsData
-            console.log(`Loaded ${tenantsData.length} tenant applications from API`)
-            toast.success(`Loaded ${tenantsData.length} tenant applications`)
+            const entitiesData = Array.isArray(data.data) ? data.data : [];
+            entities.value = entitiesData
+            allEntities.value = entitiesData
+            console.log(`Loaded ${entitiesData.length} temple entities from API`)
+            toast.success(`Loaded ${entitiesData.length} temple entities`)
           } else if (Array.isArray(data)) {
-            tenants.value = data
-            allTenants.value = data
-            console.log(`Loaded ${data.length} tenant applications from API`)
-            toast.success(`Loaded ${data.length} tenant applications`)
+            entities.value = data
+            allEntities.value = data
+            console.log(`Loaded ${data.length} temple entities from API`)
+            toast.success(`Loaded ${data.length} temple entities`)
           } else {
             console.warn('API returned unexpected format:', data)
             // Set empty arrays as fallback
-            tenants.value = []
-            allTenants.value = []
-            toast.error('Could not load tenant data: unexpected API response format')
+            entities.value = []
+            allEntities.value = []
+            toast.error('Could not load temple data: unexpected API response format')
           }
         } catch (apiError) {
           console.error('Error calling API directly:', apiError)
           
-          // Try using the service
+          // Try using the service if available
           try {
-            const serviceResponse = await superAdminService.getPendingTenants()
-            console.log('Service response:', serviceResponse)
+            // Try to get a function for pending entities from the superAdminService
+            let serviceFunction = superAdminService.getPendingEntities;
             
-            if (serviceResponse && serviceResponse.success && serviceResponse.data) {
-              // Check different possible structures from the service
-              let tenantsData = []
+            // If that doesn't exist, try alternative function names
+            if (!serviceFunction) serviceFunction = superAdminService.getEntitiesWithFilters;
+            if (!serviceFunction) serviceFunction = superAdminService.getEntities;
+            
+            if (serviceFunction) {
+              const serviceResponse = await serviceFunction('pending');
+              console.log('Service response:', serviceResponse)
               
-              if (serviceResponse.data.pending_tenants) {
-                tenantsData = Array.isArray(serviceResponse.data.pending_tenants) ? serviceResponse.data.pending_tenants : [];
-                console.log('Found pending_tenants in service response')
-              } else if (Array.isArray(serviceResponse.data)) {
-                tenantsData = serviceResponse.data
-                console.log('Found array in service response')
+              if (serviceResponse && serviceResponse.success && serviceResponse.data) {
+                // Check different possible structures from the service
+                let entitiesData = []
+                
+                if (serviceResponse.data.pending_entities) {
+                  entitiesData = Array.isArray(serviceResponse.data.pending_entities) ? serviceResponse.data.pending_entities : [];
+                } else if (Array.isArray(serviceResponse.data)) {
+                  entitiesData = serviceResponse.data
+                } else {
+                  console.warn('Unexpected service response format:', serviceResponse)
+                  entitiesData = []
+                }
+                
+                entities.value = entitiesData
+                allEntities.value = entitiesData
+                
+                if (entitiesData.length > 0) {
+                  toast.success(`Loaded ${entitiesData.length} temple entities`)
+                } else {
+                  toast.info('No pending temple entities found')
+                }
               } else {
-                console.warn('Unexpected service response format:', serviceResponse)
-                tenantsData = []
-              }
-              
-              tenants.value = tenantsData
-              allTenants.value = tenantsData
-              
-              if (tenantsData.length > 0) {
-                toast.success(`Loaded ${tenantsData.length} tenant applications`)
-              } else {
-                toast.info('No pending tenant applications found')
+                console.warn('Service call failed or returned unexpected format')
+                entities.value = []
+                allEntities.value = []
+                toast.error('Could not load temple data from API')
               }
             } else {
-              console.warn('Service call failed or returned unexpected format')
-              tenants.value = []
-              allTenants.value = []
-              toast.error('Could not load tenant data from API')
+              // If no service function is available, try a direct API call with axios
+              const axiosResponse = await api.get('/v1/entities/by-creator');
+              console.log('Axios response:', axiosResponse);
+              
+              if (axiosResponse && axiosResponse.data) {
+                let entitiesData = Array.isArray(axiosResponse.data) ? axiosResponse.data : [];
+                entities.value = entitiesData;
+                allEntities.value = entitiesData;
+                
+                if (entitiesData.length > 0) {
+                  toast.success(`Loaded ${entitiesData.length} temple entities`);
+                } else {
+                  toast.info('No pending temple entities found');
+                }
+              }
             }
           } catch (serviceError) {
             console.error('Error calling service:', serviceError)
-            tenants.value = []
-            allTenants.value = []
-            toast.error('Could not load tenant data')
+            entities.value = []
+            allEntities.value = []
+            toast.error('Could not load temple data')
           }
         }
       } catch (error) {
-        console.error('Error in loadTenants:', error)
-        tenants.value = []
-        allTenants.value = []
-        toast.error('Error loading tenant data')
+        console.error('Error in loadEntities:', error)
+        entities.value = []
+        allEntities.value = []
+        toast.error('Error loading temple data')
       } finally {
         loading.value = false
       }
     }
     
-    // Load all tenants (for "View All" option)
-    const loadAllTenants = async () => {
+    // Load all entities (for "View All" option)
+    const loadAllEntities = async () => {
       loading.value = true
       
       try {
-        const response = await superAdminService.getAllTenants()
+        // Try to call a service method if it exists
+        let serviceFunction = superAdminService.getAllEntities;
         
-        if (response && response.success && Array.isArray(response.data)) {
-          allTenants.value = response.data
-          toast.success(`Loaded ${response.data.length} total tenants`)
+        if (serviceFunction) {
+          const response = await serviceFunction();
+          
+          if (response && response.success && Array.isArray(response.data)) {
+            allEntities.value = response.data
+            toast.success(`Loaded ${response.data.length} total temples`)
+          } else {
+            // Fallback to direct API call
+            await loadEntityTypesDirectly();
+          }
         } else {
-          // Fallback to pending tenants if getAllTenants fails
-          await loadTenants()
+          // Try direct API call
+          await loadEntityTypesDirectly();
         }
       } catch (error) {
-        console.error('Error loading all tenants:', error)
-        // Fallback to pending tenants if getAllTenants fails
-        await loadTenants()
-        toast.warning('Showing pending tenants only')
+        console.error('Error loading all entities:', error)
+        // Fallback to pending entities
+        await loadEntities()
+        toast.warning('Showing pending temples only')
       } finally {
         loading.value = false
+      }
+    }
+    
+    // Helper to load all entity types directly via API
+    const loadEntityTypesDirectly = async () => {
+      try {
+        const statuses = ['pending', 'approved', 'rejected'];
+        let allData = [];
+        
+        // Fetch each status type and combine
+        for (const status of statuses) {
+          const response = await fetch(`/api/v1/superadmin/entities?status=${status}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data && data.data && Array.isArray(data.data)) {
+              allData = [...allData, ...data.data];
+            }
+          }
+        }
+        
+        if (allData.length > 0) {
+          allEntities.value = allData;
+          toast.success(`Loaded ${allData.length} total temples`);
+        } else {
+          // If direct API calls fail, fall back to pending entities
+          await loadEntities();
+          toast.warning('Showing pending temples only');
+        }
+      } catch (error) {
+        console.error('Error in loadEntityTypesDirectly:', error);
+        // Fall back to pending entities
+        await loadEntities();
       }
     }
     
     // Debug methods
-    const debugTenantData = async () => {
+    const debugEntityData = async () => {
       apiDebugInfo.value = 'Loading API debug information...'
       showApiDebugModal.value = true
       
       try {
         const debugInfo = []
-        debugInfo.push('==== TENANT DATA DEBUG ====\n')
+        debugInfo.push('==== ENTITY DATA DEBUG ====\n')
         
         // 1. Test direct API call to verify backend
-        debugInfo.push('Testing direct API call to /api/v1/superadmin/tenants?status=pending...')
+        debugInfo.push('Testing direct API call to /api/v1/superadmin/entities?status=pending...')
         try {
-          const response = await fetch('/api/v1/superadmin/tenants?status=pending', {
+          const response = await fetch('/api/v1/superadmin/entities?status=pending', {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
             }
@@ -918,38 +922,53 @@ export default {
             debugInfo.push(`API Response Data: ${JSON.stringify(data, null, 2)}`)
             
             // Try to load the data if not already loaded
-            if ((!Array.isArray(allTenants.value) || allTenants.value.length === 0) && data && data.data) {
-              const tenantsData = Array.isArray(data.data) ? data.data : [];
-              tenants.value = tenantsData
-              allTenants.value = tenantsData
-              debugInfo.push(`\nAUTOMATICALLY LOADED ${tenantsData.length} TENANTS FROM API RESPONSE`)
-            } else if ((!Array.isArray(allTenants.value) || allTenants.value.length === 0) && Array.isArray(data)) {
-              tenants.value = data
-              allTenants.value = data
-              debugInfo.push(`\nAUTOMATICALLY LOADED ${data.length} TENANTS FROM API RESPONSE`)
+            if ((!Array.isArray(allEntities.value) || allEntities.value.length === 0) && data && data.data) {
+              const entitiesData = Array.isArray(data.data) ? data.data : [];
+              entities.value = entitiesData
+              allEntities.value = entitiesData
+              debugInfo.push(`\nAUTOMATICALLY LOADED ${entitiesData.length} ENTITIES FROM API RESPONSE`)
             }
           }
         } catch (error) {
           debugInfo.push(`API Error: ${error.message}`)
         }
         
-        // 2. Check service methods
-        debugInfo.push('\n==== SERVICE METHODS DEBUG ====\n')
-        debugInfo.push(`superAdminService.baseURL: ${superAdminService.baseURL}`)
-        
-        // 3. Display tenant data
-        debugInfo.push('\n==== TENANT DATA ====\n')
-        debugInfo.push(`Total Tenants: ${Array.isArray(allTenants.value) ? allTenants.value.length : 0}`)
-        if (Array.isArray(allTenants.value) && allTenants.value.length > 0) {
-          const firstTenant = allTenants.value[0]
-          debugInfo.push(`First Tenant Data: ${JSON.stringify(firstTenant, null, 2)}`)
-          debugInfo.push(`First Tenant ID: ${firstTenant.id || firstTenant.ID || 'Not found'}`)
+        // 2. Test the "by-creator" API endpoint
+        debugInfo.push('\n==== ENTITY BY CREATOR API DEBUG ====\n')
+        try {
+          const response = await fetch('/api/v1/entities/by-creator', {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+            }
+          })
           
-          // List all properties that could be used as ID
-          const potentialIds = ['ID', 'id', 'user_id', 'userId', '_id']
-          for (const idField of potentialIds) {
-            debugInfo.push(`${idField}: ${firstTenant[idField]}`)
+          if (!response.ok) {
+            debugInfo.push(`API Error: ${response.status} ${response.statusText}`)
+            const errorText = await response.text()
+            debugInfo.push(`Error details: ${errorText}`)
+          } else {
+            const data = await response.json()
+            debugInfo.push(`API Response Status: ${response.status}`)
+            debugInfo.push(`API Response Data: ${JSON.stringify(data, null, 2)}`)
+            
+            // Try to load the data if not already loaded
+            if ((!Array.isArray(allEntities.value) || allEntities.value.length === 0) && Array.isArray(data)) {
+              entities.value = data
+              allEntities.value = data
+              debugInfo.push(`\nAUTOMATICALLY LOADED ${data.length} ENTITIES FROM BY-CREATOR API RESPONSE`)
+            }
           }
+        } catch (error) {
+          debugInfo.push(`API Error: ${error.message}`)
+        }
+        
+        // 3. Display entity data
+        debugInfo.push('\n==== ENTITY DATA ====\n')
+        debugInfo.push(`Total Entities: ${Array.isArray(allEntities.value) ? allEntities.value.length : 0}`)
+        if (Array.isArray(allEntities.value) && allEntities.value.length > 0) {
+          const firstEntity = allEntities.value[0]
+          debugInfo.push(`First Entity Data: ${JSON.stringify(firstEntity, null, 2)}`)
+          debugInfo.push(`First Entity ID: ${firstEntity.id || firstEntity.ID || 'Not found'}`)
         }
         
         apiDebugInfo.value = debugInfo.join('\n')
@@ -959,37 +978,37 @@ export default {
     }
     
     // Direct API test for approval
-    const testApprovalApi = async (tenant) => {
-      if (!tenant) {
-        toast.error('No tenant selected for testing')
+    const testApprovalApi = async (entity) => {
+      if (!entity) {
+        toast.error('No entity selected for testing')
         return
       }
       
-      apiDebugInfo.value = `Testing API call for tenant ${tenant.id || tenant.ID || 'unknown'}...`
+      apiDebugInfo.value = `Testing API call for entity ${entity.id || entity.ID || 'unknown'}...`
       showApiDebugModal.value = true
       
       try {
         const debugInfo = []
-        debugInfo.push(`Testing API approval for tenant ${JSON.stringify(tenant, null, 2)}\n`)
+        debugInfo.push(`Testing API approval for entity ${JSON.stringify(entity, null, 2)}\n`)
         
-        // Extract tenant ID with fallbacks
-        const tenantId = tenant.id || tenant.ID || tenant.user_id || tenant.userId
+        // Extract entity ID with fallbacks
+        const entityId = entity.id || entity.ID
         
-        if (!tenantId) {
-          debugInfo.push('ERROR: No tenant ID found in tenant object!')
+        if (!entityId) {
+          debugInfo.push('ERROR: No entity ID found in entity object!')
           apiDebugInfo.value = debugInfo.join('\n')
           return
         }
         
-        debugInfo.push(`Using tenant ID: ${tenantId}`)
+        debugInfo.push(`Using entity ID: ${entityId}`)
         
         // Test direct API call
-        debugInfo.push('\nTesting direct PATCH call to approve tenant...')
+        debugInfo.push('\nTesting direct PATCH call to approve entity...')
         try {
           const token = localStorage.getItem('auth_token')
           debugInfo.push(`Auth token available: ${!!token}`)
           
-          const response = await fetch(`/api/v1/superadmin/tenants/${tenantId}/approval`, {
+          const response = await fetch(`/api/v1/superadmin/entities/${entityId}/approval`, {
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',
@@ -1008,8 +1027,8 @@ export default {
             debugInfo.push('\nSUCCESS: Direct API call worked! The backend endpoint is functional.')
             toast.success('Test API call successful!')
             
-            // Refresh the tenant list to show the updated status
-            await loadTenants()
+            // Refresh the entity list
+            loadEntities()
           } else {
             const errorText = await response.text()
             debugInfo.push(`Error response: ${errorText}`)
@@ -1024,27 +1043,26 @@ export default {
       }
     }
     
-    // Updated to use id instead of ID - FIXED ENDPOINT
-    const handleApprove = async (tenant) => {
-      if (!tenant) {
-        toast.error('Cannot approve: Missing tenant');
+    // Handle approval
+    const handleApprove = async (entity) => {
+      if (!entity) {
+        toast.error('Cannot approve: Missing entity');
         return;
       }
       
-      // Use lowercase id first, fall back to uppercase ID
-      const tenantId = tenant.id || tenant.ID;
+      const entityId = entity.id || entity.ID;
       
-      if (!tenantId) {
-        toast.error('Cannot approve: Missing tenant ID');
+      if (!entityId) {
+        toast.error('Cannot approve: Missing entity ID');
         return;
       }
       
       isProcessing.value = true;
-      console.log(`Attempting to approve tenant ${tenantId} with PATCH to /api/v1/superadmin/tenants/${tenantId}/approval`);
+      console.log(`Attempting to approve entity ${entityId}`);
       
       try {
-        // Make a direct API call to the approval endpoint - RESTORED CORRECT ENDPOINT
-        const response = await fetch(`/api/v1/superadmin/tenants/${tenantId}/approval`, {
+        // Make a direct API call to the approval endpoint
+        const response = await fetch(`/api/v1/superadmin/entities/${entityId}/approval`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -1058,60 +1076,58 @@ export default {
         if (response.ok) {
           const data = await response.json();
           console.log('Approval successful:', data);
-          toast.success(`Tenant ${getTenantName(tenant)} approved successfully`);
+          toast.success(`Temple ${getEntityName(entity)} approved successfully`);
           
-          // Refresh the tenant list
-          loadTenants();
+          // Refresh the entity list
+          loadEntities();
           emit('updated');
         } else {
           console.error('Approval failed with status:', response.status);
           const errorData = await response.text();
           console.error('Error response:', errorData);
-          toast.error(`Failed to approve tenant: ${response.statusText}`);
+          toast.error(`Failed to approve temple: ${response.statusText}`);
         }
       } catch (error) {
         console.error('Error in approval process:', error);
-        toast.error('Error approving tenant: ' + (error.message || 'Unknown error'));
+        toast.error('Error approving temple: ' + (error.message || 'Unknown error'));
       } finally {
         isProcessing.value = false;
       }
     };
     
-    // Updated to use id instead of ID
-    const handleRejectClick = (tenant) => {
-      if (!tenant) {
-        toast.error('Cannot reject: Missing tenant');
+    // Handle reject click
+    const handleRejectClick = (entity) => {
+      if (!entity) {
+        toast.error('Cannot reject: Missing entity');
         return;
       }
       
-      // Use lowercase id first, fall back to uppercase ID
-      const tenantId = tenant.id || tenant.ID;
+      const entityId = entity.id || entity.ID;
       
-      if (!tenantId) {
-        toast.error('Cannot reject: Missing tenant ID');
+      if (!entityId) {
+        toast.error('Cannot reject: Missing entity ID');
         return;
       }
       
-      selectedTenant.value = tenant;
+      selectedEntity.value = entity;
       rejectReason.value = '';
       showRejectModal.value = true;
     };
     
-    // Updated to use id instead of ID - FIXED ENDPOINT
+    // Confirm rejection
     const confirmReject = async () => {
-      const tenant = selectedTenant.value;
+      const entity = selectedEntity.value;
       
-      if (!tenant) {
-        toast.error('Cannot reject: Missing tenant');
+      if (!entity) {
+        toast.error('Cannot reject: Missing entity');
         showRejectModal.value = false;
         return;
       }
       
-      // Use lowercase id first, fall back to uppercase ID
-      const tenantId = tenant.id || tenant.ID;
+      const entityId = entity.id || entity.ID;
       
-      if (!tenantId) {
-        toast.error('Cannot reject: Missing tenant ID');
+      if (!entityId) {
+        toast.error('Cannot reject: Missing entity ID');
         showRejectModal.value = false;
         return;
       }
@@ -1124,8 +1140,8 @@ export default {
       isProcessing.value = true;
       
       try {
-        // Make a direct API call to the rejection endpoint - RESTORED CORRECT ENDPOINT
-        const response = await fetch(`/api/v1/superadmin/tenants/${tenantId}/approval`, {
+        // Make a direct API call to the rejection endpoint
+        const response = await fetch(`/api/v1/superadmin/entities/${entityId}/approval`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -1140,21 +1156,21 @@ export default {
         if (response.ok) {
           const data = await response.json();
           console.log('Rejection successful:', data);
-          toast.success(`Tenant ${getTenantName(tenant)} rejected successfully`);
+          toast.success(`Temple ${getEntityName(entity)} rejected successfully`);
           showRejectModal.value = false;
           
-          // Refresh the tenant list
-          loadTenants();
+          // Refresh the entity list
+          loadEntities();
           emit('updated');
         } else {
           console.error('Rejection failed with status:', response.status);
           const errorData = await response.text();
           console.error('Error response:', errorData);
-          toast.error(`Failed to reject tenant: ${response.statusText}`);
+          toast.error(`Failed to reject temple: ${response.statusText}`);
         }
       } catch (error) {
         console.error('Error in rejection process:', error);
-        toast.error('Error rejecting tenant: ' + (error.message || 'Unknown error'));
+        toast.error('Error rejecting temple: ' + (error.message || 'Unknown error'));
       } finally {
         isProcessing.value = false;
       }
@@ -1162,34 +1178,35 @@ export default {
     
     // Load data on mount
     onMounted(() => {
-      loadTenants()
+      loadEntities()
     })
     
     return {
       loading,
-      tenants,
-      allTenants,
+      entities,
+      allEntities,
       pendingCount,
       approvedCount,
       rejectedCount,
       statusFilter,
       currentPage,
       itemsPerPage,
-      filteredTenants,
-      paginatedTenants,
+      filteredEntities,
+      paginatedEntities,
       totalPages,
       paginationStart,
       paginationEnd,
       displayedPageNumbers,
       getStatusBadgeClass,
       formatDate,
-      loadTenants,
-      loadAllTenants,
+      loadEntities,
+      loadAllEntities,
       handleApprove,
       handleRejectClick,
-      getTenantName,
-      getTenantEmail,
-      getTenantInitial,
+      getEntityName,
+      getMainDeity,
+      getFullAddress,
+      getEntityInitial,
       goToPage,
       isStatusPending,
       isStatusApproved,
@@ -1197,20 +1214,17 @@ export default {
       applyFilters,
       isProcessing,
       showRejectModal,
-      selectedTenant,
+      selectedEntity,
       rejectReason,
       confirmReject,
       // Details modal
       showDetailsModal,
       handleViewDetails,
       handleApproveFromDetails,
-      // NEW TEMPLE DETAILS HELPERS
-      getTempleDetail,
-      getTempleDescription,
-      debugTenantDetails,
-      // Debug & Mock data
+      debugEntityDetails,
+      // Debug methods
       debugMode,
-      debugTenantData,
+      debugEntityData,
       testApprovalApi,
       showApiDebugModal,
       apiDebugInfo
