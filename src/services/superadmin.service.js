@@ -1,9 +1,237 @@
 import api, { endpoints } from './api.js'
-import reportsService from '@/services/reports.service'
 
 class SuperAdminService {
   constructor() {
     this.baseURL = '/api/v1/superadmin'
+  }
+
+   // ==========================================
+  // TENANT SELECTION - NEW
+  // ==========================================
+
+  /**
+   * Get tenants available for selection by the current user
+   * Endpoint: GET /api/v1/superadmin/tenants/selection
+   * This endpoint is protected and available to superadmin, standarduser, and monitoringuser roles
+   */
+ async getTenantsForSelection() {
+  try {
+    console.log('Service: Fetching tenants for selection...');
+    
+    // Use the actual endpoint from your backend
+    const response = await api.get(`${this.baseURL}/tenants/selection`);
+    console.log('Service: Tenants selection response:', response);
+    
+    // For debugging - log the exact structure of the first item
+    if (response && response.data && response.data.length > 0) {
+      console.log('First tenant raw data:', JSON.stringify(response.data[0], null, 2));
+    } else if (Array.isArray(response) && response.length > 0) {
+      console.log('First tenant raw data (direct array):', JSON.stringify(response[0], null, 2));
+    }
+    
+    // Handle the response format
+    if (response && response.data && Array.isArray(response.data)) {
+      // Process the tenants data to ensure consistent format
+      const processedTenants = response.data.map(tenant => {
+        // Log the raw tenant data for debugging
+        console.log(`Processing tenant ${tenant.id}: temple_name=${tenant.temple_name}, templeName=${tenant.templeName}, location=${tenant.location}, temple_place=${tenant.temple_place}`);
+        
+        return {
+          id: tenant.id || tenant.ID,
+          name: tenant.name || tenant.full_name || tenant.fullName || tenant.Name || 'Unknown Tenant',
+          email: tenant.email || tenant.Email || '',
+          // Handle all possible field name variations
+          templeName: tenant.temple_name || tenant.templeName || '',
+          location: tenant.location || tenant.temple_place || '',
+          status: (tenant.status || tenant.Status || 'active').toLowerCase(),
+          templesCount: tenant.temples_count || tenant.templesCount || 0,
+          imageUrl: tenant.image_url || tenant.imageUrl || null,
+          // Keep the temple object for compatibility with existing code
+          temple: {
+            name: tenant.temple_name || tenant.templeName || '',
+            address: tenant.location || tenant.temple_place || ''
+          }
+        };
+      });
+      
+      console.log('Service: Processed tenants for selection:', processedTenants);
+      
+      return {
+        success: true,
+        data: processedTenants,
+        message: 'Tenants fetched successfully'
+      };
+    } else if (Array.isArray(response)) {
+      // Direct array response
+      const processedTenants = response.map(tenant => {
+        // Log the raw tenant data for debugging
+        console.log(`Processing tenant ${tenant.id} (direct array): temple_name=${tenant.temple_name}, templeName=${tenant.templeName}, location=${tenant.location}, temple_place=${tenant.temple_place}`);
+        
+        return {
+          id: tenant.id || tenant.ID,
+          name: tenant.name || tenant.full_name || tenant.fullName || tenant.Name || 'Unknown Tenant',
+          email: tenant.email || tenant.Email || '',
+          templeName: tenant.temple_name || tenant.templeName || '',
+          location: tenant.location || tenant.temple_place || '',
+          status: (tenant.status || tenant.Status || 'active').toLowerCase(),
+          templesCount: tenant.temples_count || tenant.templesCount || 0,
+          imageUrl: tenant.image_url || tenant.imageUrl || null,
+          temple: {
+            name: tenant.temple_name || tenant.templeName || '',
+            address: tenant.location || tenant.temple_place || ''
+          }
+        };
+      });
+      
+      return {
+        success: true,
+        data: processedTenants,
+        message: 'Tenants fetched successfully'
+      };
+    }
+    
+    console.warn('Service: Unexpected response format for tenant selection');
+    return {
+      success: false,
+      data: [],
+      message: 'Unexpected response format'
+    };
+    
+  } catch (error) {
+    console.error('Service: Error fetching tenants for selection:', error);
+    
+    // Fallback to mock data for development
+    if (error.response?.status === 404) {
+      console.warn('Tenants selection endpoint not found, using mock data');
+      const mockData = this.getMockTenantsForSelection();
+      return {
+        success: true,
+        data: mockData,
+        message: 'Mock tenants loaded (API endpoint not available)'
+      };
+    }
+    
+    return {
+      success: false,
+      data: [],
+      message: error.message || 'Failed to fetch tenants for selection'
+    };
+  }
+}
+
+  /**
+   * Helper method to format location from tenant data
+   */
+  formatLocationForSelection(tenant) {
+    // Try to build location from available data
+    const city = tenant.city || tenant.City || tenant.temple?.city || tenant.Temple?.city || '';
+    const state = tenant.state || tenant.State || tenant.temple?.state || tenant.Temple?.state || '';
+    const address = tenant.address || tenant.Address || tenant.temple?.address || tenant.Temple?.address || '';
+    
+    if (city && state) {
+      return `${city}, ${state}`;
+    } else if (address) {
+      // Extract city and state from address if possible
+      const parts = address.split(',');
+      if (parts.length >= 2) {
+        return `${parts[parts.length-2].trim()}, ${parts[parts.length-1].trim()}`;
+      }
+      return address;
+    } else if (city) {
+      return city;
+    } else if (state) {
+      return state;
+    }
+    
+    return 'Location not specified';
+  }
+
+  /**
+   * Mock data for tenant selection (development/fallback)
+   */
+  getMockTenantsForSelection() {
+    return [
+      {
+        id: 1,
+        name: 'Bangalore Temple Trust',
+        email: 'admin@bangaloretemple.com',
+        templeName: 'Sri Venkateswara Temple',
+        location: 'Bengaluru, Karnataka',
+        status: 'active',
+        templesCount: 5,
+        imageUrl: null,
+        temple: {
+          name: 'Sri Venkateswara Temple',
+          address: '123 Temple Street, Bengaluru',
+          city: 'Bengaluru',
+          state: 'Karnataka'
+        }
+      },
+      {
+        id: 2,
+        name: 'Mumbai Temples Association',
+        email: 'info@mumbaitemples.org',
+        templeName: 'Ganesh Temple',
+        location: 'Mumbai, Maharashtra',
+        status: 'active',
+        templesCount: 8,
+        imageUrl: null,
+        temple: {
+          name: 'Ganesh Temple',
+          address: '456 Temple Road, Mumbai',
+          city: 'Mumbai',
+          state: 'Maharashtra'
+        }
+      },
+      {
+        id: 3,
+        name: 'Madurai Temple Management',
+        email: 'admin@maduraitemples.com',
+        templeName: 'Meenakshi Temple',
+        location: 'Madurai, Tamil Nadu',
+        status: 'active',
+        templesCount: 3,
+        imageUrl: null,
+        temple: {
+          name: 'Meenakshi Temple',
+          address: '789 Divine Lane, Madurai',
+          city: 'Madurai',
+          state: 'Tamil Nadu'
+        }
+      },
+      {
+        id: 4,
+        name: 'Puri Temple Network',
+        email: 'contact@puritemples.org',
+        templeName: 'Jagannath Temple',
+        location: 'Puri, Odisha',
+        status: 'pending',
+        templesCount: 2,
+        imageUrl: null,
+        temple: {
+          name: 'Jagannath Temple',
+          address: '101 Sacred Avenue, Puri',
+          city: 'Puri',
+          state: 'Odisha'
+        }
+      },
+      {
+        id: 5,
+        name: 'Chennai Temple Board',
+        email: 'board@chennaitemples.org',
+        templeName: 'Kapaleeshwarar Temple',
+        location: 'Chennai, Tamil Nadu',
+        status: 'active',
+        templesCount: 6,
+        imageUrl: null,
+        temple: {
+          name: 'Kapaleeshwarar Temple',
+          address: '202 Temple Square, Chennai',
+          city: 'Chennai',
+          state: 'Tamil Nadu'
+        }
+      }
+    ];
   }
 
   // ==========================================
@@ -957,147 +1185,6 @@ async getAvailableTenants(userId) {
         data: null,
         message: error.response?.data?.error || error.message || 'Failed to assign tenants'
       }
-    }
-  }
-
-  // ==========================================
-  // REPORT ACCESS FOR SUPERADMIN - NEW
-  // ==========================================
-
-  /**
-   * Fetch report preview for a specific tenant as a superadmin
-   * @param {Object} params Report parameters
-   * @returns {Promise} Promise resolving to report preview data
-   */
-  async fetchTenantReportPreview(params) {
-    try {
-      console.log('SuperAdmin Service: Fetching tenant report preview...', params);
-      
-      // Always set the isSuperAdmin flag to true
-      const superadminParams = {
-        ...params,
-        isSuperAdmin: true
-      };
-      
-      // Use the reports service which already has fallback logic for different API patterns
-      const preview = await reportsService.getReportPreview(superadminParams);
-      
-      return {
-        success: true,
-        data: preview,
-        message: 'Report preview fetched successfully'
-      };
-    } catch (error) {
-      console.error('SuperAdmin Service: Error fetching tenant report preview:', error);
-      return {
-        success: false,
-        data: null,
-        message: error.message || 'Failed to fetch report preview'
-      };
-    }
-  }
-
-  /**
-   * Download a report for a specific tenant as a superadmin
-   * @param {Object} params Report parameters
-   * @returns {Promise} Promise resolving to download result
-   */
-  async downloadTenantReport(params) {
-    try {
-      console.log('SuperAdmin Service: Downloading tenant report...', params);
-      
-      // Always set the isSuperAdmin flag to true
-      const superadminParams = {
-        ...params,
-        isSuperAdmin: true
-      };
-      
-      // Use the appropriate reports service method based on report type
-      let result;
-      
-      switch (params.type) {
-        case 'events':
-        case 'sevas':
-        case 'bookings':
-        case 'donations':
-          result = await reportsService.downloadActivitiesReport(superadminParams);
-          break;
-        case 'temple-registered':
-          result = await reportsService.downloadTempleRegisteredReport(superadminParams);
-          break;
-        case 'devotee-birthdays':
-          result = await reportsService.downloadDevoteeBirthdaysReport(superadminParams);
-          break;
-        case 'devotee-list':
-          result = await reportsService.downloadDevoteeListReport(superadminParams);
-          break;
-        case 'devotee-profile':
-          result = await reportsService.downloadDevoteeProfileReport(superadminParams);
-          break;
-        case 'audit-logs':
-          result = await reportsService.downloadAuditLogsReport(superadminParams);
-          break;
-        default:
-          throw new Error(`Unsupported report type: ${params.type}`);
-      }
-      
-      return {
-        success: true,
-        data: result,
-        message: 'Report downloaded successfully'
-      };
-    } catch (error) {
-      console.error('SuperAdmin Service: Error downloading tenant report:', error);
-      return {
-        success: false,
-        data: null,
-        message: error.message || 'Failed to download report'
-      };
-    }
-  }
-
-  /**
-   * Get tenant entity details for reports
-   * @param {string|number} tenantId Tenant ID
-   * @returns {Promise} Promise resolving to tenant details
-   */
-  async getTenantEntityDetails(tenantId) {
-    try {
-      console.log(`SuperAdmin Service: Fetching entity details for tenant ${tenantId}...`);
-      
-      // Try to get tenant details from superadmin endpoint
-      const response = await api.get(`${this.baseURL}/tenants/${tenantId}`);
-      
-      let entityDetails = null;
-      
-      // Extract entity/temple details from the response
-      if (response && response.data && response.data.tenant) {
-        entityDetails = response.data.tenant;
-      } else if (response && response.data) {
-        entityDetails = response.data;
-      } else if (response) {
-        entityDetails = response;
-      }
-      
-      // Extract temple information if available
-      const temples = (response && response.data && response.data.temples) || 
-                     (response && response.temples) || 
-                     [];
-      
-      return {
-        success: true,
-        data: entityDetails,
-        temples: temples,
-        message: 'Tenant entity details fetched successfully'
-      };
-    } catch (error) {
-      console.error('SuperAdmin Service: Error fetching tenant entity details:', error);
-      return {
-        success: false,
-        data: null,
-        temples: [],
-        message: error.message || 'Failed to fetch tenant entity details'
-      };
     }
   }
 

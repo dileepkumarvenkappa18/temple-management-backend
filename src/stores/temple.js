@@ -108,22 +108,34 @@ export const useTempleStore = defineStore('temple', () => {
     }
   }
 
-  const fetchTemplesForSuperAdmin = async (tenantId) => {
+  // This is just the updated method to add to the temple.js store
+// This is the updated fetchTemplesForSuperAdmin method for temple.js store
+const fetchTemplesForSuperAdmin = async (tenantId) => {
   console.log(`🏛️ Fetching temples for SuperAdmin for tenant ID ${tenantId}...`);
+  // Clear existing temples before fetching new ones
   temples.value = [];
   loading.value = true;
   error.value = null;
   
   try {
-    // Use the existing getTemples method but with a special flag
+    if (!tenantId) {
+      console.warn('No tenant ID provided for fetchTemplesForSuperAdmin');
+      return [];
+    }
+    
+    console.log(`🔄 Starting fresh fetch for tenant ID ${tenantId}`);
+    
+    // Use the existing getTemples method with superAdmin flag and tenantId
+    // Force a fresh fetch with cache busting
     const response = await templeService.getTemples({
       tenantId: tenantId,
-      superAdmin: true
+      superAdmin: true,
+      timestamp: Date.now() // Add timestamp for cache busting
     });
     
     if (response && Array.isArray(response)) {
       temples.value = response;
-      console.log(`🏛️ Temple service response for SuperAdmin:`, temples.value);
+      console.log(`🏛️ Temple service response for SuperAdmin: ${response.length} temples for tenant ${tenantId}`);
     } else {
       temples.value = [];
       console.warn(`No temples returned for tenant ID ${tenantId}`);
@@ -137,7 +149,7 @@ export const useTempleStore = defineStore('temple', () => {
   } finally {
     loading.value = false;
   }
-};
+}
 
   const createTemple = async (templeData) => {
     try {

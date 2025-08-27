@@ -43,7 +43,7 @@
         </button>
       </div>
 
-      <!-- Tenant list (shown for all users initially except SuperAdmin) -->
+      <!-- Tenant list -->
       <div v-if="showTenantList">
         <!-- Search and filter -->
         <div class="mb-6">
@@ -62,12 +62,12 @@
           </div>
         </div>
 
-        <!-- Loading state -->
+        <!-- Loading -->
         <div v-if="loading" class="flex justify-center py-12">
           <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
         </div>
 
-        <!-- Tenant list displayed as cards -->
+        <!-- Tenant list -->
         <div v-else-if="filteredTenants.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div 
             v-for="tenant in filteredTenants" 
@@ -90,7 +90,6 @@
                   </svg>
                 </span>
               </div>
-              <!-- Status badge -->
               <div class="absolute top-2 right-2">
                 <span 
                   class="px-2 py-1 text-xs font-semibold rounded-lg"
@@ -166,12 +165,10 @@ import axios from 'axios';
 import { useToast } from '@/composables/useToast';
 import tenantService from '@/services/tenant.service';
 
-// Get auth store for user information
 const authStore = useAuthStore();
 const router = useRouter();
 const { showToast } = useToast();
 
-// Get user info from auth store
 const userInfo = ref({
   id: authStore.user?.id || 1,
   name: authStore.user?.fullName || authStore.user?.name || 'User',
@@ -179,14 +176,11 @@ const userInfo = ref({
   role: authStore.userRole || authStore.user?.role || 'standard_user',
 });
 
-console.log('Current user in tenant selection:', userInfo.value);
-
 const loading = ref(false);
 const tenants = ref([]);
 const selectedTenantId = ref(null);
 const searchQuery = ref('');
 
-// Computed properties
 const isSuperAdmin = computed(() => {
   const role = userInfo.value.role?.toLowerCase() || '';
   return role === 'superadmin' || role === 'super_admin';
@@ -197,7 +191,6 @@ const isMonitoringUser = computed(() => {
   return role === 'monitoringuser' || role === 'monitoring_user';
 });
 
-// Show tenant list immediately for all users except SuperAdmin
 const showTenantList = ref(!isSuperAdmin.value);
 
 const getSelectionInstructions = computed(() => {
@@ -221,67 +214,19 @@ const filteredTenants = computed(() => {
   );
 });
 
-// Methods
 const loadTenants = async () => {
   loading.value = true;
   showTenantList.value = true;
-  
   try {
-    console.log('Fetching tenants from backend API...');
-    
-    // Use the tenant service to get tenants for selection
     const tenantsData = await tenantService.getTenantsForSelection();
-    
     if (Array.isArray(tenantsData) && tenantsData.length > 0) {
       tenants.value = tenantsData;
-      console.log('Tenants loaded successfully:', tenants.value);
     } else {
       tenants.value = [];
       showToast('No tenants available for selection', 'warning');
     }
   } catch (error) {
     console.error('Failed to load tenants:', error);
-    
-    // Mock data for development
-    tenants.value = [
-      {
-        id: 1,
-        name: 'Bangalore Temple Trust',
-        email: 'admin@bangaloretemple.com',
-        location: 'Bengaluru, Karnataka',
-        status: 'active',
-        templesCount: 5,
-        imageUrl: null
-      },
-      {
-        id: 2,
-        name: 'Mumbai Temples Association',
-        email: 'info@mumbaitemples.org',
-        location: 'Mumbai, Maharashtra',
-        status: 'active',
-        templesCount: 8,
-        imageUrl: null
-      },
-      {
-        id: 3,
-        name: 'Madurai Temple Management',
-        email: 'admin@maduraitemples.com',
-        location: 'Madurai, Tamil Nadu',
-        status: 'active',
-        templesCount: 3,
-        imageUrl: null
-      },
-      {
-        id: 4,
-        name: 'Puri Temple Network',
-        email: 'contact@puritemples.org',
-        location: 'Puri, Odisha',
-        status: 'pending',
-        templesCount: 2,
-        imageUrl: null
-      }
-    ];
-    
     showToast('Using development data while API is being set up', 'info');
   } finally {
     loading.value = false;
@@ -289,63 +234,33 @@ const loadTenants = async () => {
 };
 
 const selectTenant = (tenantId) => {
-  console.log('selectTenant called with ID:', tenantId);
-  
-  // Convert to number to ensure consistent comparison
   selectedTenantId.value = Number(tenantId);
-  
-  console.log('Selected tenant ID (updated):', selectedTenantId.value);
-  
-  // Find the selected tenant for better user feedback
-  const selected = tenants.value.find(t => Number(t.id) === Number(tenantId));
-  if (selected) {
-    console.log('Selected tenant:', selected.name);
-  }
 };
 
 const proceedToTenantDashboard = () => {
-  console.log('proceedToTenantDashboard called');
-  console.log('Current selectedTenantId:', selectedTenantId.value);
-  
   if (!selectedTenantId.value) {
-    console.warn('No tenant selected');
     showToast('Please select a tenant to proceed', 'warning');
     return;
   }
-  
+
   try {
-    console.log('Proceeding to entity dashboard with ID:', selectedTenantId.value);
-    
-    // Store the selected tenant IDs
     localStorage.setItem('selected_tenant_id', selectedTenantId.value);
     localStorage.setItem('current_tenant_id', selectedTenantId.value);
     localStorage.setItem('current_entity_id', selectedTenantId.value);
-    
-    // Set axios headers for subsequent API calls
+
     const token = localStorage.getItem('auth_token');
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      // Set tenant header for subsequent API calls
       axios.defaults.headers.common['X-Tenant-ID'] = selectedTenantId.value;
     }
-    
-    // Find the selected tenant to get its name
+
     const selectedTenant = tenants.value.find(t => Number(t.id) === Number(selectedTenantId.value));
     if (selectedTenant) {
       localStorage.setItem('selected_tenant_name', selectedTenant.name);
-      console.log('Stored tenant name:', selectedTenant.name);
     }
-    
-    // Determine the correct route based on user role
-    const userRole = authStore.userRole?.toLowerCase() || '';
-    let redirectPath;
-    
-    // All roles go to entity dashboard in this implementation
-    redirectPath = `/entity/${selectedTenantId.value}/dashboard`;
-    
-    console.log('Redirecting to:', redirectPath);
-    
-    // Use direct location navigation for reliability
+
+    // ✅ Redirect to tenant dashboard
+    const redirectPath = `/tenant/${selectedTenantId.value}/dashboard`;
     window.location.href = redirectPath;
   } catch (error) {
     console.error('Navigation error:', error);
@@ -353,66 +268,33 @@ const proceedToTenantDashboard = () => {
   }
 };
 
-// Direct navigation function for testing
 const directNavigate = (tenantId) => {
-  // Store the tenant ID in localStorage
   localStorage.setItem('selected_tenant_id', tenantId);
   localStorage.setItem('current_tenant_id', tenantId);
   localStorage.setItem('current_entity_id', tenantId);
-  
-  // Find the selected tenant to get its name
+
   const selectedTenant = tenants.value.find(t => Number(t.id) === Number(tenantId));
   if (selectedTenant) {
     localStorage.setItem('selected_tenant_name', selectedTenant.name);
   }
-  
-  // Redirect directly using window.location
-  const path = `/entity/${tenantId}/dashboard`;
-  console.log('Direct navigation to:', path);
+
+  // ✅ Redirect to tenant dashboard
+  const path = `/tenant/${tenantId}/dashboard`;
   window.location.href = path;
 };
 
-// On component mount
 onMounted(() => {
-  console.log('TenantSelectionView mounted');
-  console.log('AuthStore state:', {
-    isAuthenticated: authStore.isAuthenticated,
-    userRole: authStore.userRole,
-    user: authStore.user
-  });
-  
-  // For SuperAdmin, wait for button click to load tenants
-  // For other roles, load tenants immediately
   if (!isSuperAdmin.value) {
     loadTenants();
   }
-  
-  // If there's a previously selected tenant, pre-select it
   const savedTenantId = localStorage.getItem('selected_tenant_id');
   if (savedTenantId) {
-    console.log('Found previously selected tenant ID:', savedTenantId);
     selectedTenantId.value = Number(savedTenantId);
   }
-  
-  // Ensure auth token is set in axios headers
   const token = localStorage.getItem('auth_token');
   if (token) {
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    console.log('Set Authorization header with token');
-  } else {
-    console.warn('No auth token found in localStorage');
   }
-  
-  // Debug: Add global access for testing in console
-  window.testSelectTenant = (id) => {
-    console.log('Test selecting tenant:', id);
-    selectTenant(id);
-  };
-  
-  window.testProceed = () => {
-    console.log('Test proceeding to dashboard');
-    proceedToTenantDashboard();
-  };
 });
 </script>
 

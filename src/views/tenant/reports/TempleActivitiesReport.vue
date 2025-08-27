@@ -471,14 +471,14 @@ const loadReportPreview = async () => {
       if (tenantIds.value.length > 1) {
         params.entityIds = tenantIds.value;
       } else {
-        params.entityId = effectiveTenantId.value;
+        params.entityId = selectedTemple.value === 'all' ? effectiveTenantId.value : selectedTemple.value;
       }
       
       console.log('Loading report preview with superadmin params:', params);
       await reportsStore.getReportPreview(params);
     } else {
       // Regular entity view
-      params.entityId = selectedTemple.value === 'all' ? effectiveTenantId.value : selectedTemple.value;
+      params.entityId = selectedTemple.value === 'all' ? 'all' : selectedTemple.value;
       
       console.log('Loading report preview with regular params:', params);
       await reportsStore.getReportPreview(params);
@@ -622,7 +622,7 @@ const downloadReport = async () => {
       if (tenantIds.value.length > 1) {
         params.entityIds = tenantIds.value;
       } else {
-        params.entityId = effectiveTenantId.value;
+        params.entityId = selectedTemple.value === 'all' ? effectiveTenantId.value : selectedTemple.value;
       }
       
       console.log('Downloading report with superadmin params:', params);
@@ -634,8 +634,8 @@ const downloadReport = async () => {
         throw new Error(result.message || 'Failed to download report');
       }
     } else {
-      // Regular entity view
-      params.entityId = selectedTemple.value === 'all' ? effectiveTenantId.value : selectedTemple.value;
+      // Regular entity view - FIX: Use the correct entityId value based on selection
+      params.entityId = selectedTemple.value === 'all' ? 'all' : selectedTemple.value;
       
       console.log('Downloading report with regular params:', params);
       const result = await reportsStore.downloadActivitiesReport(params);
@@ -651,13 +651,17 @@ const downloadReport = async () => {
 };
 
 // Lifecycle hooks
+// Lifecycle hooks
 onMounted(async () => {
   console.log('TempleActivitiesReport mounted');
   console.log('fromSuperadmin:', fromSuperadmin.value);
   console.log('Tenant IDs from URL:', tenantIds.value);
   console.log('Effective tenant ID:', effectiveTenantId.value);
   
-  // First fetch temples
+  // Always clear temple data first before fetching
+  templeStore.clearTempleData();
+  
+  // Then fetch temples fresh
   await fetchTemples();
   
   // Then load report preview

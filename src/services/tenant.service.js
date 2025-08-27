@@ -2,6 +2,32 @@ import api from '@/plugins/axios'
 import { useAuthStore } from '@/stores/auth'
 
 /**
+ * Get tenants for selection (used in tenant selection screen)
+ * @returns {Promise} - Promise with tenant list
+ */
+export const getTenantsForSelection = async () => {
+  try {
+    console.log('📡 Fetching tenants for selection')
+    const response = await api.get('/v1/tenants/selection') // adjust endpoint if backend differs
+    console.log('✅ Tenants fetched:', response.data)
+
+    // Handle data structure (array or wrapped in {data:[]})
+    if (Array.isArray(response.data)) {
+      return response.data
+    } else if (response.data?.data && Array.isArray(response.data.data)) {
+      return response.data.data
+    } else {
+      console.warn('⚠️ Unexpected tenants response format:', response.data)
+      return []
+    }
+  } catch (error) {
+    console.error('❌ Error fetching tenants for selection:', error)
+    console.error('Error response:', error.response?.data)
+    return []
+  }
+}
+
+/**
  * Get all temples for a tenant
  * @param {string|number} tenantId - The tenant ID
  * @returns {Promise} - Promise with temple data
@@ -10,7 +36,7 @@ export const getTemples = async (tenantId) => {
   try {
     console.log('📡 Making API call to fetch available temples')
     console.log('🔍 Search params:', { tenantId, headers: api.defaults.headers.common })
-    
+
     // Get current URL path to determine context
     const currentPath = window.location.pathname
     console.log('📍 Current path:', currentPath)
@@ -19,34 +45,30 @@ export const getTemples = async (tenantId) => {
     if (tenantId) {
       api.defaults.headers.common['X-Tenant-ID'] = tenantId
     }
-    
+
     // Get auth store to check user role
     const authStore = useAuthStore()
     const userRole = (authStore.userRole || '').toLowerCase()
     const isMonitoringUser = userRole.includes('monitoring') || userRole.includes('monitoringuser')
     const isStandardUser = userRole.includes('standard') || userRole.includes('standarduser')
-    
+
     // Different endpoints based on the context
     let endpoint = '/v1/entities'
-    
-    // For standard/monitoring users, use tenant endpoint with the assigned tenant ID
+
     if ((isMonitoringUser || isStandardUser) && tenantId) {
       console.log('🔒 Standard/Monitoring user accessing temples for tenant ID:', tenantId)
       endpoint = '/v1/entities'
-    } 
-    // If accessing as tenant admin or with a specific tenant ID
-    else if (tenantId) {
+    } else if (tenantId) {
       console.log('🔒 Using admin endpoint: /v1/entities')
       endpoint = '/v1/entities'
     } else {
-      // Default to user context (for devotees/volunteers)
       console.log('👤 Using user endpoint: /v1/entities/available')
       endpoint = '/v1/entities/available'
     }
-    
+
     console.log(`🔍 Making GET request to: ${endpoint}`)
     const response = await api.get(endpoint)
-    
+
     // Handle various response formats
     let temples = response.data
     if (response.data && response.data.data && Array.isArray(response.data.data)) {
@@ -55,22 +77,18 @@ export const getTemples = async (tenantId) => {
       console.warn('⚠️ Unexpected response format:', response.data)
       temples = []
     }
-    
+
     console.log(`✅ Received ${temples.length} temples:`, temples)
     return temples
   } catch (error) {
     console.error('❌ Error fetching temples:', error)
     console.error('Error response:', error.response?.data)
-    
-    // Return empty array on error
     return []
   }
 }
 
 /**
  * Get a specific temple by ID
- * @param {string|number} id - Temple ID
- * @returns {Promise} - Promise with temple data
  */
 export const getTempleById = async (id) => {
   try {
@@ -87,8 +105,6 @@ export const getTempleById = async (id) => {
 
 /**
  * Create a new temple
- * @param {Object} templeData - Temple data to create
- * @returns {Promise} - Promise with created temple data
  */
 export const createTemple = async (templeData) => {
   try {
@@ -102,9 +118,6 @@ export const createTemple = async (templeData) => {
 
 /**
  * Update an existing temple
- * @param {string|number} id - Temple ID to update
- * @param {Object} templeData - Updated temple data
- * @returns {Promise} - Promise with updated temple data
  */
 export const updateTemple = async (id, templeData) => {
   try {
@@ -118,8 +131,6 @@ export const updateTemple = async (id, templeData) => {
 
 /**
  * Delete a temple
- * @param {string|number} id - Temple ID to delete
- * @returns {Promise} - Promise with deletion status
  */
 export const deleteTemple = async (id) => {
   try {
@@ -132,6 +143,7 @@ export const deleteTemple = async (id) => {
 }
 
 export default {
+  getTenantsForSelection,
   getTemples,
   getTempleById,
   createTemple,
