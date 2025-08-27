@@ -724,53 +724,64 @@ func (r *Repository) GetAssignableTenants(ctx context.Context, limit, page int) 
 }
 
 func (r *Repository) GetTenantsForSelection(ctx context.Context) ([]TenantSelectionResponse, error) {
-	var tenants []TenantSelectionResponse
+    var tenants []TenantSelectionResponse
 
-	query := `
-		SELECT 
-			users.id,
-			users.full_name as name,
-			users.email,
-			COALESCE(td.temple_name, td.temple_place, '') as location,
-			users.status,
-			COALESCE(entity_count.count, 0) as temples_count
-		FROM users
-		JOIN user_roles ON users.role_id = user_roles.id
-		LEFT JOIN tenant_details td ON users.id = td.user_id
-		LEFT JOIN (
-			SELECT created_by, COUNT(*) as count 
-			FROM entities 
-			WHERE status = 'approved' 
-			GROUP BY created_by
-		) entity_count ON users.id = entity_count.created_by
-		WHERE user_roles.role_name = 'templeadmin' 
-		AND users.status = 'active'
-		ORDER BY users.full_name ASC
-	`
+    // Modified query to explicitly join with tenant_details table and select fields directly
+    query := `
+        SELECT 
+            u.id,
+            u.full_name as name,
+            u.email,
+            td.temple_name,  -- Explicitly select temple_name
+            td.temple_place, -- Explicitly select temple_place
+            u.status,
+            COALESCE(entity_count.count, 0) as temples_count
+        FROM users u
+        JOIN user_roles ur ON u.role_id = ur.id
+        LEFT JOIN tenant_details td ON u.id = td.user_id
+        LEFT JOIN (
+            SELECT created_by, COUNT(*) as count 
+            FROM entities 
+            WHERE status = 'approved' 
+            GROUP BY created_by
+        ) entity_count ON u.id = entity_count.created_by
+        WHERE ur.role_name = 'templeadmin' 
+        AND u.status = 'active'
+        ORDER BY u.full_name ASC
+    `
 
-	rows, err := r.db.WithContext(ctx).Raw(query).Rows()
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+    rows, err := r.db.WithContext(ctx).Raw(query).Rows()
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
 
-	for rows.Next() {
-		var tenant TenantSelectionResponse
-		err := rows.Scan(
-			&tenant.ID,
-			&tenant.Name,
-			&tenant.Email,
-			&tenant.Location,
-			&tenant.Status,
-			&tenant.TemplesCount,
-		)
-		if err != nil {
-			return nil, err
-		}
-		tenants = append(tenants, tenant)
-	}
+    for rows.Next() {
+        var tenant TenantSelectionResponse
+        var templeName sql.NullString
+        var location sql.NullString
+        
+        err := rows.Scan(
+            &tenant.ID,
+            &tenant.Name,
+            &tenant.Email,
+            &templeName,
+            &location,
+            &tenant.Status,
+            &tenant.TemplesCount,
+        )
+        if err != nil {
+            return nil, err
+        }
+        
+        // Directly assign these fields to match the expected frontend field names
+        tenant.TempleName = templeName.String
+        tenant.Location = location.String
+        
+        tenants = append(tenants, tenant)
+    }
 
-	return tenants, nil
+    return tenants, nil
 }
 
 // Get assigned tenants for StandardUser / MonitoringUser
@@ -830,73 +841,88 @@ func (r *Repository) GetAssignedTenantsForUser(ctx context.Context, userID uint)
 
 
 // New method to get tenants with temple details
+// New method to get tenants with temple details
 func (r *Repository) GetTenantsWithTempleDetails(ctx context.Context, role, status string) ([]TenantResponse, error) {
-	var responses []TenantResponse
-	
-	query := `
-		SELECT 
-			u.id, 
-			u.full_name as "fullName",
-			u.email,
-			ur.role_name as "role",
-			u.status,
-			e.id as temple_id, 
-			COALESCE(e.name, td.temple_name) as temple_name, 
-			COALESCE(e.city, td.temple_place) as temple_city, 
-			COALESCE(e.state, '') as temple_state
-		FROM 
-			users u
-		JOIN 
-			user_roles ur ON u.role_id = ur.id
-		LEFT JOIN 
-			tenant_details td ON u.id = td.user_id
-		LEFT JOIN 
-			entities e ON u.id = e.created_by
-		WHERE 
-			ur.role_name = ? AND u.status = ?
-	`
-	
-	rows, err := r.db.WithContext(ctx).Raw(query, role, status).Rows()
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	
-	for rows.Next() {
-		var tr TenantResponse
-		var templeID sql.NullInt64
-		var templeName, templeCity, templeState sql.NullString
-		
-		err := rows.Scan(
-			&tr.ID,
-			&tr.FullName,
-			&tr.Email,
-			&tr.Role,
-			&tr.Status,
-			&templeID,
-			&templeName,
-			&templeCity,
-			&templeState,
-		)
-		
-		if err != nil {
-			return nil, err
-		}
-		
-		if templeID.Valid && templeName.Valid {
-			tr.Temple = &TempleDetails{
-				ID:    uint(templeID.Int64),
-				Name:  templeName.String,
-				City:  templeCity.String,
-				State: templeState.String,
-			}
-		}
-		
-		responses = append(responses, tr)
-	}
-	
-	return responses, nil
+    var responses []TenantResponse
+    
+    // Base query with dynamic WHERE clause
+    query := `
+        SELECT 
+            u.id, 
+            u.full_name as "fullName",
+            u.email,
+            ur.role_name as "role",
+            u.status,
+            e.id as temple_id, 
+            COALESCE(e.name, td.temple_name) as temple_name, 
+            COALESCE(e.city, td.temple_place) as temple_city, 
+            COALESCE(e.state, '') as temple_state
+        FROM 
+            users u
+        JOIN 
+            user_roles ur ON u.role_id = ur.id
+        LEFT JOIN 
+            tenant_details td ON u.id = td.user_id
+        LEFT JOIN 
+            entities e ON u.id = e.created_by
+        WHERE 1=1
+    `
+    
+    // Build dynamic query params
+    params := []interface{}{}
+    
+    if role != "" {
+        query += " AND ur.role_name = ?"
+        params = append(params, role)
+    }
+    
+    if status != "" {
+        query += " AND u.status = ?"
+        params = append(params, status)
+    }
+    
+    rows, err := r.db.WithContext(ctx).Raw(query, params...).Rows()
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+    
+    for rows.Next() {
+        var tr TenantResponse
+        var templeID sql.NullInt64
+        var templeName, templeCity, templeState sql.NullString
+        
+        err := rows.Scan(
+            &tr.ID,
+            &tr.FullName,
+            &tr.Email,
+            &tr.Role,
+            &tr.Status,
+            &templeID,
+            &templeName,
+            &templeCity,
+            &templeState,
+        )
+        
+        if err != nil {
+            return nil, err
+        }
+        
+        if templeID.Valid && templeName.Valid {
+            tr.Temple = &TempleDetails{
+                ID:    uint(templeID.Int64),
+                Name:  templeName.String,
+                City:  templeCity.String,
+                State: templeState.String,
+            }
+        }
+        
+        responses = append(responses, tr)
+    }
+    
+    return responses, nil
 }
+
 // BulkCreateUsers inserts multiple users safely with better error handling
 func (r *Repository) BulkCreateUsers(ctx context.Context, users []auth.User) error {
 	if len(users) == 0 {

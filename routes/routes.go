@@ -115,8 +115,6 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		superadminRoutes.GET("/tenants", superadminHandler.GetTenantsWithFilters)
 		superadminRoutes.PATCH("/tenants/:id/approval", superadminHandler.UpdateTenantApprovalStatus)
 		
-		
-
 		// ================ ENTITY APPROVAL MANAGEMENT ================
 		// 🔁 Paginated list of entities with optional ?status=pending&limit=10&page=1
 		superadminRoutes.GET("/entities", superadminHandler.GetEntitiesWithFilters)
@@ -164,8 +162,28 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		// Bulk upload users via CSV
         superadminRoutes.POST("/users/bulk-upload", superadminHandler.BulkUploadUsers)
 		
+		// ================ SUPERADMIN REPORTS ================
+		// Add dedicated routes for reports with multiple tenants
+		reportsRepo := reports.NewRepository(database.DB)
+		reportsExporter := reports.NewReportExporter()
+		reportsService := reports.NewReportService(reportsRepo, reportsExporter, auditSvc)
+		reportsHandler := reports.NewHandler(reportsService, reportsRepo, auditSvc)
 		
-
+		// Reports endpoints for superadmin with multiple tenants support
+		superadminRoutes.GET("/reports/activities", reportsHandler.GetSuperAdminActivities)
+		superadminRoutes.GET("/reports/temple-registered", reportsHandler.GetSuperAdminTempleRegisteredReport)
+		superadminRoutes.GET("/reports/devotee-birthdays", reportsHandler.GetSuperAdminDevoteeBirthdaysReport)
+		superadminRoutes.GET("/reports/devotee-list", reportsHandler.GetSuperAdminDevoteeListReport)
+		superadminRoutes.GET("/reports/devotee-profile", reportsHandler.GetSuperAdminDevoteeProfileReport)
+		superadminRoutes.GET("/reports/audit-logs", reportsHandler.GetSuperAdminAuditLogsReport)
+		
+		// Support for tenant-specific routes (for backwards compatibility)
+		superadminRoutes.GET("/tenants/:id/reports/activities", reportsHandler.GetSuperAdminTenantActivities)
+		superadminRoutes.GET("/tenants/:id/reports/temple-registered", reportsHandler.GetSuperAdminTenantTempleRegisteredReport)
+		superadminRoutes.GET("/tenants/:id/reports/devotee-birthdays", reportsHandler.GetSuperAdminTenantDevoteeBirthdaysReport)
+		superadminRoutes.GET("/tenants/:id/reports/devotee-list", reportsHandler.GetSuperAdminTenantDevoteeListReport)
+		superadminRoutes.GET("/tenants/:id/reports/devotee-profile", reportsHandler.GetSuperAdminTenantDevoteeProfileReport)
+		superadminRoutes.GET("/tenants/:id/reports/audit-logs", reportsHandler.GetSuperAdminTenantAuditLogsReport)
 	}
 
 	protected.GET("/tenants/selection", 

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -56,12 +57,52 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 		c.Set("user", user)
 		c.Set("claims", claims)
 		
-		// NEW: Handle assigned tenant access
+		// Special handling for "all" entity parameter in reports URLs
 		var assignedTenantID *uint
-		if assignedTenantIDFloat, exists := claims["assigned_tenant_id"]; exists {
-			if tenantID, ok := assignedTenantIDFloat.(float64); ok {
-				id := uint(tenantID)
-				assignedTenantID = &id
+		if user.RoleID == 1 && strings.Contains(c.Request.URL.Path, "/entities/all/reports/") {
+			// Superadmin viewing all entities - use their own tenant ID
+			id := user.ID
+			assignedTenantID = &id
+			
+			// Check if there's a specific tenant_id in query params that should override
+			if tenantQuery := c.Query("tenant_id"); tenantQuery != "" && tenantQuery != "all" {
+				if tid, err := strconv.ParseUint(tenantQuery, 10, 32); err == nil {
+					id := uint(tid)
+					assignedTenantID = &id
+				}
+			}
+		} else {
+			// Regular handling for all other cases
+			
+			// Check URL for tenant_id or id parameter
+			if tenantIDParam := c.Param("id"); tenantIDParam != "" && tenantIDParam != "all" {
+				if tid, err := strconv.ParseUint(tenantIDParam, 10, 32); err == nil {
+					id := uint(tid)
+					assignedTenantID = &id
+				}
+			} else if tenantQuery := c.Query("tenant_id"); tenantQuery != "" && tenantQuery != "all" {
+				if tid, err := strconv.ParseUint(tenantQuery, 10, 32); err == nil {
+					id := uint(tid)
+					assignedTenantID = &id
+				}
+			} else if tenantsQuery := c.Query("tenants"); tenantsQuery != "" {
+				tenantIDs := strings.Split(tenantsQuery, ",")
+				if len(tenantIDs) > 0 && tenantIDs[0] != "" && tenantIDs[0] != "all" {
+					if tid, err := strconv.ParseUint(tenantIDs[0], 10, 32); err == nil {
+						id := uint(tid)
+						assignedTenantID = &id
+					}
+				}
+			}
+			
+			// If no tenant ID from URL, check claims
+			if assignedTenantID == nil {
+				if assignedTenantIDFloat, exists := claims["assigned_tenant_id"]; exists {
+					if tenantID, ok := assignedTenantIDFloat.(float64); ok && tenantID > 0 {
+						id := uint(tenantID)
+						assignedTenantID = &id
+					}
+				}
 			}
 		}
 		

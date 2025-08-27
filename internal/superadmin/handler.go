@@ -643,37 +643,19 @@ func (h *Handler) GetTenantsForSelection(c *gin.Context) {
 }
 
 // GET /superadmin/tenants
+// GET /superadmin/tenants
 func (h *Handler) GetTenants(c *gin.Context) {
     role := c.Query("role")
     status := c.Query("status")
     
-    // Use the enhanced method when role is templeadmin
-    if role == "templeadmin" {
-        tenants, err := h.service.GetTenantsWithTempleDetails(c.Request.Context(), role, status)
-        if err != nil {
-            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-            return
-        }
-        
-        c.JSON(http.StatusOK, gin.H{"data": tenants})
-        return
-    }
-    
-    // Fall back to GetTenantsWithFilters for other roles with default pagination
-    limit := 10
-    page := 1
-    tenants, total, err := h.service.GetTenantsWithFilters(c.Request.Context(), status, limit, page)
+    // Always use the enhanced method to include temple details
+    tenants, err := h.service.GetTenantsWithTempleDetails(c.Request.Context(), role, status)
     if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tenants"})
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
         return
     }
     
-    c.JSON(http.StatusOK, gin.H{
-        "data":  tenants,
-        "total": total,
-        "page":  page,
-        "limit": limit,
-    })
+    c.JSON(http.StatusOK, gin.H{"data": tenants})
 }
 
 

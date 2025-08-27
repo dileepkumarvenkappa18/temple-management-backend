@@ -147,6 +147,240 @@ func (h *Handler) GetActivities(c *gin.Context) {
 	c.Data(http.StatusOK, mime, bytes)
 }
 
+// GetSuperAdminActivities handles activities reports with multiple tenant IDs
+func (h *Handler) GetSuperAdminActivities(c *gin.Context) {
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+
+	// Ensure superadmin role
+	if ctx.RoleName != "superadmin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only superadmin can access this endpoint"})
+		return
+	}
+
+	// Get IP address from context
+	ip := middleware.GetIPFromContext(c)
+
+	// Get request parameters
+	reportType := c.Query("type")
+	if reportType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "type query param required: events|sevas|bookings|donations"})
+		return
+	}
+	
+	tenantsParam := c.Query("tenants")
+	if tenantsParam == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenants query param required"})
+		return
+	}
+	
+	tenantIDs := strings.Split(tenantsParam, ",")
+	
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	format := c.Query("format") // excel, csv, pdf -> if empty return JSON
+
+	// Compute date range
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Collect entity IDs for all specified tenants
+	var allEntityIDs []string
+	for _, tenantIDStr := range tenantIDs {
+		tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
+		if err != nil {
+			continue // Skip invalid tenant IDs
+		}
+		
+		// Get entities for this tenant
+		entityIDs, err := h.repo.GetEntitiesByTenant(uint(tenantID))
+		if err != nil {
+			continue // Skip if there's an error fetching entities
+		}
+		
+		// Add to the collection
+		for _, entityID := range entityIDs {
+			allEntityIDs = append(allEntityIDs, fmt.Sprint(entityID))
+		}
+	}
+	
+	if len(allEntityIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": ReportData{}, "message": "No entities found for the specified tenants"})
+		return
+	}
+
+	// Create request object
+	req := ActivitiesReportRequest{
+		EntityID:  "multiple", // Indicate multiple entities
+		Type:      reportType,
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Format:    format,
+		EntityIDs: allEntityIDs,
+	}
+
+	// If no format -> return JSON preview
+	if req.Format == "" {
+		data, err := h.service.GetActivities(req)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		
+		// Log report view
+		details := map[string]interface{}{
+			"report_type": req.Type,
+			"format":     "json_preview",
+			"tenant_ids": tenantIDs,
+			"entity_ids": req.EntityIDs,
+			"date_range": req.DateRange,
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "SUPERADMIN_ACTIVITIES_REPORT_VIEWED", details, ip, "success")
+		
+		c.JSON(http.StatusOK, data)
+		return
+	}
+
+	// Else export file (format present)
+	bytes, fname, mime, err := h.service.ExportActivities(c.Request.Context(), req, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
+}
+
+// GetSuperAdminTenantActivities handles single tenant reports for superadmin
+func (h *Handler) GetSuperAdminTenantActivities(c *gin.Context) {
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+
+	// Ensure superadmin role
+	if ctx.RoleName != "superadmin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only superadmin can access this endpoint"})
+		return
+	}
+
+	// Get IP address from context
+	ip := middleware.GetIPFromContext(c)
+
+	// Get request parameters
+	tenantID := c.Param("id")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant ID is required"})
+		return
+	}
+	
+	reportType := c.Query("type")
+	if reportType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "type query param required: events|sevas|bookings|donations"})
+		return
+	}
+	
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	format := c.Query("format") // excel, csv, pdf -> if empty return JSON
+
+	// Compute date range
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Convert tenant ID to uint
+	tenantIDUint, err := strconv.ParseUint(tenantID, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant ID"})
+		return
+	}
+
+	// Get entities for this tenant
+	entityIDs, err := h.repo.GetEntitiesByTenant(uint(tenantIDUint))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch tenant entities"})
+		return
+	}
+	
+	if len(entityIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": ReportData{}, "message": "No entities found for the specified tenant"})
+		return
+	}
+
+	// Convert entity IDs to strings
+	entityIDStrs := make([]string, 0, len(entityIDs))
+	for _, id := range entityIDs {
+		entityIDStrs = append(entityIDStrs, fmt.Sprint(id))
+	}
+
+	// Create request object
+	req := ActivitiesReportRequest{
+		EntityID:  tenantID, // Use tenant ID as entity ID
+		Type:      reportType,
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Format:    format,
+		EntityIDs: entityIDStrs,
+	}
+
+	// If no format -> return JSON preview
+	if req.Format == "" {
+		data, err := h.service.GetActivities(req)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		
+		// Log report view
+		details := map[string]interface{}{
+			"report_type": req.Type,
+			"format":     "json_preview",
+			"tenant_id":  tenantID,
+			"entity_ids": req.EntityIDs,
+			"date_range": req.DateRange,
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "SUPERADMIN_TENANT_ACTIVITIES_REPORT_VIEWED", details, ip, "success")
+		
+		c.JSON(http.StatusOK, data)
+		return
+	}
+
+	// Else export file (format present)
+	bytes, fname, mime, err := h.service.ExportActivities(c.Request.Context(), req, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
+}
+
 func (h *Handler) GetTempleRegisteredReport(c *gin.Context) {
 	// Get access context from middleware
 	accessContext, exists := c.Get("access_context")
@@ -256,6 +490,248 @@ func (h *Handler) GetTempleRegisteredReport(c *gin.Context) {
 
 	// Export file (format is present)
 	bytes, fname, mime, err := h.service.ExportTempleRegisteredReport(c.Request.Context(), req, entityIDs, reportType, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
+}
+
+// GetSuperAdminTempleRegisteredReport handles temple registered report for superadmin with multiple tenants
+func (h *Handler) GetSuperAdminTempleRegisteredReport(c *gin.Context) {
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+
+	// Ensure superadmin role
+	if ctx.RoleName != "superadmin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only superadmin can access this endpoint"})
+		return
+	}
+
+	// Get IP address from context
+	ip := middleware.GetIPFromContext(c)
+
+	// Get request parameters
+	tenantsParam := c.Query("tenants")
+	if tenantsParam == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenants query param required"})
+		return
+	}
+	
+	tenantIDs := strings.Split(tenantsParam, ",")
+	
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	status := c.Query("status") // approve|rejected|pending
+	format := c.Query("format")
+
+	// Compute date range
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Collect entity IDs for all specified tenants
+	var allEntityIDs []string
+	for _, tenantIDStr := range tenantIDs {
+		tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
+		if err != nil {
+			continue // Skip invalid tenant IDs
+		}
+		
+		// Get entities for this tenant
+		entityIDs, err := h.repo.GetEntitiesByTenant(uint(tenantID))
+		if err != nil {
+			continue // Skip if there's an error fetching entities
+		}
+		
+		// Add to the collection
+		for _, entityID := range entityIDs {
+			allEntityIDs = append(allEntityIDs, fmt.Sprint(entityID))
+		}
+	}
+	
+	if len(allEntityIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": []TempleRegisteredReportRow{}, "message": "No entities found for the specified tenants"})
+		return
+	}
+
+	// Create request object
+	req := TempleRegisteredReportRequest{
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Status:    status,
+		Format:    format,
+		EntityID:  "multiple", // Indicate multiple entities
+	}
+
+	// The 'format' query parameter determines the report type for the exporter.
+	var reportType string
+	switch format {
+	case "excel":
+		reportType = ReportTypeTempleRegisteredExcel
+	case "pdf":
+		reportType = ReportTypeTempleRegisteredPDF
+	case "csv": // Explicitly handle csv for clarity
+		reportType = ReportTypeTempleRegistered
+	default:
+		// If no format is specified, return JSON preview
+		data, err := h.service.GetTempleRegisteredReport(req, allEntityIDs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		
+		// Log report view
+		details := map[string]interface{}{
+			"report_type": "temple_registered",
+			"format":     "json_preview",
+			"tenant_ids": tenantIDs,
+			"entity_ids": allEntityIDs,
+			"status":     status,
+			"date_range": dateRange,
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "SUPERADMIN_TEMPLE_REGISTER_REPORT_VIEWED", details, ip, "success")
+		
+		c.JSON(http.StatusOK, data)
+		return
+	}
+
+	// Export file (format is present)
+	bytes, fname, mime, err := h.service.ExportTempleRegisteredReport(c.Request.Context(), req, allEntityIDs, reportType, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
+}
+
+// GetSuperAdminTenantTempleRegisteredReport handles temple registered report for a single tenant by superadmin
+func (h *Handler) GetSuperAdminTenantTempleRegisteredReport(c *gin.Context) {
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+
+	// Ensure superadmin role
+	if ctx.RoleName != "superadmin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only superadmin can access this endpoint"})
+		return
+	}
+
+	// Get IP address from context
+	ip := middleware.GetIPFromContext(c)
+
+	// Get request parameters
+	tenantID := c.Param("id")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant ID is required"})
+		return
+	}
+	
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	status := c.Query("status") // approve|rejected|pending
+	format := c.Query("format")
+
+	// Compute date range
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Convert tenant ID to uint
+	tenantIDUint, err := strconv.ParseUint(tenantID, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant ID"})
+		return
+	}
+
+	// Get entities for this tenant
+	entityIDs, err := h.repo.GetEntitiesByTenant(uint(tenantIDUint))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch tenant entities"})
+		return
+	}
+	
+	if len(entityIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": []TempleRegisteredReportRow{}, "message": "No entities found for the specified tenant"})
+		return
+	}
+
+	// Convert entity IDs to strings
+	entityIDStrs := make([]string, 0, len(entityIDs))
+	for _, id := range entityIDs {
+		entityIDStrs = append(entityIDStrs, fmt.Sprint(id))
+	}
+
+	// Create request object
+	req := TempleRegisteredReportRequest{
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Status:    status,
+		Format:    format,
+		EntityID:  tenantID, // Use tenant ID as entity ID
+	}
+
+	// The 'format' query parameter determines the report type for the exporter.
+	var reportType string
+	switch format {
+	case "excel":
+		reportType = ReportTypeTempleRegisteredExcel
+	case "pdf":
+		reportType = ReportTypeTempleRegisteredPDF
+	case "csv": // Explicitly handle csv for clarity
+		reportType = ReportTypeTempleRegistered
+	default:
+		// If no format is specified, return JSON preview
+		data, err := h.service.GetTempleRegisteredReport(req, entityIDStrs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		
+		// Log report view
+		details := map[string]interface{}{
+			"report_type": "temple_registered",
+			"format":     "json_preview",
+			"tenant_id":  tenantID,
+			"entity_ids": entityIDStrs,
+			"status":     status,
+			"date_range": dateRange,
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "SUPERADMIN_TENANT_TEMPLE_REGISTER_REPORT_VIEWED", details, ip, "success")
+		
+		c.JSON(http.StatusOK, data)
+		return
+	}
+
+	// Export file (format is present)
+	bytes, fname, mime, err := h.service.ExportTempleRegisteredReport(c.Request.Context(), req, entityIDStrs, reportType, &ctx.UserID, ip)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -380,6 +856,242 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 	c.Data(http.StatusOK, mime, bytes)
 }
 
+// GetSuperAdminDevoteeBirthdaysReport handles devotee birthdays report for superadmin with multiple tenants
+func (h *Handler) GetSuperAdminDevoteeBirthdaysReport(c *gin.Context) {
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+
+	// Ensure superadmin role
+	if ctx.RoleName != "superadmin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only superadmin can access this endpoint"})
+		return
+	}
+
+	// Get IP address from context
+	ip := middleware.GetIPFromContext(c)
+
+	// Get request parameters
+	tenantsParam := c.Query("tenants")
+	if tenantsParam == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenants query param required"})
+		return
+	}
+	
+	tenantIDs := strings.Split(tenantsParam, ",")
+	
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	format := c.Query("format")
+
+	// Compute date range
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Collect entity IDs for all specified tenants
+	var allEntityIDs []string
+	for _, tenantIDStr := range tenantIDs {
+		tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
+		if err != nil {
+			continue // Skip invalid tenant IDs
+		}
+		
+		// Get entities for this tenant
+		entityIDs, err := h.repo.GetEntitiesByTenant(uint(tenantID))
+		if err != nil {
+			continue // Skip if there's an error fetching entities
+		}
+		
+		// Add to the collection
+		for _, entityID := range entityIDs {
+			allEntityIDs = append(allEntityIDs, fmt.Sprint(entityID))
+		}
+	}
+	
+	if len(allEntityIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": []DevoteeBirthdayReportRow{}, "message": "No entities found for the specified tenants"})
+		return
+	}
+
+	// Create request object
+	req := DevoteeBirthdaysReportRequest{
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Format:    format,
+		EntityID:  "multiple", // Indicate multiple entities
+	}
+
+	// The 'format' query parameter determines the report type for the exporter.
+	var reportType string
+	switch format {
+	case "excel":
+		reportType = ReportTypeDevoteeBirthdaysExcel
+	case "pdf":
+		reportType = ReportTypeDevoteeBirthdaysPDF
+	case "csv": // Explicitly handle csv for clarity
+		reportType = ReportTypeDevoteeBirthdays
+	default:
+		// If no format is specified, return JSON preview
+		data, err := h.service.GetDevoteeBirthdaysReport(req, allEntityIDs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		
+		// Log report view
+		details := map[string]interface{}{
+			"report_type": "devotee_birthdays",
+			"format":     "json_preview",
+			"tenant_ids": tenantIDs,
+			"entity_ids": allEntityIDs,
+			"date_range": dateRange,
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "SUPERADMIN_DEVOTEE_BIRTHDAYS_REPORT_VIEWED", details, ip, "success")
+		
+		c.JSON(http.StatusOK, data)
+		return
+	}
+
+	// Export file (format is present)
+	bytes, fname, mime, err := h.service.ExportDevoteeBirthdaysReport(c.Request.Context(), req, allEntityIDs, reportType, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
+}
+
+// GetSuperAdminTenantDevoteeBirthdaysReport handles devotee birthdays report for a single tenant by superadmin
+func (h *Handler) GetSuperAdminTenantDevoteeBirthdaysReport(c *gin.Context) {
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+
+	// Ensure superadmin role
+	if ctx.RoleName != "superadmin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only superadmin can access this endpoint"})
+		return
+	}
+
+	// Get IP address from context
+	ip := middleware.GetIPFromContext(c)
+
+	// Get request parameters
+	tenantID := c.Param("id")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant ID is required"})
+		return
+	}
+	
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	format := c.Query("format")
+
+	// Compute date range
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Convert tenant ID to uint
+	tenantIDUint, err := strconv.ParseUint(tenantID, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant ID"})
+		return
+	}
+
+	// Get entities for this tenant
+	entityIDs, err := h.repo.GetEntitiesByTenant(uint(tenantIDUint))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch tenant entities"})
+		return
+	}
+	
+	if len(entityIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": []DevoteeBirthdayReportRow{}, "message": "No entities found for the specified tenant"})
+		return
+	}
+
+	// Convert entity IDs to strings
+	entityIDStrs := make([]string, 0, len(entityIDs))
+	for _, id := range entityIDs {
+		entityIDStrs = append(entityIDStrs, fmt.Sprint(id))
+	}
+
+	// Create request object
+	req := DevoteeBirthdaysReportRequest{
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Format:    format,
+		EntityID:  tenantID, // Use tenant ID as entity ID
+	}
+
+	// The 'format' query parameter determines the report type for the exporter.
+	var reportType string
+	switch format {
+	case "excel":
+		reportType = ReportTypeDevoteeBirthdaysExcel
+	case "pdf":
+		reportType = ReportTypeDevoteeBirthdaysPDF
+	case "csv": // Explicitly handle csv for clarity
+		reportType = ReportTypeDevoteeBirthdays
+	default:
+		// If no format is specified, return JSON preview
+		data, err := h.service.GetDevoteeBirthdaysReport(req, entityIDStrs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		
+		// Log report view
+		details := map[string]interface{}{
+			"report_type": "devotee_birthdays",
+			"format":     "json_preview",
+			"tenant_id":  tenantID,
+			"entity_ids": entityIDStrs,
+			"date_range": dateRange,
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "SUPERADMIN_TENANT_DEVOTEE_BIRTHDAYS_REPORT_VIEWED", details, ip, "success")
+		
+		c.JSON(http.StatusOK, data)
+		return
+	}
+
+	// Export file (format is present)
+	bytes, fname, mime, err := h.service.ExportDevoteeBirthdaysReport(c.Request.Context(), req, entityIDStrs, reportType, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
+}
+
 // GetDevoteeListReport handles requests for devotee list report
 func (h *Handler) GetDevoteeListReport(c *gin.Context) {
 	// Get access context from middleware
@@ -492,6 +1204,238 @@ func (h *Handler) GetDevoteeListReport(c *gin.Context) {
 	c.Data(http.StatusOK, mime, bytes)
 }
 
+// GetSuperAdminDevoteeListReport handles devotee list report for superadmin with multiple tenants
+func (h *Handler) GetSuperAdminDevoteeListReport(c *gin.Context) {
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+
+	// Ensure superadmin role
+	if ctx.RoleName != "superadmin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only superadmin can access this endpoint"})
+		return
+	}
+
+	// Get IP address from context
+	ip := middleware.GetIPFromContext(c)
+
+	// Get request parameters
+	tenantsParam := c.Query("tenants")
+	if tenantsParam == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenants query param required"})
+		return
+	}
+	
+	tenantIDs := strings.Split(tenantsParam, ",")
+	
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	status := c.Query("status") // active|inactive|blocked etc
+	format := c.Query("format")
+
+	// Compute date range
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Collect entity IDs for all specified tenants
+	var allEntityIDs []string
+	for _, tenantIDStr := range tenantIDs {
+		tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
+		if err != nil {
+			continue // Skip invalid tenant IDs
+		}
+		
+		// Get entities for this tenant
+		entityIDs, err := h.repo.GetEntitiesByTenant(uint(tenantID))
+		if err != nil {
+			continue // Skip if there's an error fetching entities
+		}
+		
+		// Add to the collection
+		for _, entityID := range entityIDs {
+			allEntityIDs = append(allEntityIDs, fmt.Sprint(entityID))
+		}
+	}
+	
+	if len(allEntityIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": []DevoteeListReportRow{}, "message": "No entities found for the specified tenants"})
+		return
+	}
+
+	// Create request object
+	req := DevoteeListReportRequest{
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Status:    status,
+		Format:    format,
+		EntityID:  "multiple", // Indicate multiple entities
+	}
+
+	var reportType string
+	switch format {
+	case "excel":
+		reportType = ReportTypeDevoteeListExcel
+	case "pdf":
+		reportType = ReportTypeDevoteeListPDF
+	case "csv":
+		reportType = ReportTypeDevoteeListCSV
+	default:
+		data, err := h.service.GetDevoteeListReport(req, allEntityIDs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		details := map[string]interface{}{
+			"report_type": "devotee_list",
+			"format":     "json_preview",
+			"tenant_ids": tenantIDs,
+			"entity_ids": allEntityIDs,
+			"status":     status,
+			"date_range": dateRange,
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "SUPERADMIN_DEVOTEE_LIST_REPORT_VIEWED", details, ip, "success")
+		c.JSON(http.StatusOK, data)
+		return
+	}
+
+	bytes, fname, mime, err := h.service.ExportDevoteeListReport(c.Request.Context(), req, allEntityIDs, reportType, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
+}
+
+// GetSuperAdminTenantDevoteeListReport handles devotee list report for a single tenant by superadmin
+func (h *Handler) GetSuperAdminTenantDevoteeListReport(c *gin.Context) {
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+
+	// Ensure superadmin role
+	if ctx.RoleName != "superadmin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only superadmin can access this endpoint"})
+		return
+	}
+
+	// Get IP address from context
+	ip := middleware.GetIPFromContext(c)
+
+	// Get request parameters
+	tenantID := c.Param("id")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant ID is required"})
+		return
+	}
+	
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	status := c.Query("status") // active|inactive|blocked etc
+	format := c.Query("format")
+
+	// Compute date range
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Convert tenant ID to uint
+	tenantIDUint, err := strconv.ParseUint(tenantID, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant ID"})
+		return
+	}
+
+	// Get entities for this tenant
+	entityIDs, err := h.repo.GetEntitiesByTenant(uint(tenantIDUint))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch tenant entities"})
+		return
+	}
+	
+	if len(entityIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": []DevoteeListReportRow{}, "message": "No entities found for the specified tenant"})
+		return
+	}
+
+	// Convert entity IDs to strings
+	entityIDStrs := make([]string, 0, len(entityIDs))
+	for _, id := range entityIDs {
+		entityIDStrs = append(entityIDStrs, fmt.Sprint(id))
+	}
+
+	// Create request object
+	req := DevoteeListReportRequest{
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Status:    status,
+		Format:    format,
+		EntityID:  tenantID, // Use tenant ID as entity ID
+	}
+
+	var reportType string
+	switch format {
+	case "excel":
+		reportType = ReportTypeDevoteeListExcel
+	case "pdf":
+		reportType = ReportTypeDevoteeListPDF
+	case "csv":
+		reportType = ReportTypeDevoteeListCSV
+	default:
+		data, err := h.service.GetDevoteeListReport(req, entityIDStrs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		details := map[string]interface{}{
+			"report_type": "devotee_list",
+			"format":     "json_preview",
+			"tenant_id":  tenantID,
+			"entity_ids": entityIDStrs,
+			"status":     status,
+			"date_range": dateRange,
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "SUPERADMIN_TENANT_DEVOTEE_LIST_REPORT_VIEWED", details, ip, "success")
+		c.JSON(http.StatusOK, data)
+		return
+	}
+
+	bytes, fname, mime, err := h.service.ExportDevoteeListReport(c.Request.Context(), req, entityIDStrs, reportType, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
+}
+
 // GetDevoteeProfileReport handles requests for devotee profile report
 func (h *Handler) GetDevoteeProfileReport(c *gin.Context) {
 	// Get access context from middleware
@@ -595,6 +1539,238 @@ func (h *Handler) GetDevoteeProfileReport(c *gin.Context) {
 	}
 
 	bytes, fname, mime, err := h.service.ExportDevoteeProfileReport(c.Request.Context(), req, entityIDs, reportType, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
+}
+
+// GetSuperAdminDevoteeProfileReport handles devotee profile report for superadmin with multiple tenants
+func (h *Handler) GetSuperAdminDevoteeProfileReport(c *gin.Context) {
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+
+	// Ensure superadmin role
+	if ctx.RoleName != "superadmin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only superadmin can access this endpoint"})
+		return
+	}
+
+	// Get IP address from context
+	ip := middleware.GetIPFromContext(c)
+
+	// Get request parameters
+	tenantsParam := c.Query("tenants")
+	if tenantsParam == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenants query param required"})
+		return
+	}
+	
+	tenantIDs := strings.Split(tenantsParam, ",")
+	
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	status := c.Query("status") // active|inactive|blocked etc
+	format := c.Query("format")
+
+	// Compute date range
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Collect entity IDs for all specified tenants
+	var allEntityIDs []string
+	for _, tenantIDStr := range tenantIDs {
+		tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
+		if err != nil {
+			continue // Skip invalid tenant IDs
+		}
+		
+		// Get entities for this tenant
+		entityIDs, err := h.repo.GetEntitiesByTenant(uint(tenantID))
+		if err != nil {
+			continue // Skip if there's an error fetching entities
+		}
+		
+		// Add to the collection
+		for _, entityID := range entityIDs {
+			allEntityIDs = append(allEntityIDs, fmt.Sprint(entityID))
+		}
+	}
+	
+	if len(allEntityIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": []DevoteeProfileReportRow{}, "message": "No entities found for the specified tenants"})
+		return
+	}
+
+	// Create request object
+	req := DevoteeProfileReportRequest{
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Status:    status,
+		Format:    format,
+		EntityID:  "multiple", // Indicate multiple entities
+	}
+
+	var reportType string
+	switch format {
+	case "excel":
+		reportType = ReportTypeDevoteeProfileExcel
+	case "pdf":
+		reportType = ReportTypeDevoteeProfilePDF
+	case "csv":
+		reportType = ReportTypeDevoteeProfileCSV
+	default:
+		data, err := h.service.GetDevoteeProfileReport(req, allEntityIDs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		details := map[string]interface{}{
+			"report_type": "devotee_profile",
+			"format":     "json_preview",
+			"tenant_ids": tenantIDs,
+			"entity_ids": allEntityIDs,
+			"status":     status,
+			"date_range": dateRange,
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "SUPERADMIN_DEVOTEE_PROFILE_REPORT_VIEWED", details, ip, "success")
+		c.JSON(http.StatusOK, data)
+		return
+	}
+
+	bytes, fname, mime, err := h.service.ExportDevoteeProfileReport(c.Request.Context(), req, allEntityIDs, reportType, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
+}
+
+// GetSuperAdminTenantDevoteeProfileReport handles devotee profile report for a single tenant by superadmin
+func (h *Handler) GetSuperAdminTenantDevoteeProfileReport(c *gin.Context) {
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+
+	// Ensure superadmin role
+	if ctx.RoleName != "superadmin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only superadmin can access this endpoint"})
+		return
+	}
+
+	// Get IP address from context
+	ip := middleware.GetIPFromContext(c)
+
+	// Get request parameters
+	tenantID := c.Param("id")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant ID is required"})
+		return
+	}
+	
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	status := c.Query("status") // active|inactive|blocked etc
+	format := c.Query("format")
+
+	// Compute date range
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Convert tenant ID to uint
+	tenantIDUint, err := strconv.ParseUint(tenantID, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant ID"})
+		return
+	}
+
+	// Get entities for this tenant
+	entityIDs, err := h.repo.GetEntitiesByTenant(uint(tenantIDUint))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch tenant entities"})
+		return
+	}
+	
+	if len(entityIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": []DevoteeProfileReportRow{}, "message": "No entities found for the specified tenant"})
+		return
+	}
+
+	// Convert entity IDs to strings
+	entityIDStrs := make([]string, 0, len(entityIDs))
+	for _, id := range entityIDs {
+		entityIDStrs = append(entityIDStrs, fmt.Sprint(id))
+	}
+
+	// Create request object
+	req := DevoteeProfileReportRequest{
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Status:    status,
+		Format:    format,
+		EntityID:  tenantID, // Use tenant ID as entity ID
+	}
+
+	var reportType string
+	switch format {
+	case "excel":
+		reportType = ReportTypeDevoteeProfileExcel
+	case "pdf":
+		reportType = ReportTypeDevoteeProfilePDF
+	case "csv":
+		reportType = ReportTypeDevoteeProfileCSV
+	default:
+		data, err := h.service.GetDevoteeProfileReport(req, entityIDStrs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		details := map[string]interface{}{
+			"report_type": "devotee_profile",
+			"format":     "json_preview",
+			"tenant_id":  tenantID,
+			"entity_ids": entityIDStrs,
+			"status":     status,
+			"date_range": dateRange,
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "SUPERADMIN_TENANT_DEVOTEE_PROFILE_REPORT_VIEWED", details, ip, "success")
+		c.JSON(http.StatusOK, data)
+		return
+	}
+
+	bytes, fname, mime, err := h.service.ExportDevoteeProfileReport(c.Request.Context(), req, entityIDStrs, reportType, &ctx.UserID, ip)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -766,4 +1942,255 @@ func (h *Handler) GetAuditLogsReport(c *gin.Context) {
     // 9️⃣ Send the file
     c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
     c.Data(http.StatusOK, mime, bytes)
+}
+
+// GetSuperAdminAuditLogsReport handles audit logs report for superadmin with multiple tenants
+func (h *Handler) GetSuperAdminAuditLogsReport(c *gin.Context) {
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+
+	// Ensure superadmin role
+	if ctx.RoleName != "superadmin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only superadmin can access this endpoint"})
+		return
+	}
+
+	// Get IP address from context
+	ip := middleware.GetIPFromContext(c)
+
+	// Get request parameters
+	tenantsParam := c.Query("tenants")
+	if tenantsParam == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenants query param required"})
+		return
+	}
+	
+	tenantIDs := strings.Split(tenantsParam, ",")
+	action := c.Query("action")
+	status := c.Query("status")
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	format := c.Query("format") // json preview, csv, excel, pdf
+
+	// Compute date range
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Collect entity IDs for all specified tenants
+	var allEntityIDs []string
+	for _, tenantIDStr := range tenantIDs {
+		tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
+		if err != nil {
+			continue // Skip invalid tenant IDs
+		}
+		
+		// Get entities for this tenant
+		entityIDs, err := h.repo.GetEntitiesByTenant(uint(tenantID))
+		if err != nil {
+			continue // Skip if there's an error fetching entities
+		}
+		
+		// Add to the collection
+		for _, entityID := range entityIDs {
+			allEntityIDs = append(allEntityIDs, fmt.Sprint(entityID))
+		}
+	}
+	
+	if len(allEntityIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": []AuditLogReportRow{}, "message": "No entities found for the specified tenants"})
+		return
+	}
+
+	// Create request object
+	req := AuditLogReportRequest{
+		EntityID:  "multiple", // Indicate multiple entities
+		Action:    action,
+		Status:    status,
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Format:    format,
+	}
+
+	// Handle JSON preview
+	if format == "" {
+		data, err := h.service.GetAuditLogsReport(req, allEntityIDs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		details := map[string]interface{}{
+			"report_type": "audit_logs",
+			"format":     "json_preview",
+			"tenant_ids": tenantIDs,
+			"entity_ids": allEntityIDs,
+			"action":     action,
+			"status":     status,
+			"date_range": dateRange,
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "SUPERADMIN_AUDIT_LOGS_REPORT_VIEWED", details, ip, "success")
+		c.JSON(http.StatusOK, data)
+		return
+	}
+
+	// Export file logic
+	var reportType string
+	switch format {
+	case "excel":
+		reportType = ReportTypeAuditLogsExcel
+	case "pdf":
+		reportType = ReportTypeAuditLogsPDF
+	case "csv":
+		reportType = ReportTypeAuditLogsCSV
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported export format"})
+		return
+	}
+
+	bytes, fname, mime, err := h.service.ExportAuditLogsReport(c.Request.Context(), req, allEntityIDs, reportType, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
+}
+
+// GetSuperAdminTenantAuditLogsReport handles audit logs report for a single tenant by superadmin
+func (h *Handler) GetSuperAdminTenantAuditLogsReport(c *gin.Context) {
+	// Get access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+
+	// Ensure superadmin role
+	if ctx.RoleName != "superadmin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only superadmin can access this endpoint"})
+		return
+	}
+
+	// Get IP address from context
+	ip := middleware.GetIPFromContext(c)
+
+	// Get request parameters
+	tenantID := c.Param("id")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant ID is required"})
+		return
+	}
+	
+	action := c.Query("action")
+	status := c.Query("status")
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	format := c.Query("format") // json preview, csv, excel, pdf
+
+	// Compute date range
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Convert tenant ID to uint
+	tenantIDUint, err := strconv.ParseUint(tenantID, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant ID"})
+		return
+	}
+
+	// Get entities for this tenant
+	entityIDs, err := h.repo.GetEntitiesByTenant(uint(tenantIDUint))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch tenant entities"})
+		return
+	}
+	
+	if len(entityIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": []AuditLogReportRow{}, "message": "No entities found for the specified tenant"})
+		return
+	}
+
+	// Convert entity IDs to strings
+	entityIDStrs := make([]string, 0, len(entityIDs))
+	for _, id := range entityIDs {
+		entityIDStrs = append(entityIDStrs, fmt.Sprint(id))
+	}
+
+	// Create request object
+	req := AuditLogReportRequest{
+		EntityID:  tenantID, // Use tenant ID as entity ID
+		Action:    action,
+		Status:    status,
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Format:    format,
+	}
+
+	// Handle JSON preview
+	if format == "" {
+		data, err := h.service.GetAuditLogsReport(req, entityIDStrs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		details := map[string]interface{}{
+			"report_type": "audit_logs",
+			"format":     "json_preview",
+			"tenant_id":  tenantID,
+			"entity_ids": entityIDStrs,
+			"action":     action,
+			"status":     status,
+			"date_range": dateRange,
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "SUPERADMIN_TENANT_AUDIT_LOGS_REPORT_VIEWED", details, ip, "success")
+		c.JSON(http.StatusOK, data)
+		return
+	}
+
+	// Export file logic
+	var reportType string
+	switch format {
+	case "excel":
+		reportType = ReportTypeAuditLogsExcel
+	case "pdf":
+		reportType = ReportTypeAuditLogsPDF
+	case "csv":
+		reportType = ReportTypeAuditLogsCSV
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported export format"})
+		return
+	}
+
+	bytes, fname, mime, err := h.service.ExportAuditLogsReport(c.Request.Context(), req, entityIDStrs, reportType, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
 }
