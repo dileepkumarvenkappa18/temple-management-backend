@@ -2208,7 +2208,7 @@ func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
 	ip := middleware.GetIPFromContext(c)
 
 	// Query params
-	role := c.Query("role")
+	role := c.Query("role")       // "tenant" or "temple"
 	status := c.Query("status")
 	dateRange := c.Query("date_range")
 	if dateRange == "" {
@@ -2235,27 +2235,31 @@ func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
 		UserID:    ctx.UserID,
 	}
 
-	// Determine accessible entities
+	// Determine accessible entities based on role
 	var entityIDs []string
-	if ctx.RoleName == "superadmin" {
+	switch ctx.RoleName {
+	case "superadmin":
 		// Superadmin can access all entities
 		entityIDs = nil
-	} else if ctx.RoleName == "templeadmin" {
+	case "tenantadmin":
+		accessibleEntityID := ctx.GetAccessibleEntityID()
+		if accessibleEntityID == nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "no accessible tenant entity"})
+			return
+		}
+		entityIDs = append(entityIDs, fmt.Sprint(*accessibleEntityID))
+	case "templeadmin":
 		ids, err := h.repo.GetEntitiesByTenant(ctx.UserID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch temple entities"})
 			return
 		}
 		for _, id := range ids {
 			entityIDs = append(entityIDs, fmt.Sprint(id))
 		}
-	} else {
-		accessibleEntityID := ctx.GetAccessibleEntityID()
-		if accessibleEntityID == nil {
-			c.JSON(http.StatusForbidden, gin.H{"error": "no accessible entity"})
-			return
-		}
-		entityIDs = append(entityIDs, fmt.Sprint(*accessibleEntityID))
+	default:
+		c.JSON(http.StatusForbidden, gin.H{"error": "role not allowed for approval reports"})
+		return
 	}
 
 	// Return JSON preview if format not specified
@@ -2265,13 +2269,21 @@ func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "APPROVAL_STATUS_REPORT_VIEWED", map[string]interface{}{
-			"report_type": "approval_status",
-			"entity_ids":  entityIDs,
-			"role":        role,
-			"status":      status,
-			"date_range":  req.DateRange,
-		}, ip, "success")
+		h.auditSvc.LogAction(
+			c.Request.Context(),
+			&ctx.UserID,
+			nil,
+			"APPROVAL_STATUS_REPORT_VIEWED",
+			map[string]interface{}{
+				"report_type": "approval_status",
+				"entity_ids":  entityIDs,
+				"role":        role,
+				"status":      status,
+				"date_range":  req.DateRange,
+			},
+			ip,
+			"success",
+		)
 		c.JSON(http.StatusOK, gin.H{
 			"report_type": "approval-status",
 			"data":        data,
@@ -2279,15 +2291,38 @@ func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
 		return
 	}
 
+	// Map format to appropriate report type
+	var reportType string
+	switch format {
+	case "excel":
+		reportType = ReportTypeApprovalStatusExcel
+	case "pdf":
+		reportType = ReportTypeApprovalStatusPDF
+	case "csv":
+		reportType = ReportTypeApprovalStatusCSV
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported format"})
+		return
+	}
+
 	// Export report if format is specified
-	bytes, fname, mime, err := h.service.ExportApprovalStatusReport(c.Request.Context(), req, entityIDs, req.Format, &ctx.UserID, ip)
+	bytes, fname, mime, err := h.service.ExportApprovalStatusReport(
+		c.Request.Context(),
+		req,
+		entityIDs,
+		reportType,
+		&ctx.UserID,
+		ip,
+	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
 	c.Data(http.StatusOK, mime, bytes)
 }
+
 
 // ==============================
 // User Details Report Handler

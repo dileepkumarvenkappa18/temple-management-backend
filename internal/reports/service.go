@@ -374,15 +374,11 @@ func (s *reportService) ExportAuditLogsReport(ctx context.Context, req AuditLogR
 // ===============================
 
 func (s *reportService) GetApprovalStatusReport(req ApprovalStatusReportRequest, entityIDs []string) ([]ApprovalStatusReportRow, error) {
-	var ids []uint
-	if entityIDs != nil && len(entityIDs) > 0 {
-		ids = convertUintSlice(entityIDs)
-	} else {
-		// nil or empty → superadmin: fetch all entities
-		ids = nil
-	}
-
-	return s.repo.GetApprovalStatus(ids, req.StartDate, req.EndDate, req.Role, req.Status)
+    // Convert string IDs to uint
+    ids := convertUintSlice(entityIDs)
+    
+    // Call repository with filters
+    return s.repo.GetApprovalStatus(ids, req.StartDate, req.EndDate, req.Role, req.Status)
 }
 
 func (s *reportService) ExportApprovalStatusReport(ctx context.Context, req ApprovalStatusReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error) {
