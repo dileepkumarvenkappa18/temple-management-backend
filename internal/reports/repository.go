@@ -20,6 +20,8 @@ type ReportRepository interface {
 	GetDevoteeList(entityIDs []uint, start, end time.Time, status string) ([]DevoteeListReportRow, error)
 	GetDevoteeProfiles(entityIDs []uint, start, end time.Time, status string) ([]DevoteeProfileReportRow, error)
 	GetAuditLogs(entityIDs []uint, start, end time.Time, actionTypes []string, status string) ([]AuditLogReportRow, error)
+	GetApprovalStatus(entityIDs []uint, start, end time.Time, role, status string) ([]ApprovalStatusReportRow, error)
+	GetUserDetails(entityIDs []uint, start, end time.Time, role, status string) ([]UserDetailsReportRow, error)
 }
 
 type repository struct {
@@ -278,6 +280,7 @@ func (r *repository) GetAuditLogs(entityIDs []uint, start, end time.Time, action
             al.status,
             al.ip_address,
             al.created_at AS timestamp,
+            al.created_at,
             COALESCE(al.details::text, '') AS details
         `).
 		Joins("LEFT JOIN users u ON al.user_id = u.id").
@@ -295,5 +298,89 @@ func (r *repository) GetAuditLogs(entityIDs []uint, start, end time.Time, action
 	}
 
 	err := query.Order("al.created_at DESC").Scan(&rows).Error
+	return rows, err
+}
+// GetApprovalStatus fetches approval status records for reporting
+func (r *repository) GetApprovalStatus(entityIDs []uint, start, end time.Time, role, status string) ([]ApprovalStatusReportRow, error) {
+	var rows []ApprovalStatusReportRow
+
+	query := r.db.Table("users u").
+		Select(`
+            u.full_name as name,
+            COALESCE(CAST(uem.entity_id AS CHAR), 'N/A') as id,  -- tenant_id replaced as id
+            ur.role_name as role,
+            uem.status,          -- real status from DB
+            u.created_at,
+            u.email
+        `).
+		Joins("LEFT JOIN user_entity_memberships uem ON u.id = uem.user_id").
+		Joins("LEFT JOIN user_roles ur ON u.role_id = ur.id")
+
+	// Filter by entity only if provided
+	if len(entityIDs) > 0 {
+		query = query.Where("uem.entity_id IN ?", entityIDs)
+	}
+
+	if !start.IsZero() && !end.IsZero() {
+		query = query.Where("u.created_at BETWEEN ? AND ?", start, end)
+	}
+
+	if role != "" {
+		query = query.Where("ur.role_name = ?", role)
+	}
+
+	if status != "" {
+		query = query.Where("uem.status = ?", status)
+	}
+
+	err := query.Order("u.created_at DESC").Scan(&rows).Error
+
+	// Replace null/empty status with "N/A" for users without membership
+	for i := range rows {
+		if rows[i].Status == "" {
+			rows[i].Status = "N/A"
+		}
+	}
+
+	return rows, err
+}
+
+
+// GetUserDetails fetches user detail records for reporting
+func (r *repository) GetUserDetails(entityIDs []uint, start, end time.Time, role, status string) ([]UserDetailsReportRow, error) {
+	var rows []UserDetailsReportRow
+
+	query := r.db.Table("users u").
+		Select(`
+            u.id,
+            u.full_name as name,
+            COALESCE(e.name,'N/A') as entity_name,
+            COALESCE(CAST(uem.entity_id AS CHAR), 'N/A') as tenant_id,
+            u.email,
+            ur.role_name as role,
+            COALESCE(uem.status, 'Active') as status, -- show all statuses: Active/Inactive/Locked
+            u.created_at
+        `).
+		Joins("LEFT JOIN user_entity_memberships uem ON u.id = uem.user_id").
+		Joins("LEFT JOIN entities e ON uem.entity_id = e.id").
+		Joins("LEFT JOIN user_roles ur ON u.role_id = ur.id")
+
+	if len(entityIDs) > 0 {
+		query = query.Where("uem.entity_id IN ?", entityIDs)
+	}
+
+	if !start.IsZero() && !end.IsZero() {
+		query = query.Where("u.created_at BETWEEN ? AND ?", start, end)
+	}
+
+	if role != "" {
+		query = query.Where("ur.role_name = ?", role)
+	}
+
+	if status != "" {
+		query = query.Where("uem.status = ?", status)
+	}
+
+	err := query.Order("u.created_at DESC").Scan(&rows).Error
 	return rows, err
 }

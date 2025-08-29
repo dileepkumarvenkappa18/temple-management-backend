@@ -24,6 +24,10 @@ func RBACMiddleware(allowedRoles ...string) gin.HandlerFunc {
 			return
 		}
 
+		// Always set both user and userID in context for downstream handlers
+		c.Set("user", user)
+		c.Set("userID", user.ID)
+
 		// Check if the user has one of the allowed roles
 		for _, role := range allowedRoles {
 			if user.Role.RoleName == role {
@@ -58,14 +62,11 @@ func RequireTempleAccess() gin.HandlerFunc {
 			var entityIDUint *uint
 			
 			// 1. URL path parameters
-			// Look for any path parameter that might contain an entity ID
 			params := c.Params
 			for _, param := range params {
-				// Check if param name contains 'id', 'entity', or 'tenant'
 				if strings.Contains(param.Key, "id") || 
 				   strings.Contains(param.Key, "entity") || 
 				   strings.Contains(param.Key, "tenant") {
-					// Try to parse it as a number
 					if param.Value != "all" && param.Value != "" {
 						id, err := strconv.ParseUint(param.Value, 10, 64)
 						if err == nil {
@@ -79,7 +80,6 @@ func RequireTempleAccess() gin.HandlerFunc {
 			
 			// 2. Query parameters
 			if entityIDUint == nil {
-				// Check common query param names for entity IDs
 				queryParams := []string{"entity_id", "entityId", "tenant_id", "tenantId", "id"}
 				for _, paramName := range queryParams {
 					if idStr := c.Query(paramName); idStr != "" {
@@ -113,7 +113,7 @@ func RequireTempleAccess() gin.HandlerFunc {
 				UserID:           user.ID,
 				RoleName:         RoleSuperAdmin,
 				DirectEntityID:   nil,
-				AssignedEntityID: entityIDUint, // Give superadmin access to the requested entity
+				AssignedEntityID: entityIDUint,
 				PermissionType:   "full",
 			}
 			c.Set("access_context", accessContext)
@@ -123,27 +123,23 @@ func RequireTempleAccess() gin.HandlerFunc {
 		
 		// For templeadmin - ALWAYS grant full access to their own temple
 		if user.Role.RoleName == RoleTempleAdmin {
-			// Get the entity ID from the URL parameter
 			entityIDStr := c.Param("id")
 			
-			// Special case for "all" - handled in handler
 			if entityIDStr == "all" {
 				accessContext := AccessContext{
 					UserID:           user.ID,
 					RoleName:         RoleTempleAdmin,
 					DirectEntityID:   user.EntityID,
 					AssignedEntityID: nil,
-					PermissionType:   "full", // Always full for templeadmin
+					PermissionType:   "full",
 				}
 				c.Set("access_context", accessContext)
 				c.Next()
 				return
 			}
 			
-			// Parse the entity ID
 			entityID, err := strconv.ParseUint(entityIDStr, 10, 64)
 			if err != nil {
-				// If not valid ID in URL, default to user's own entity
 				if user.EntityID != nil {
 					accessContext := AccessContext{
 						UserID:           user.ID,
@@ -161,7 +157,6 @@ func RequireTempleAccess() gin.HandlerFunc {
 				}
 			}
 			
-			// Create an access context with the entity ID
 			entityIDUint := uint(entityID)
 			accessContext := AccessContext{
 				UserID:           user.ID,
@@ -175,15 +170,12 @@ func RequireTempleAccess() gin.HandlerFunc {
 			return
 		}
 		
-		// For standarduser, monitoringuser, check entity access
+		// For standarduser, monitoringuser
 		if user.Role.RoleName == RoleStandardUser || 
 		   user.Role.RoleName == RoleMonitoringUser {
-			// Get the entity ID from the URL parameter
 			entityIDStr := c.Param("id")
 			
-			// Special case for "all" - handled in handler
 			if entityIDStr == "all" {
-				// Determine permission type based on role
 				permType := "full"
 				if user.Role.RoleName == RoleMonitoringUser {
 					permType = "readonly"
@@ -201,23 +193,17 @@ func RequireTempleAccess() gin.HandlerFunc {
 				return
 			}
 			
-			// Parse the entity ID
 			entityID, err := strconv.ParseUint(entityIDStr, 10, 64)
 			if err != nil {
 				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid entity ID"})
 				return
 			}
 			
-			// TODO: Check if user has access to this entity
-			// This would involve a database lookup to verify the user's access rights
-			
-			// Determine permission type based on role
 			permType := "full"
 			if user.Role.RoleName == RoleMonitoringUser {
 				permType = "readonly"
 			}
 			
-			// Create an access context with the entity ID
 			entityIDUint := uint(entityID)
 			accessContext := AccessContext{
 				UserID:           user.ID,
@@ -231,7 +217,6 @@ func RequireTempleAccess() gin.HandlerFunc {
 			return
 		}
 
-		// If we get here, the user doesn't have temple access
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "temple access required"})
 	}
 }
@@ -239,12 +224,10 @@ func RequireTempleAccess() gin.HandlerFunc {
 // RequireWriteAccess ensures user has write access
 func RequireWriteAccess() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Allow superadmin and templeadmin to bypass write access check
 		userVal, exists := c.Get("user")
 		if exists {
 			user, ok := userVal.(auth.User)
 			if ok {
-				// Both superadmin and templeadmin always have write access
 				if user.Role.RoleName == RoleSuperAdmin || user.Role.RoleName == RoleTempleAdmin {
 					c.Next()
 					return
@@ -252,7 +235,6 @@ func RequireWriteAccess() gin.HandlerFunc {
 			}
 		}
 		
-		// Continue with regular access context check for other roles
 		accessContext, exists := c.Get("access_context")
 		if !exists {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
@@ -273,4 +255,3 @@ func RequireWriteAccess() gin.HandlerFunc {
 		c.Next()
 	}
 }
-

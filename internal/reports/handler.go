@@ -2194,3 +2194,191 @@ func (h *Handler) GetSuperAdminTenantAuditLogsReport(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
 	c.Data(http.StatusOK, mime, bytes)
 }
+// ==============================
+// Approval Status Report Handler
+// ==============================
+func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
+	// Access context from middleware
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+	ip := middleware.GetIPFromContext(c)
+
+	// Query params
+	role := c.Query("role")
+	status := c.Query("status")
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	format := c.Query("format") // excel, csv, pdf -> empty = JSON
+
+	// Compute start & end
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	req := ApprovalStatusReportRequest{
+		Role:      role,
+		Status:    status,
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Format:    format,
+		UserID:    ctx.UserID,
+	}
+
+	// Determine accessible entities
+	var entityIDs []string
+	if ctx.RoleName == "superadmin" {
+		// Superadmin can access all entities
+		entityIDs = nil
+	} else if ctx.RoleName == "templeadmin" {
+		ids, err := h.repo.GetEntitiesByTenant(ctx.UserID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
+			return
+		}
+		for _, id := range ids {
+			entityIDs = append(entityIDs, fmt.Sprint(id))
+		}
+	} else {
+		accessibleEntityID := ctx.GetAccessibleEntityID()
+		if accessibleEntityID == nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "no accessible entity"})
+			return
+		}
+		entityIDs = append(entityIDs, fmt.Sprint(*accessibleEntityID))
+	}
+
+	// Return JSON preview if format not specified
+	if req.Format == "" {
+		data, err := h.service.GetApprovalStatusReport(req, entityIDs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "APPROVAL_STATUS_REPORT_VIEWED", map[string]interface{}{
+			"report_type": "approval_status",
+			"entity_ids":  entityIDs,
+			"role":        role,
+			"status":      status,
+			"date_range":  req.DateRange,
+		}, ip, "success")
+		c.JSON(http.StatusOK, gin.H{
+			"report_type": "approval-status",
+			"data":        data,
+		})
+		return
+	}
+
+	// Export report if format is specified
+	bytes, fname, mime, err := h.service.ExportApprovalStatusReport(c.Request.Context(), req, entityIDs, req.Format, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
+}
+
+// ==============================
+// User Details Report Handler
+// ==============================
+func (h *Handler) GetUserDetailsReport(c *gin.Context) {
+	// Access context
+	accessContext, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return
+	}
+	ctx := accessContext.(middleware.AccessContext)
+	ip := middleware.GetIPFromContext(c)
+
+	// Query params
+	role := c.Query("role")
+	status := c.Query("status")
+	dateRange := c.Query("date_range")
+	if dateRange == "" {
+		dateRange = DateRangeWeekly
+	}
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+	format := c.Query("format")
+
+	// Compute start & end
+	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	req := UserDetailReportRequest{
+		Role:      role,
+		Status:    status,
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Format:    format,
+		UserID:    ctx.UserID,
+	}
+
+	// Accessible entities
+	var entityIDs []string
+	if ctx.RoleName == "superadmin" {
+		entityIDs = nil // all entities
+	} else if ctx.RoleName == "templeadmin" {
+		ids, err := h.repo.GetEntitiesByTenant(ctx.UserID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
+			return
+		}
+		for _, id := range ids {
+			entityIDs = append(entityIDs, fmt.Sprint(id))
+		}
+	} else {
+		accessibleEntityID := ctx.GetAccessibleEntityID()
+		if accessibleEntityID == nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "no accessible entity"})
+			return
+		}
+		entityIDs = append(entityIDs, fmt.Sprint(*accessibleEntityID))
+	}
+
+	// JSON preview
+	if req.Format == "" {
+		data, err := h.service.GetUserDetailsReport(req, entityIDs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "USER_DETAILS_REPORT_VIEWED", map[string]interface{}{
+			"report_type": "user_details",
+			"entity_ids":  entityIDs,
+			"role":        role,
+			"status":      status,
+			"date_range":  req.DateRange,
+		}, ip, "success")
+		c.JSON(http.StatusOK, gin.H{
+			"report_type": "user-details",
+			"data":        data,
+		})
+		return
+	}
+
+	// Export report
+	bytes, fname, mime, err := h.service.ExportUserDetailsReport(c.Request.Context(), req, entityIDs, req.Format, &ctx.UserID, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Data(http.StatusOK, mime, bytes)
+}

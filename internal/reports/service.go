@@ -26,6 +26,13 @@ type ReportService interface {
 
     GetAuditLogsReport(req AuditLogReportRequest, entityIDs []string) ([]AuditLogReportRow, error)
     ExportAuditLogsReport(ctx context.Context, req AuditLogReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error)
+    
+    // New methods for UserDetails and ApprovalStatus
+    GetApprovalStatusReport(req ApprovalStatusReportRequest, entityIDs []string) ([]ApprovalStatusReportRow, error)
+    ExportApprovalStatusReport(ctx context.Context, req ApprovalStatusReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error)
+    
+    GetUserDetailsReport(req UserDetailReportRequest, entityIDs []string) ([]UserDetailsReportRow, error)
+    ExportUserDetailsReport(ctx context.Context, req UserDetailReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error)
 }
 
 type reportService struct {
@@ -360,4 +367,116 @@ func (s *reportService) ExportAuditLogsReport(ctx context.Context, req AuditLogR
     s.auditSvc.LogAction(ctx, userID, nil, "AUDIT_LOGS_REPORT_DOWNLOADED", details, ip, "success")
 
     return bytes, filename, mimeType, nil
+}
+
+// ===============================
+// Approval Status Reports
+// ===============================
+
+func (s *reportService) GetApprovalStatusReport(req ApprovalStatusReportRequest, entityIDs []string) ([]ApprovalStatusReportRow, error) {
+	var ids []uint
+	if entityIDs != nil && len(entityIDs) > 0 {
+		ids = convertUintSlice(entityIDs)
+	} else {
+		// nil or empty → superadmin: fetch all entities
+		ids = nil
+	}
+
+	return s.repo.GetApprovalStatus(ids, req.StartDate, req.EndDate, req.Role, req.Status)
+}
+
+func (s *reportService) ExportApprovalStatusReport(ctx context.Context, req ApprovalStatusReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error) {
+	rows, err := s.GetApprovalStatusReport(req, entityIDs)
+	if err != nil {
+		s.auditSvc.LogAction(ctx, userID, nil, "APPROVAL_STATUS_REPORT_DOWNLOAD_FAILED", map[string]interface{}{
+			"report_type": "approval_status",
+			"format":      req.Format,
+			"error":       err.Error(),
+			"role":        req.Role,
+			"status":      req.Status,
+		}, ip, "failure")
+		return nil, "", "", err
+	}
+
+	data := ReportData{ApprovalStatus: rows}
+	bytes, filename, mimeType, err := s.exporter.Export(reportType, req.Format, data)
+	if err != nil {
+		s.auditSvc.LogAction(ctx, userID, nil, "APPROVAL_STATUS_REPORT_DOWNLOAD_FAILED", map[string]interface{}{
+			"report_type": "approval_status",
+			"format":      req.Format,
+			"error":       err.Error(),
+			"role":        req.Role,
+			"status":      req.Status,
+		}, ip, "failure")
+		return nil, "", "", err
+	}
+
+	s.auditSvc.LogAction(ctx, userID, nil, "APPROVAL_STATUS_REPORT_DOWNLOADED", map[string]interface{}{
+		"report_type":  "approval_status",
+		"format":       req.Format,
+		"filename":     filename,
+		"entity_ids":   entityIDs,
+		"role":         req.Role,
+		"status":       req.Status,
+		"date_range":   req.DateRange,
+		"record_count": len(rows),
+	}, ip, "success")
+
+	return bytes, filename, mimeType, nil
+}
+
+// ===============================
+// User Details Reports
+// ===============================
+
+func (s *reportService) GetUserDetailsReport(req UserDetailReportRequest, entityIDs []string) ([]UserDetailsReportRow, error) {
+	var ids []uint
+	if entityIDs != nil && len(entityIDs) > 0 {
+		ids = convertUintSlice(entityIDs)
+	} else {
+		// nil or empty → superadmin: fetch all users
+		ids = nil
+	}
+
+	return s.repo.GetUserDetails(ids, req.StartDate, req.EndDate, req.Role, req.Status)
+}
+
+func (s *reportService) ExportUserDetailsReport(ctx context.Context, req UserDetailReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error) {
+	rows, err := s.GetUserDetailsReport(req, entityIDs)
+	if err != nil {
+		s.auditSvc.LogAction(ctx, userID, nil, "USER_DETAILS_REPORT_DOWNLOAD_FAILED", map[string]interface{}{
+			"report_type": "user_details",
+			"format":      req.Format,
+			"error":       err.Error(),
+			"role":        req.Role,
+			"status":      req.Status,
+		}, ip, "failure")
+		return nil, "", "", err
+	}
+
+	data := ReportData{UserDetails: rows}
+	bytes, filename, mimeType, err := s.exporter.Export(reportType, req.Format, data)
+	if err != nil {
+		s.auditSvc.LogAction(ctx, userID, nil, "USER_DETAILS_REPORT_DOWNLOAD_FAILED", map[string]interface{}{
+			"report_type": "user_details",
+			"format":      req.Format,
+			"error":       err.Error(),
+			"role":        req.Role,
+			"status":      req.Status,
+		}, ip, "failure")
+		return nil, "", "", err
+	}
+
+	s.auditSvc.LogAction(ctx, userID, nil, "USER_DETAILS_REPORT_DOWNLOADED", map[string]interface{}{
+		"report_type":  "user_details",
+		"format":       req.Format,
+		"filename":     filename,
+		"entity_ids":   entityIDs,
+		"role":         req.Role,
+		"status":       req.Status,
+		"date_range":   req.DateRange,
+		"record_count": len(rows),
+	}, ip, "success")
+
+	return bytes, filename, mimeType, nil
 }

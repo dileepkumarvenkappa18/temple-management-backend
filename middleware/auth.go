@@ -53,18 +53,17 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 			return
 		}
 
-		// Set user in context
+		// ✅ Set user and user_id in context
 		c.Set("user", user)
+		c.Set("user_id", user.ID) // <-- Needed for reports
 		c.Set("claims", claims)
-		
-		// Special handling for "all" entity parameter in reports URLs
+
+		// ========= Tenant / Entity resolution =========
 		var assignedTenantID *uint
 		if user.RoleID == 1 && strings.Contains(c.Request.URL.Path, "/entities/all/reports/") {
-			// Superadmin viewing all entities - use their own tenant ID
 			id := user.ID
 			assignedTenantID = &id
-			
-			// Check if there's a specific tenant_id in query params that should override
+
 			if tenantQuery := c.Query("tenant_id"); tenantQuery != "" && tenantQuery != "all" {
 				if tid, err := strconv.ParseUint(tenantQuery, 10, 32); err == nil {
 					id := uint(tid)
@@ -72,9 +71,6 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 				}
 			}
 		} else {
-			// Regular handling for all other cases
-			
-			// Check URL for tenant_id or id parameter
 			if tenantIDParam := c.Param("id"); tenantIDParam != "" && tenantIDParam != "all" {
 				if tid, err := strconv.ParseUint(tenantIDParam, 10, 32); err == nil {
 					id := uint(tid)
@@ -94,8 +90,7 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 					}
 				}
 			}
-			
-			// If no tenant ID from URL, check claims
+
 			if assignedTenantID == nil {
 				if assignedTenantIDFloat, exists := claims["assigned_tenant_id"]; exists {
 					if tenantID, ok := assignedTenantIDFloat.(float64); ok && tenantID > 0 {
@@ -105,8 +100,7 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 				}
 			}
 		}
-		
-		// Create and set access context
+
 		accessContext := ResolveAccessContext(user, assignedTenantID)
 		c.Set("access_context", accessContext)
 

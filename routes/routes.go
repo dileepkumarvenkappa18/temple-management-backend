@@ -176,7 +176,10 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		superadminRoutes.GET("/reports/devotee-list", reportsHandler.GetSuperAdminDevoteeListReport)
 		superadminRoutes.GET("/reports/devotee-profile", reportsHandler.GetSuperAdminDevoteeProfileReport)
 		superadminRoutes.GET("/reports/audit-logs", reportsHandler.GetSuperAdminAuditLogsReport)
-		
+	superadminRoutes.GET("/reports/approval-status", reportsHandler.GetApprovalStatusReport)
+superadminRoutes.GET("/reports/user-details", reportsHandler.GetUserDetailsReport)
+
+
 		// Support for tenant-specific routes (for backwards compatibility)
 		superadminRoutes.GET("/tenants/:id/reports/activities", reportsHandler.GetSuperAdminTenantActivities)
 		superadminRoutes.GET("/tenants/:id/reports/temple-registered", reportsHandler.GetSuperAdminTenantTempleRegisteredReport)
@@ -189,6 +192,7 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	protected.GET("/tenants/selection", 
 		middleware.RBACMiddleware("superadmin", "standarduser", "monitoringuser"), 
 		superadminHandler.GetTenantsForSelection)
+	
 
 // ========== Seva ==========
 sevaRepo := seva.NewRepository(database.DB)
@@ -455,6 +459,7 @@ eventRoutes.Use(middleware.RequireTempleAccess())
 		reportsRoutes.GET("/devotee-list", reportsHandler.GetDevoteeListReport)
 		reportsRoutes.GET("/devotee-profile", reportsHandler.GetDevoteeProfileReport)
 		reportsRoutes.GET("/audit-logs", reportsHandler.GetAuditLogsReport)  // fixed typo
+		
 		
 		// If you want to restrict export functionality to only users with write access, 
 		// you can create a separate group with write access requirement:
