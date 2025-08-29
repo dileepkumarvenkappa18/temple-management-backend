@@ -18,7 +18,6 @@
         </div>
       </div>
     </div>
-
     <!-- Main Content -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <!-- Tenants Selection Card -->
@@ -27,7 +26,6 @@
           <h3 class="text-xl font-bold text-gray-900">Select Tenants</h3>
           <p class="text-gray-600 mt-1">Choose which tenants to include in your report</p>
         </div>
-
         <div class="p-6">
           <div class="mb-6">
             <div class="flex items-center justify-between mb-4">
@@ -50,7 +48,6 @@
                 </button>
               </div>
             </div>
-
             <!-- Filters -->
             <div class="flex flex-wrap items-center gap-4 mb-4">
               <div class="relative flex-1 min-w-[250px]">
@@ -79,16 +76,13 @@
                 </select>
               </div>
             </div>
-
             <!-- Tenant List -->
             <div v-if="loading" class="py-10 flex justify-center">
               <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
             </div>
-
             <div v-else-if="filteredTenants.length === 0" class="text-center py-8">
               <p class="text-gray-500">No tenants found matching your filters</p>
             </div>
-
             <div v-else class="overflow-x-auto border border-gray-200 rounded-lg">
               <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
@@ -136,7 +130,6 @@
               </table>
             </div>
           </div>
-
           <!-- Report Type Selection -->
           <div class="mt-8 border-t border-gray-200 pt-6">
             <h4 class="text-lg font-medium text-gray-900 mb-4">Select Report Type</h4>
@@ -168,7 +161,6 @@
               </div>
             </div>
           </div>
-
           <!-- Proceed Button -->
           <div class="mt-8 flex justify-end">
             <button 
@@ -181,7 +173,6 @@
           </div>
         </div>
       </div>
-
       <!-- Selection Summary -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
         <div class="p-6">
@@ -248,7 +239,7 @@ const statusFilter = ref('all');
 const selectedTenants = ref([]);
 const selectedReport = ref('');
 
-// Report types
+// Report types (with "User Details" and "Approval Status" removed)
 const reportTypes = [
   {
     id: 'temple-register',
@@ -276,24 +267,6 @@ const reportTypes = [
     bgColor: 'bg-purple-100',
     iconColor: 'text-purple-600',
     route: '/superadmin/reports/birthdays'
-  },
-  {
-    id: 'user-details',
-    name: 'User Details Report',
-    description: 'Comprehensive user information and activity statistics',
-    icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
-    bgColor: 'bg-amber-100',
-    iconColor: 'text-amber-600',
-    route: '/superadmin/reports/user-details'
-  },
-  {
-    id: 'approval-status',
-    name: 'Approval Status Report',
-    description: 'Track tenant and temple approval workflows and statuses',
-    icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
-    bgColor: 'bg-teal-100',
-    iconColor: 'text-teal-600',
-    route: '/superadmin/reports/approval-status'
   }
 ];
 
@@ -303,8 +276,6 @@ const tenantTempleMap = ref({});
 // Computed properties
 const filteredTenants = computed(() => {
   let tenants = superAdminStore.tenants;
-  
-  // Filter by search query
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase();
     tenants = tenants.filter(tenant => 
@@ -314,14 +285,11 @@ const filteredTenants = computed(() => {
       getLocationDisplay(tenant).toLowerCase().includes(query)
     );
   }
-  
-  // Filter by status
   if (statusFilter.value !== 'all') {
     tenants = tenants.filter(tenant => 
       tenant.status?.toLowerCase() === statusFilter.value.toLowerCase()
     );
   }
-  
   return tenants;
 });
 
@@ -329,101 +297,52 @@ const allSelected = computed(() => {
   return filteredTenants.value.length > 0 && 
          filteredTenants.value.every(tenant => selectedTenants.value.includes(tenant.id));
 });
-
 const someSelected = computed(() => {
   return selectedTenants.value.length > 0 && !allSelected.value;
 });
-
 const canProceed = computed(() => {
   return selectedTenants.value.length > 0 && selectedReport.value;
 });
 
-// Methods
+// Utility methods
 const getTenantDisplayName = (tenant) => {
   return tenant.fullName || tenant.name || tenant.FullName || `Temple Admin #${tenant.id || tenant.ID}`;
 };
-
-// Get temple name for display
 const getTempleNameDisplay = (tenant) => {
-  // If we have the temple data from tenant-temple mapping
   if (tenantTempleMap.value[tenant.id || tenant.ID]) {
     return tenantTempleMap.value[tenant.id || tenant.ID].name;
   }
-  
-  // Check for various possible temple data structures in the tenant object
-  if (tenant.temple && tenant.temple.name) {
-    return tenant.temple.name;
-  }
-  
-  if (tenant.Temple && tenant.Temple.name) {
-    return tenant.Temple.name;
-  }
-  
-  if (tenant.Temple && tenant.Temple.Name) {
-    return tenant.Temple.Name;
-  }
-  
-  if (tenant.EntityID && tenant.EntityName) {
-    return tenant.EntityName;
-  }
-  
+  if (tenant.temple && tenant.temple.name) return tenant.temple.name;
+  if (tenant.Temple && tenant.Temple.name) return tenant.Temple.name;
+  if (tenant.Temple && tenant.Temple.Name) return tenant.Temple.Name;
+  if (tenant.EntityID && tenant.EntityName) return tenant.EntityName;
   return getTenantDisplayName(tenant) + "'s Temple";
 };
-
-// Get location for display
 const getLocationDisplay = (tenant) => {
-  // If we have the temple data from tenant-temple mapping
   if (tenantTempleMap.value[tenant.id || tenant.ID]) {
     const templeInfo = tenantTempleMap.value[tenant.id || tenant.ID];
-    if (templeInfo.city && templeInfo.state) {
-      return `${templeInfo.city}, ${templeInfo.state}`;
-    }
+    if (templeInfo.city && templeInfo.state) return `${templeInfo.city}, ${templeInfo.state}`;
   }
-  
-  // Check for various possible location data structures
   if (tenant.temple) {
-    if (tenant.temple.city && tenant.temple.state) {
-      return `${tenant.temple.city}, ${tenant.temple.state}`;
-    }
-    if (tenant.temple.address) {
-      return tenant.temple.address;
-    }
+    if (tenant.temple.city && tenant.temple.state) return `${tenant.temple.city}, ${tenant.temple.state}`;
+    if (tenant.temple.address) return tenant.temple.address;
   }
-  
   if (tenant.Temple) {
-    if (tenant.Temple.City && tenant.Temple.State) {
-      return `${tenant.Temple.City}, ${tenant.Temple.State}`;
-    }
-    if (tenant.Temple.Address) {
-      return tenant.Temple.Address;
-    }
+    if (tenant.Temple.City && tenant.Temple.State) return `${tenant.Temple.City}, ${tenant.Temple.State}`;
+    if (tenant.Temple.Address) return tenant.Temple.Address;
   }
-  
-  if (tenant.EntityCity && tenant.EntityState) {
-    return `${tenant.EntityCity}, ${tenant.EntityState}`;
-  }
-  
-  if (tenant.EntityAddress) {
-    return tenant.EntityAddress;
-  }
-  
+  if (tenant.EntityCity && tenant.EntityState) return `${tenant.EntityCity}, ${tenant.EntityState}`;
+  if (tenant.EntityAddress) return tenant.EntityAddress;
   return "Location not available";
 };
 
+// Fetch tenants and temple details
 const fetchTenants = async () => {
   loading.value = true;
   try {
-    console.log('Fetching tenants for reports...');
-    
-    // First, fetch available tenants using the method that provides temple details
     const response = await superAdminService.getAvailableTenants();
-    
     if (response && response.success && response.data && response.data.length > 0) {
-      // Use the available tenants data which should include temple details
       superAdminStore.tenants = response.data;
-      console.log(`Fetched ${superAdminStore.tenants.length} tenants with temple details`);
-      
-      // Map tenant temples for easy access
       superAdminStore.tenants.forEach(tenant => {
         if (tenant.temple) {
           tenantTempleMap.value[tenant.id] = {
@@ -434,32 +353,21 @@ const fetchTenants = async () => {
         }
       });
     } else {
-      // Fallback to regular tenants endpoint
       const fallbackResponse = await superAdminStore.fetchTenantsForReports();
-      
       if (fallbackResponse && fallbackResponse.success) {
-        console.log(`Fetched ${superAdminStore.tenants.length} tenants from reports endpoint`);
-        
-        // Now fetch temple details for each tenant
         await fetchTempleDetailsForTenants();
       } else {
         throw new Error('Failed to fetch tenants');
       }
     }
   } catch (error) {
-    console.error('Error fetching tenants for reports:', error);
     toast.error('Failed to load tenants with complete details');
-    
-    // Try one more fallback to standard tenants list
     try {
       await superAdminStore.fetchTenants();
-      
-      // Try to fetch temple details for the tenants we have
       if (superAdminStore.tenants.length > 0) {
         await fetchTempleDetailsForTenants();
       }
     } catch (fallbackError) {
-      console.error('Fallback tenant fetch also failed:', fallbackError);
       toast.error('Using limited tenant data for demonstration');
     }
   } finally {
@@ -467,65 +375,43 @@ const fetchTenants = async () => {
   }
 };
 
-// Fetch temple details for all tenants
 const fetchTempleDetailsForTenants = async () => {
-  try {
-    // For each tenant, fetch their temple details if not already available
-    for (const tenant of superAdminStore.tenants) {
-      if (!tenant.temple && !tenantTempleMap.value[tenant.id || tenant.ID]) {
-        try {
-          // Try to get tenant details which may include temple info
-          const tenantDetailsResponse = await superAdminService.getTenantDetails(tenant.id || tenant.ID);
-          
-          if (tenantDetailsResponse.success && tenantDetailsResponse.data) {
-            const tenantData = tenantDetailsResponse.data;
-            
-            // Get temple info from the response
-            const templeInfo = tenantData.temple || tenantData.Temple || 
-                             (tenantDetailsResponse.temples && tenantDetailsResponse.temples.length > 0 
-                              ? tenantDetailsResponse.temples[0] : null);
-            
-            if (templeInfo) {
-              // Add temple info to our mapping
-              tenantTempleMap.value[tenant.id || tenant.ID] = {
-                name: templeInfo.name || templeInfo.Name || '',
-                city: templeInfo.city || templeInfo.City || 
-                      (templeInfo.address ? templeInfo.address.split(',')[0]?.trim() : '') ||
-                      (templeInfo.Address ? templeInfo.Address.split(',')[0]?.trim() : ''),
-                state: templeInfo.state || templeInfo.State || 
-                       (templeInfo.address ? templeInfo.address.split(',')[1]?.trim() : '') ||
-                       (templeInfo.Address ? templeInfo.Address.split(',')[1]?.trim() : '')
-              };
-              
-              // Also update the tenant object itself for consistency
-              tenant.temple = {
-                name: tenantTempleMap.value[tenant.id || tenant.ID].name,
-                city: tenantTempleMap.value[tenant.id || tenant.ID].city,
-                state: tenantTempleMap.value[tenant.id || tenant.ID].state
-              };
-            }
+  for (const tenant of superAdminStore.tenants) {
+    if (!tenant.temple && !tenantTempleMap.value[tenant.id || tenant.ID]) {
+      try {
+        const tenantDetailsResponse = await superAdminService.getTenantDetails(tenant.id || tenant.ID);
+        if (tenantDetailsResponse.success && tenantDetailsResponse.data) {
+          const tenantData = tenantDetailsResponse.data;
+          const templeInfo = tenantData.temple || tenantData.Temple || 
+                           (tenantDetailsResponse.temples && tenantDetailsResponse.temples.length > 0 
+                            ? tenantDetailsResponse.temples[0] : null);
+          if (templeInfo) {
+            tenantTempleMap.value[tenant.id || tenant.ID] = {
+              name: templeInfo.name || templeInfo.Name || '',
+              city: templeInfo.city || templeInfo.City || 
+                    (templeInfo.address ? templeInfo.address.split(',')[0]?.trim() : '') ||
+                    (templeInfo.Address ? templeInfo.Address.split(',')[0]?.trim() : ''),
+              state: templeInfo.state || templeInfo.State || 
+                     (templeInfo.address ? templeInfo.address.split(',')[1]?.trim() : '') ||
+                     (templeInfo.Address ? templeInfo.Address.split(',')[1]?.trim() : '')
+            };
+            tenant.temple = {
+              name: tenantTempleMap.value[tenant.id || tenant.ID].name,
+              city: tenantTempleMap.value[tenant.id || tenant.ID].city,
+              state: tenantTempleMap.value[tenant.id || tenant.ID].state
+            };
           }
-        } catch (error) {
-          console.warn(`Could not fetch details for tenant ${tenant.id || tenant.ID}:`, error);
         }
-      }
+      } catch {}
     }
-  } catch (error) {
-    console.error('Error fetching temple details for tenants:', error);
   }
 };
 
-const isSelected = (tenantId) => {
-  return selectedTenants.value.includes(tenantId);
-};
-
+const isSelected = (tenantId) => selectedTenants.value.includes(tenantId);
 const toggleSelect = (tenantId) => {
   const index = selectedTenants.value.indexOf(tenantId);
-  if (index === -1) {
-    selectedTenants.value.push(tenantId);
-  } else {
-    selectedTenants.value.splice(index, 1);
-  }
+  if (index === -1) selectedTenants.value.push(tenantId);
+  else selectedTenants.value.splice(index, 1);
 };
 
 const toggleSelectAll = () => {
@@ -537,23 +423,15 @@ const toggleSelectAll = () => {
     const newSelectedIds = filteredTenants.value
       .filter(tenant => !selectedTenants.value.includes(tenant.id))
       .map(tenant => tenant.id);
-    
     selectedTenants.value = [...selectedTenants.value, ...newSelectedIds];
   }
 };
 
 const selectAllTenants = () => {
-  const allIds = filteredTenants.value.map(tenant => tenant.id);
-  selectedTenants.value = allIds;
+  selectedTenants.value = filteredTenants.value.map(tenant => tenant.id);
 };
-
-const clearTenantSelection = () => {
-  selectedTenants.value = [];
-};
-
-const selectReport = (reportId) => {
-  selectedReport.value = reportId;
-};
+const clearTenantSelection = () => { selectedTenants.value = []; };
+const selectReport = (reportId) => { selectedReport.value = reportId; };
 
 const getStatusClass = (status) => {
   const statusMap = {
@@ -562,30 +440,21 @@ const getStatusClass = (status) => {
     'rejected': 'bg-red-100 text-red-800',
     'active': 'bg-green-100 text-green-800'
   };
-  
   return statusMap[status?.toLowerCase()] || 'bg-gray-100 text-gray-800';
 };
-
 const getTenantName = (tenantId) => {
   const tenant = superAdminStore.tenants.find(t => t.id === tenantId);
   return tenant ? getTenantDisplayName(tenant) : `Tenant #${tenantId}`;
 };
-
 const getReportName = () => {
   const report = reportTypes.find(r => r.id === selectedReport.value);
   return report ? report.name : 'None Selected';
 };
-
 const proceedToReport = () => {
   if (!canProceed.value) return;
-  
   const report = reportTypes.find(r => r.id === selectedReport.value);
   if (!report) return;
-  
-  // Encode the selected tenants as a URL-friendly string
   const tenantsParam = selectedTenants.value.join(',');
-  
-  // Navigate to the report route with tenants parameter
   router.push({
     path: report.route,
     query: {
@@ -595,9 +464,8 @@ const proceedToReport = () => {
   });
 };
 
-// Lifecycle hooks
+// Lifecycle hook
 onMounted(async () => {
-  console.log('SuperadminReportsView mounted');
   await fetchTenants();
 });
 </script>

@@ -258,6 +258,31 @@
                 </svg>
                 <span>Tenant Reports</span>
               </router-link>
+
+              <!-- NEW: Approval Status Report -->
+              <router-link 
+                to="/superadmin/reports/approval-status" 
+                class="px-3 py-2 text-sm rounded-md cursor-pointer flex items-center"
+                :class="isActiveRoute('/superadmin/reports/approval-status') ? 'text-indigo-700 font-medium' : 'text-gray-700 hover:bg-indigo-100'"
+              >
+                <svg class="mr-2 h-4 w-4" :class="isActiveRoute('/superadmin/reports/approval-status') ? 'text-indigo-600' : 'text-gray-500'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l6 3-6 3 9-3V9l-9-3z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 20l14-8" />
+                </svg>
+                <span>Approval Status Report</span>
+              </router-link>
+
+              <!-- NEW: User Details Report -->
+              <router-link 
+                to="/superadmin/reports/user-details" 
+                class="px-3 py-2 text-sm rounded-md cursor-pointer flex items-center"
+                :class="isActiveRoute('/superadmin/reports/user-details') ? 'text-indigo-700 font-medium' : 'text-gray-700 hover:bg-indigo-100'"
+              >
+                <svg class="mr-2 h-4 w-4" :class="isActiveRoute('/superadmin/reports/user-details') ? 'text-indigo-600' : 'text-gray-500'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <span>User Details Report</span>
+              </router-link>
             </div>
           </transition>
         </div>

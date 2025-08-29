@@ -20,7 +20,7 @@
           <div>
             <h1 class="text-2xl font-bold text-gray-900">Approval Status Report</h1>
             <p class="text-gray-600 mt-1">
-              Track tenant and temple approval workflows and statuses
+              Track approval workflows and statuses across your organization
               <span v-if="fromSuperadmin && tenantIds.length > 1" class="text-indigo-600 font-medium">
                 (Multiple Tenants Selected)
               </span>
@@ -44,30 +44,11 @@
       <!-- Filter & Download Card -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-8">
         <div class="p-6 border-b border-gray-200">
-          <h3 class="text-xl font-bold text-gray-900">Approval Statuses</h3>
+          <h3 class="text-xl font-bold text-gray-900">Approval Status Report</h3>
           <p class="text-gray-600 mt-1">Configure filters and download your approval workflow data</p>
         </div>
 
         <div class="p-6">
-          <!-- Approval Type Selection -->
-          <div class="mb-6">
-            <label class="block text-gray-700 font-medium mb-2">Approval Type</label>
-            <div class="flex flex-wrap gap-2">
-              <button 
-                v-for="type in approvalTypes" 
-                :key="type.value"
-                @click="setApprovalType(type.value)"
-                :disabled="isDownloading"
-                class="px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                :class="approvalType === type.value ? 
-                  'bg-indigo-600 text-white' : 
-                  'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-              >
-                {{ type.label }}
-              </button>
-            </div>
-          </div>
-
           <!-- Filter Section -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <!-- Date Range Filter -->
@@ -78,7 +59,7 @@
                   v-for="filter in timeFilters" 
                   :key="filter.value"
                   @click="setActiveFilter(filter.value)"
-                  :disabled="isDownloading"
+                  :disabled="reportsStore.downloadLoading"
                   class="px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   :class="activeFilter === filter.value ? 
                     'bg-indigo-600 text-white' : 
@@ -97,7 +78,7 @@
                   v-for="status in statusFilters" 
                   :key="status.value"
                   @click="setActiveStatus(status.value)"
-                  :disabled="isDownloading"
+                  :disabled="reportsStore.downloadLoading"
                   class="px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   :class="activeStatus === status.value ? 
                     'bg-indigo-600 text-white' : 
@@ -117,7 +98,7 @@
                 <input 
                   type="date" 
                   v-model="startDate"
-                  :disabled="isDownloading"
+                  :disabled="reportsStore.downloadLoading"
                   :max="endDate"
                   class="w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
@@ -127,7 +108,7 @@
                 <input 
                   type="date" 
                   v-model="endDate"
-                  :disabled="isDownloading"
+                  :disabled="reportsStore.downloadLoading"
                   :min="startDate"
                   :max="today"
                   class="w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -136,19 +117,19 @@
             </div>
           </div>
 
-          <!-- Download Section -->
+          <!-- Preview and Download Section -->
           <div class="border-t border-gray-200 pt-6">
-            <div class="flex flex-col md:flex-row md:items-center md:justify-between">
-              <div class="mb-4 md:mb-0">
-                <h4 class="text-lg font-medium text-gray-900">Download Report</h4>
-                <p class="text-sm text-gray-600">Select a format and click download</p>
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
+              <div>
+                <h4 class="text-lg font-medium text-gray-900">Report Actions</h4>
+                <p class="text-sm text-gray-600">Preview or download your approval status report</p>
               </div>
-              <div class="flex items-center space-x-3">
+              <div class="flex items-center space-x-3 mt-4 md:mt-0">
                 <!-- Format Selection -->
                 <div class="relative">
                   <select 
                     v-model="selectedFormat" 
-                    :disabled="isDownloading"
+                    :disabled="reportsStore.downloadLoading"
                     class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option v-for="format in formats" :key="format.value" :value="format.value">
@@ -157,27 +138,44 @@
                   </select>
                 </div>
 
+                <!-- Preview Button -->
+                <button 
+                  @click="previewReport"
+                  :disabled="reportsStore.loading || !isFormValid"
+                  class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+                >
+                  <svg v-if="reportsStore.loading" class="animate-spin -ml-1 mr-2 h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <svg v-else class="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  {{ reportsStore.loading ? 'Loading...' : 'Preview' }}
+                </button>
+
                 <!-- Download Button -->
                 <button 
                   @click="downloadReport"
-                  :disabled="isDownloading || !isFormValid"
+                  :disabled="reportsStore.downloadLoading || !isFormValid"
                   class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
                 >
-                  <svg v-if="isDownloading" class="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <svg v-if="reportsStore.downloadLoading" class="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
                   <svg v-else class="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
-                  {{ isDownloading ? 'Downloading...' : 'Download' }}
+                  {{ reportsStore.downloadLoading ? 'Downloading...' : 'Download' }}
                 </button>
               </div>
             </div>
           </div>
 
           <!-- Error Display -->
-          <div v-if="errorMessage" class="mt-4 p-4 bg-red-50 border border-red-200 rounded-md">
+          <div v-if="reportsStore.error" class="mt-4 p-4 bg-red-50 border border-red-200 rounded-md">
             <div class="flex">
               <div class="flex-shrink-0">
                 <svg class="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -186,14 +184,66 @@
               </div>
               <div class="ml-3">
                 <h3 class="text-sm font-medium text-red-800">Error</h3>
-                <p class="mt-1 text-sm text-red-700">{{ errorMessage }}</p>
+                <p class="mt-1 text-sm text-red-700">{{ reportsStore.error }}</p>
+              </div>
+              <div class="ml-auto pl-3">
+                <button 
+                  @click="reportsStore.clearError"
+                  class="inline-flex text-red-400 hover:text-red-500"
+                >
+                  <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                  </svg>
+                </button>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Current Applied Filters -->
+      <!-- Preview Results Card -->
+      <div v-if="reportsStore.reportPreview && reportsStore.hasReportData" class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-8">
+        <div class="p-6 border-b border-gray-200">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-xl font-bold text-gray-900">Report Preview</h3>
+              <p class="text-gray-600 mt-1">
+                Showing {{ reportsStore.reportPreview.totalRecords }} approval records
+              </p>
+            </div>
+            <div class="text-sm text-gray-500">
+              Last updated: {{ new Date().toLocaleString() }}
+            </div>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th v-for="column in reportsStore.reportPreview.columns" :key="column.key" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {{ column.label }}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr v-for="(item, index) in reportsStore.reportPreview.data.slice(0, 10)" :key="index" class="hover:bg-gray-50">
+                <td v-for="column in reportsStore.reportPreview.columns" :key="column.key" class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {{ item[column.key] || '-' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          
+          <div v-if="reportsStore.reportPreview.data.length > 10" class="px-6 py-3 bg-gray-50 border-t border-gray-200">
+            <p class="text-sm text-gray-600">
+              Showing first 10 of {{ reportsStore.reportPreview.totalRecords }} records. Download the full report to see all data.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Applied Filters Display -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
         <div class="p-6">
           <h3 class="text-lg font-medium text-gray-900 mb-4">Applied Filters</h3>
@@ -203,12 +253,6 @@
             <div v-if="fromSuperadmin && tenantIds.length > 1" class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
               <span class="font-medium mr-1">Tenants:</span>
               {{ tenantIds.length }} selected
-            </div>
-            
-            <!-- Approval Type Filter -->
-            <div class="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-800">
-              <span class="font-medium mr-1">Type:</span>
-              {{ getApprovalTypeLabel(approvalType) }}
             </div>
             
             <!-- Date Range Filter -->
@@ -234,7 +278,7 @@
           </div>
           
           <p class="mt-4 text-sm text-gray-600">
-            Your report will include data based on the filters above. Click Download to generate and download the report.
+            Your report will include approval status data based on the filters above. Use Preview to see a sample of the data before downloading.
           </p>
         </div>
       </div>
@@ -246,24 +290,22 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useReportsStore } from '@/stores/reports';
 import { useToast } from '@/composables/useToast';
-import ReportsService from '@/services/reports.service';
 
 // Composables
 const route = useRoute();
 const router = useRouter();
 const userStore = useAuthStore();
+const reportsStore = useReportsStore();
 const { showToast } = useToast();
 
 // Reactive state
-const approvalType = ref('all');
 const activeFilter = ref('monthly');
 const activeStatus = ref('all');
 const selectedFormat = ref('pdf');
 const startDate = ref('');
 const endDate = ref('');
-const isDownloading = ref(false);
-const errorMessage = ref('');
 
 // Initialize dates
 const initializeDates = () => {
@@ -276,12 +318,6 @@ const initializeDates = () => {
 };
 
 // Filter options
-const approvalTypes = [
-  { label: 'All Types', value: 'all' },
-  { label: 'Tenant Approvals', value: 'tenant' },
-  { label: 'Temple Approvals', value: 'temple' }
-];
-
 const timeFilters = [
   { label: 'Weekly', value: 'weekly' },
   { label: 'Monthly', value: 'monthly' },
@@ -307,13 +343,12 @@ const tenantId = computed(() => {
   return route.params.tenantId || userStore.user?.id || localStorage.getItem('current_tenant_id');
 });
 
-// Check for tenants parameter from superadmin
 const fromSuperadmin = computed(() => route.query.from === 'superadmin');
 const tenantIds = computed(() => {
   if (route.query.tenants) {
     return route.query.tenants.split(',');
   }
-  return [tenantId.value]; // Default to current tenant only
+  return [tenantId.value];
 });
 
 const today = computed(() => {
@@ -328,16 +363,10 @@ const isFormValid = computed(() => {
 });
 
 // Methods
-const setApprovalType = (type) => {
-  approvalType.value = type;
-  clearError();
-};
-
 const setActiveFilter = (filter) => {
   activeFilter.value = filter;
-  clearError();
+  reportsStore.clearError();
   
-  // Set appropriate date range based on filter
   const today = new Date();
   const start = new Date();
   
@@ -357,16 +386,7 @@ const setActiveFilter = (filter) => {
 
 const setActiveStatus = (status) => {
   activeStatus.value = status;
-  clearError();
-};
-
-const clearError = () => {
-  errorMessage.value = '';
-};
-
-const getApprovalTypeLabel = (type) => {
-  const found = approvalTypes.find(t => t.value === type);
-  return found ? found.label : 'Unknown';
+  reportsStore.clearError();
 };
 
 const getTimeFilterLabel = (filter) => {
@@ -395,103 +415,84 @@ const formatDate = (dateString) => {
 };
 
 const buildReportParams = () => {
-  // Use entityIds if coming from superadmin with multiple tenants
-  if (fromSuperadmin.value && tenantIds.value.length > 1) {
-    const params = {
-      entityIds: tenantIds.value,
-      dateRange: activeFilter.value,
-      format: selectedFormat.value,
-      approvalType: approvalType.value !== 'all' ? approvalType.value : undefined
-    };
+  const baseParams = {
+    dateRange: activeFilter.value,
+    startDate: startDate.value,
+    endDate: endDate.value,
+  };
 
-    // Add status filter if not 'all'
-    if (activeStatus.value !== 'all') {
-      params.status = activeStatus.value;
-    }
-
-    // Add custom date range
-    if (activeFilter.value === 'custom') {
-      params.startDate = startDate.value;
-      params.endDate = endDate.value;
-    }
-
-    return params;
-  } else {
-    // Original logic for single tenant
-    const params = {
-      entityId: tenantId.value,
-      dateRange: activeFilter.value,
-      format: selectedFormat.value,
-      approvalType: approvalType.value !== 'all' ? approvalType.value : undefined
-    };
-
-    // Add status filter if not 'all'
-    if (activeStatus.value !== 'all') {
-      params.status = activeStatus.value;
-    }
-
-    // Add custom date range
-    if (activeFilter.value === 'custom') {
-      params.startDate = startDate.value;
-      params.endDate = endDate.value;
-    }
-
-    return params;
+  // Add status filter if not 'all'
+  if (activeStatus.value !== 'all') {
+    baseParams.status = activeStatus.value;
   }
+
+  // Handle multi-tenant vs single tenant
+  if (fromSuperadmin.value && tenantIds.value.length > 1) {
+    baseParams.entityIds = tenantIds.value;
+    baseParams.isSuperAdmin = true;
+  } else {
+    baseParams.entityId = tenantId.value;
+  }
+
+  return baseParams;
 };
 
-const downloadReport = async () => {
-  if (isDownloading.value || !isFormValid.value) return;
-
-  clearError();
-  isDownloading.value = true;
+const previewReport = async () => {
+  if (!isFormValid.value) return;
 
   try {
     const params = buildReportParams();
     
-    // Add the report type to the params
-    params.type = 'approval-status';
-    
-    // Validate parameters
-    // Note: You might need to add this validation method to your ReportsService
-    const validation = { isValid: true, errors: [] }; // Placeholder validation
-    
-    if (!validation.isValid) {
-      throw new Error(validation.errors.join(', '));
-    }
+    console.log('Previewing Approval Status report with parameters:', {
+      tenants: fromSuperadmin.value && tenantIds.value.length > 1 ? tenantIds.value.length : 1,
+      dateRange: getTimeFilterLabel(activeFilter.value),
+      status: getStatusFilterLabel(activeStatus.value),
+      period: `${formatDate(startDate.value)} - ${formatDate(endDate.value)}`
+    });
 
-    // Console logging
-    console.log('Downloading Approval Status report with the following parameters:');
-    console.log('- Approval Type:', getApprovalTypeLabel(approvalType.value));
-    if (fromSuperadmin.value && tenantIds.value.length > 1) {
-      console.log('- Tenants:', tenantIds.value.length, 'selected');
+    await reportsStore.getApprovalStatusPreview(params);
+    
+    if (reportsStore.hasReportData) {
+      showToast(`Preview loaded: ${reportsStore.reportPreview.totalRecords} records found`, 'success');
     } else {
-      console.log('- Tenant ID:', tenantId.value);
+      showToast('No data found for the selected criteria', 'info');
     }
-    console.log('- Time filter:', getTimeFilterLabel(activeFilter.value));
-    console.log('- Date range:', formatDate(startDate.value), 'to', formatDate(endDate.value));
-    console.log('- Status:', getStatusFilterLabel(activeStatus.value));
-    console.log('- Format:', getFormatLabel(selectedFormat.value));
-
-    // Call the service method
-    // Note: You might need to implement this method in your ReportsService
-    const result = await ReportsService.downloadApprovalStatusReport(params);
     
-    // Show success message
-    showToast(`Approval Status Report downloaded successfully: ${result.filename}`, 'success');
+  } catch (error) {
+    console.error('Preview failed:', error);
+    showToast(`Preview failed: ${error.message}`, 'error');
+  }
+};
+
+const downloadReport = async () => {
+  if (!isFormValid.value) return;
+
+  try {
+    const params = {
+      ...buildReportParams(),
+      format: selectedFormat.value
+    };
+    
+    console.log('Downloading Approval Status report:', {
+      tenants: fromSuperadmin.value && tenantIds.value.length > 1 ? tenantIds.value.length : 1,
+      dateRange: getTimeFilterLabel(activeFilter.value),
+      status: getStatusFilterLabel(activeStatus.value),
+      format: getFormatLabel(selectedFormat.value),
+      period: `${formatDate(startDate.value)} - ${formatDate(endDate.value)}`
+    });
+
+    const result = await reportsStore.downloadApprovalStatusReport(params);
+    showToast(`Report downloaded successfully: ${result.filename}`, 'success');
     
   } catch (error) {
     console.error('Download failed:', error);
-    errorMessage.value = error.message || 'Failed to download report. Please try again.';
     showToast(`Download failed: ${error.message}`, 'error');
-  } finally {
-    isDownloading.value = false;
   }
 };
 
 // Lifecycle hooks
 onMounted(() => {
-  // Initialize default dates
   initializeDates();
+  reportsStore.clearReportData();
 });
 </script>

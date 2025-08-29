@@ -1,6 +1,120 @@
 import api from '@/plugins/axios'
 
 class ReportsService {
+  // ===============================
+  // Utility to build query params
+  // ===============================
+  buildQueryParams(filters) {
+    const queryParams = new URLSearchParams()
+
+    // Common filters
+    if (filters.dateRange) queryParams.append('date_range', filters.dateRange)
+    if (filters.format) queryParams.append('format', filters.format)
+    if (filters.status) queryParams.append('status', filters.status)
+    if (filters.role) queryParams.append('role', filters.role)
+
+    // Handle custom date ranges
+    if (filters.dateRange === 'custom' && filters.startDate && filters.endDate) {
+      queryParams.append('start_date', filters.startDate)
+      queryParams.append('end_date', filters.endDate)
+    }
+
+    return queryParams
+  }
+
+  // ===============================
+  // Utility to build report URLs
+  // ===============================
+  buildReportURL({ isSuperAdmin, entityId, entityIds, endpoint, queryParams }) {
+    if (isSuperAdmin) {
+      if (entityIds && entityIds.length > 1) {
+        return `/v1/superadmin/reports/${endpoint}?${queryParams}&entities=${entityIds.join(',')}`
+      } else {
+        // Fallback: single entity (superadmin scope)
+        return `/v1/superadmin/entities/${entityId}/reports/${endpoint}?${queryParams}`
+      }
+    } else {
+      // Tenant scope
+      return `/v1/entities/${entityId}/reports/${endpoint}?${queryParams}`
+    }
+  }
+
+  // ===============================
+  // APPROVAL STATUS REPORT METHODS
+  // ===============================
+  async getApprovalStatusReport(params) {
+    const { entityId, entityIds, isSuperAdmin } = params
+    if (!entityId && !entityIds) throw new Error('Entity ID or Entity IDs are required')
+
+    const queryParams = this.buildQueryParams(params)
+    const url = this.buildReportURL({ ...params, endpoint: 'approval-status', queryParams })
+
+    console.log('📊 Approval Status API request:', url)
+    return api.get(url)
+  }
+
+  async downloadApprovalStatusReport(params) {
+    const { entityId, entityIds, format } = params
+    if ((!entityId && !entityIds) || !format) throw new Error('Entity ID (or IDs) and format are required')
+
+    const queryParams = this.buildQueryParams(params)
+    const url = this.buildReportURL({ ...params, endpoint: 'approval-status', queryParams })
+
+    return this.downloadReport(url, { format }, 'approval_status_report')
+  }
+
+  async getApprovalStatusPreview(params) {
+    const response = await this.getApprovalStatusReport(params)
+    const data = response.data?.data || response.data || []
+
+    const columns = [
+      { key: 'item_name', label: 'Item Name' },
+      { key: 'item_type', label: 'Type' },
+      { key: 'submitted_by', label: 'Submitted By' },
+      { key: 'submitted_date', label: 'Submitted Date' },
+      { key: 'status', label: 'Status' },
+      { key: 'approved_by', label: 'Approved By' },
+      { key: 'approval_date', label: 'Approval Date' },
+      { key: 'comments', label: 'Comments' }
+    ]
+
+    return {
+      data: Array.isArray(data)
+        ? data.map(item => ({
+            ...item,
+            submitted_date: item.submitted_date ? this.formatDate(item.submitted_date) : '-',
+            approval_date: item.approval_date ? this.formatDate(item.approval_date) : '-'
+          }))
+        : [],
+      columns,
+      totalRecords: Array.isArray(data) ? data.length : 0
+    }
+  }
+
+  // ===============================
+  // USER DETAILS REPORT METHODS
+  // ===============================
+  async getUserDetailsReport(params) {
+    const { entityId, entityIds } = params
+    if (!entityId && !entityIds) throw new Error('Entity ID or Entity IDs are required')
+
+    const queryParams = this.buildQueryParams(params)
+    const url = this.buildReportURL({ ...params, endpoint: 'user-details', queryParams })
+
+    console.log('👥 User Details API request:', url)
+    return api.get(url)
+  }
+
+  async downloadUserDetailsReport(params) {
+    const { entityId, entityIds, format } = params
+    if ((!entityId && !entityIds) || !format) throw new Error('Entity ID (or IDs) and format are required')
+
+    const queryParams = this.buildQueryParams(params)
+    const url = this.buildReportURL({ ...params, endpoint: 'user-details', queryParams })
+
+    return this.downloadReport(url, { format }, 'user_details_report')
+  }
+
   /**
    * Get activities report data (JSON preview)
    */
@@ -945,6 +1059,67 @@ class ReportsService {
       throw error
     }
   }
+
+
+
+  async downloadUserDetailsReport(params) {
+  const { entityId, entityIds, role, status, dateRange = 'monthly', startDate, endDate, format, isSuperAdmin } = params;
+
+  if ((!entityId && !entityIds) || !format) {
+    throw new Error('Entity ID (or IDs) and format are required');
+  }
+
+  const queryParams = new URLSearchParams({
+    date_range: dateRange,
+    format,
+  });
+
+  if (role) {
+    queryParams.append('role', role);
+  }
+
+  if (status) {
+    queryParams.append('status', status);
+  }
+
+  if (dateRange === 'custom' && startDate && endDate) {
+    queryParams.append('start_date', startDate);
+    queryParams.append('end_date', endDate);
+  }
+
+  let url;
+
+  if (isSuperAdmin) {
+    if (entityIds && entityIds.length > 1) {
+      url = `/v1/superadmin/reports/user-details?${queryParams}&tenants=${entityIds.join(',')}`;
+    } else {
+      url = `/v1/superadmin/tenants/${entityId}/reports/user-details?${queryParams}`;
+    }
+  } else {
+    url = `/v1/entities/${entityId}/reports/user-details?${queryParams}`;
+  }
+
+  try {
+    return await this.downloadReport(url, { format }, 'user_details_report', async () => {
+      if (isSuperAdmin) {
+        const alternatives = [
+          entityIds && entityIds.length > 1
+            ? `/v1/superadmin/user-details/report?${queryParams}&tenants=${entityIds.join(',')}`
+            : `/v1/superadmin/user-details/report?${queryParams}&tenant_id=${entityId}`,
+          entityIds && entityIds.length > 1
+            ? `/v1/superadmin/entities/reports/user-details?${queryParams}&tenants=${entityIds.join(',')}`
+            : `/v1/entities/${entityId}/reports/user-details?${queryParams}`
+        ];
+        return alternatives;
+      }
+      return null;
+    });
+  } catch (error) {
+    console.error('Error downloading user details report:', error);
+    throw error;
+  }
+}
+
 
   // AUDIT LOGS REPORT METHODS
   async getAuditLogsReport(params) {

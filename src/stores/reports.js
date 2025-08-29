@@ -1,4 +1,3 @@
-// src/stores/reports.js
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import reportsService from '@/services/reports.service'
@@ -44,6 +43,8 @@ export const useReportsStore = defineStore('reports', () => {
     }
     
     return devoteeList.value.filter(devotee => {
+      if (!devotee) return false
+      
       if (devoteeListStatus.value === 'active') {
         return devotee.status === 'active' || devotee.is_active === true
       } else if (devoteeListStatus.value === 'inactive') {
@@ -161,53 +162,335 @@ export const useReportsStore = defineStore('reports', () => {
       loading.value = false
     }
   }
-/**
- * Fetch audit logs report data (JSON preview)
- */
-const fetchAuditLogsReport = async (params) => {
-  try {
-    loading.value = true
-    error.value = null
 
-    // Add report type for summary
-    lastReportParams.value = { ...params, type: 'audit-logs' }
+  /**
+   * Fetch audit logs report data (JSON preview)
+   */
+  const fetchAuditLogsReport = async (params) => {
+    try {
+      loading.value = true
+      error.value = null
 
-    const response = await reportsService.getAuditLogsReport(params)
-    currentReport.value = response
+      // Add report type for summary
+      lastReportParams.value = { ...params, type: 'audit-logs' }
 
-    const preview = await reportsService.getAuditLogsPreview(params)
-    reportPreview.value = preview
+      const response = await reportsService.getAuditLogsReport(params)
+      currentReport.value = response
 
-    return response
-  } catch (err) {
-    error.value = err.message || 'Failed to fetch audit logs report'
-    console.error('Error in fetchAuditLogsReport:', err)
-    throw err
-  } finally {
-    loading.value = false
+      const preview = await reportsService.getAuditLogsPreview(params)
+      reportPreview.value = preview
+
+      return response
+    } catch (err) {
+      error.value = err.message || 'Failed to fetch audit logs report'
+      console.error('Error in fetchAuditLogsReport:', err)
+      throw err
+    } finally {
+      loading.value = false
+    }
   }
-}
 
-/**
- * Download audit logs report in specified format
- */
-const downloadAuditLogsReport = async (params) => {
-  try {
-    downloadLoading.value = true
-    error.value = null
+  /**
+   * Download audit logs report in specified format
+   */
+  const downloadAuditLogsReport = async (params) => {
+    try {
+      downloadLoading.value = true
+      error.value = null
 
-    const result = await reportsService.downloadAuditLogsReport(params)
-    lastReportParams.value = { ...params, type: 'audit-logs' }
+      const result = await reportsService.downloadAuditLogsReport(params)
+      lastReportParams.value = { ...params, type: 'audit-logs' }
 
-    return result
-  } catch (err) {
-    error.value = err.message || 'Failed to download audit logs report'
-    console.error('Error in downloadAuditLogsReport:', err)
-    throw err
-  } finally {
-    downloadLoading.value = false
+      return result
+    } catch (err) {
+      error.value = err.message || 'Failed to download audit logs report'
+      console.error('Error in downloadAuditLogsReport:', err)
+      throw err
+    } finally {
+      downloadLoading.value = false
+    }
   }
-}
+
+
+  // Add these methods to your Pinia store (useReportsStore)
+
+  // APPROVAL STATUS REPORT METHODS
+  const fetchApprovalStatusReport = async (params) => {
+    try {
+      loading.value = true
+      error.value = null
+
+      // Store params for reference
+      lastReportParams.value = { ...params, type: 'approval-status' }
+
+      // Add isSuperAdmin flag if entityIds is present
+      if (params.entityIds && Array.isArray(params.entityIds)) {
+        params.isSuperAdmin = true
+      }
+
+      // Fetch report data
+      const response = await reportsService.getApprovalStatusReport(params)
+      currentReport.value = response
+
+      // Get formatted preview
+      const preview = await reportsService.getApprovalStatusPreview(params)
+      reportPreview.value = preview
+
+      return response
+    } catch (err) {
+      error.value = err.message || 'Failed to fetch approval status report'
+      console.error('Error in fetchApprovalStatusReport:', err)
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const downloadApprovalStatusReport = async (params) => {
+    try {
+      downloadLoading.value = true
+      error.value = null
+
+      // Add isSuperAdmin flag if entityIds is present
+      if (params.entityIds && Array.isArray(params.entityIds)) {
+        params.isSuperAdmin = true
+      }
+
+      // Download report
+      const result = await reportsService.downloadApprovalStatusReport(params)
+      
+      // Store successful download params
+      lastReportParams.value = { ...params, type: 'approval-status' }
+
+      return result
+    } catch (err) {
+      error.value = err.message || 'Failed to download approval status report'
+      console.error('Error in downloadApprovalStatusReport:', err)
+      throw err
+    } finally {
+      downloadLoading.value = false
+    }
+  }
+
+  const getApprovalStatusPreview = async (params) => {
+    try {
+      loading.value = true
+      error.value = null
+
+      // Add isSuperAdmin flag if entityIds is present
+      if (params.entityIds && Array.isArray(params.entityIds)) {
+        params.isSuperAdmin = true
+      }
+
+      const preview = await reportsService.getApprovalStatusPreview(params)
+      reportPreview.value = preview
+      lastReportParams.value = { ...params, type: 'approval-status' }
+
+      return preview
+    } catch (err) {
+      error.value = err.message || 'Failed to get approval status preview'
+      console.error('Error in getApprovalStatusPreview:', err)
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // USER DETAILS REPORT METHODS
+  const fetchUserDetailsReport = async (params) => {
+    try {
+      loading.value = true
+      error.value = null
+
+      // Store params for reference
+      lastReportParams.value = { ...params, type: 'user-details' }
+
+      // Add isSuperAdmin flag if entityIds is present
+      if (params.entityIds && Array.isArray(params.entityIds)) {
+        params.isSuperAdmin = true
+      }
+
+      // Fetch report data
+      const response = await reportsService.getUserDetailsReport(params)
+      currentReport.value = response
+
+      // Get formatted preview
+      const preview = await reportsService.getUserDetailsPreview(params)
+      reportPreview.value = preview
+
+      return response
+    } catch (err) {
+      error.value = err.message || 'Failed to fetch user details report'
+      console.error('Error in fetchUserDetailsReport:', err)
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const downloadUserDetailsReport = async (params) => {
+    try {
+      downloadLoading.value = true
+      error.value = null
+
+      // Add isSuperAdmin flag if entityIds is present
+      if (params.entityIds && Array.isArray(params.entityIds)) {
+        params.isSuperAdmin = true
+      }
+
+      // Download report
+      const result = await reportsService.downloadUserDetailsReport(params)
+      
+      // Store successful download params
+      lastReportParams.value = { ...params, type: 'user-details' }
+
+      return result
+    } catch (err) {
+      error.value = err.message || 'Failed to download user details report'
+      console.error('Error in downloadUserDetailsReport:', err)
+      throw err
+    } finally {
+      downloadLoading.value = false
+    }
+  }
+
+  const getUserDetailsPreview = async (params) => {
+    try {
+      loading.value = true
+      error.value = null
+
+      // Add isSuperAdmin flag if entityIds is present
+      if (params.entityIds && Array.isArray(params.entityIds)) {
+        params.isSuperAdmin = true
+      }
+
+      const preview = await reportsService.getUserDetailsPreview(params)
+      reportPreview.value = preview
+      lastReportParams.value = { ...params, type: 'user-details' }
+
+      return preview
+    } catch (err) {
+      error.value = err.message || 'Failed to get user details preview'
+      console.error('Error in getUserDetailsPreview:', err)
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // UTILITY METHODS FOR NEW ENDPOINTS
+  const buildApprovalStatusParams = (componentState) => {
+    const {
+      selectedTemple,
+      selectedFormat,
+      status,
+      activeFilter,
+      startDate,
+      endDate
+    } = componentState
+
+    // Use default date range if custom dates aren't provided
+    let dates = { startDate, endDate }
+    if (activeFilter !== 'custom' || !startDate || !endDate) {
+      dates = getDefaultDateRange(activeFilter)
+    }
+
+    return {
+      entityId: selectedTemple === 'all' ? 'all' : selectedTemple.toString(),
+      status,
+      dateRange: activeFilter,
+      format: selectedFormat,
+      startDate: dates.startDate,
+      endDate: dates.endDate
+    }
+  }
+
+  const buildUserDetailsParams = (componentState) => {
+    const {
+      selectedTemple,
+      selectedFormat,
+      role,
+      status,
+      activeFilter,
+      startDate,
+      endDate
+    } = componentState
+
+    // Use default date range if custom dates aren't provided
+    let dates = { startDate, endDate }
+    if (activeFilter !== 'custom' || !startDate || !endDate) {
+      dates = getDefaultDateRange(activeFilter)
+    }
+
+    return {
+      entityId: selectedTemple === 'all' ? 'all' : selectedTemple.toString(),
+      role,
+      status,
+      dateRange: activeFilter,
+      format: selectedFormat,
+      startDate: dates.startDate,
+      endDate: dates.endDate
+    }
+  }
+
+  // Update the validation method to include new report types
+  const validateReportParams = (params) => {
+    const errors = []
+
+    if (!params.entityId && !params.entityIds) {
+      errors.push('Entity ID or Entity IDs are required')
+    }
+
+    const validReportTypes = [
+      'events', 'sevas', 'bookings', 'donations', 
+      'temple-registered', 'devotee-birthdays', 'devotee-list', 
+      'devotee-profile', 'audit-logs', 'approval-status', 'user-details'
+    ]
+
+    if (!params.type || !validReportTypes.includes(params.type)) {
+      errors.push(`Valid report type is required (${validReportTypes.join(', ')})`)
+    }
+
+    // Validation for approval-status reports
+    if (params.type === 'approval-status') {
+      const validStatuses = ['pending', 'approved', 'rejected', 'all']
+      if (params.status && !validStatuses.includes(params.status)) {
+        errors.push(`Invalid status filter for approval-status. Allowed values: ${validStatuses.join(', ')}`)
+      }
+    }
+
+    // Validation for user-details reports
+    if (params.type === 'user-details') {
+      const validRoles = ['admin', 'manager', 'devotee', 'priest', 'all']
+      const validStatuses = ['active', 'inactive', 'pending', 'all']
+      
+      if (params.role && !validRoles.includes(params.role)) {
+        errors.push(`Invalid role filter for user-details. Allowed values: ${validRoles.join(', ')}`)
+      }
+      
+      if (params.status && !validStatuses.includes(params.status)) {
+        errors.push(`Invalid status filter for user-details. Allowed values: ${validStatuses.join(', ')}`)
+      }
+    }
+
+    if (params.dateRange === 'custom') {
+      if (!params.startDate || !params.endDate) {
+        errors.push('Start date and end date are required for custom date range')
+      } else if (new Date(params.startDate) > new Date(params.endDate)) {
+        errors.push('Start date must be before end date')
+      }
+    }
+
+    if (params.format && !['pdf', 'csv', 'excel'].includes(params.format)) {
+      errors.push('Invalid format specified')
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    }
+  }
+
 
   // TEMPLE REGISTERED REPORT METHODS
   /**
@@ -301,6 +584,11 @@ const downloadAuditLogsReport = async (params) => {
       downloadLoading.value = true
       error.value = null
 
+      // Add isSuperAdmin flag if entityIds is present
+      if (params.entityIds && Array.isArray(params.entityIds)) {
+        params.isSuperAdmin = true
+      }
+
       // Download report
       const result = await reportsService.downloadDevoteeBirthdaysReport(params)
       
@@ -325,6 +613,11 @@ const downloadAuditLogsReport = async (params) => {
       loading.value = true
       error.value = null
 
+      // Add isSuperAdmin flag if entityIds is present
+      if (params.entityIds && Array.isArray(params.entityIds)) {
+        params.isSuperAdmin = true
+      }
+
       const preview = await reportsService.getDevoteeBirthdaysPreview(params)
       reportPreview.value = preview
       lastReportParams.value = { ...params, type: 'devotee-birthdays' }
@@ -344,29 +637,53 @@ const downloadAuditLogsReport = async (params) => {
     try {
       loading.value = true
       error.value = null
-      const { entityId, status = 'all' } = params
+      
+      const { entityId, entityIds, status = 'all' } = params
       lastReportParams.value = { ...params, type: 'devotee-list' }
       
-      const response = await reportsService.getDevoteeList({ entityId, status })
-      currentReport.value = response
-      
-      // Handle nested response data
-      let responseData = response.data
-      if (responseData && responseData.data) {
-        responseData = responseData.data
+      // Add isSuperAdmin flag if entityIds is present
+      if (entityIds && Array.isArray(entityIds)) {
+        params.isSuperAdmin = true
       }
       
-      // FIXED: Set devoteeList properly
-      devoteeList.value = responseData.devotees || responseData || []
+      const response = await reportsService.getDevoteeList(params)
+      currentReport.value = response
+      
+      // Safely unwrap nested data with comprehensive null safety
+      let responseData = null
+      
+      if (response && response.data) {
+        responseData = response.data
+        // Handle nested data structure
+        if (responseData && responseData.data) {
+          responseData = responseData.data
+        }
+      }
+
+      // Defensive assignment to devoteeList.value with multiple fallback paths
+      if (Array.isArray(responseData)) {
+        devoteeList.value = responseData
+      } else if (responseData && Array.isArray(responseData.devotees)) {
+        devoteeList.value = responseData.devotees
+      } else if (responseData && Array.isArray(responseData.data)) {
+        devoteeList.value = responseData.data
+      } else if (response && response.devotees && Array.isArray(response.devotees)) {
+        devoteeList.value = response.devotees
+      } else {
+        console.warn('No valid devotee data found in response:', response)
+        devoteeList.value = []
+      }
+      
       devoteeListStatus.value = status
       
-      const preview = await reportsService.getDevoteeListPreview({ entityId, status })
+      const preview = await reportsService.getDevoteeListPreview(params)
       reportPreview.value = preview
       
       return response
     } catch (err) {
       error.value = err.message || 'Failed to fetch devotee list report'
       console.error('Error in fetchDevoteeListReport:', err)
+      devoteeList.value = [] // Reset on error
       throw err
     } finally {
       loading.value = false
@@ -377,10 +694,17 @@ const downloadAuditLogsReport = async (params) => {
     try {
       downloadLoading.value = true
       error.value = null
+      
       const { format } = params
       if (!format) {
         throw new Error('Format is required for download')
       }
+      
+      // Add isSuperAdmin flag if entityIds is present
+      if (params.entityIds && Array.isArray(params.entityIds)) {
+        params.isSuperAdmin = true
+      }
+      
       const result = await reportsService.downloadDevoteeListReport(params)
       lastReportParams.value = { ...params, type: 'devotee-list' }
       return result
@@ -398,7 +722,9 @@ const downloadAuditLogsReport = async (params) => {
       loading.value = true
       error.value = null
       devoteeListStatus.value = status
-      await fetchDevoteeListReport({ entityId, status })
+      
+      const params = { entityId, status }
+      await fetchDevoteeListReport(params)
     } catch (err) {
       error.value = err.message || 'Failed to filter devotee list'
       console.error('Error in setDevoteeListStatus:', err)
@@ -413,13 +739,19 @@ const downloadAuditLogsReport = async (params) => {
     try {
       loading.value = true
       error.value = null
+      
       const { entityId } = params
       lastReportParams.value = { ...params, type: 'devotee-profile' }
       
-      const response = await reportsService.getDevoteeProfile({ entityId })
+      // Add isSuperAdmin flag if entityIds is present
+      if (params.entityIds && Array.isArray(params.entityIds)) {
+        params.isSuperAdmin = true
+      }
+      
+      const response = await reportsService.getDevoteeProfile(params)
       currentReport.value = response
       
-      const preview = await reportsService.getDevoteeProfilePreview({ entityId })
+      const preview = await reportsService.getDevoteeProfilePreview(params)
       devoteeProfile.value = preview
       
       return response
@@ -436,10 +768,17 @@ const downloadAuditLogsReport = async (params) => {
     try {
       downloadLoading.value = true
       error.value = null
+      
       const { format } = params
       if (!format) {
         throw new Error('Format is required for download')
       }
+      
+      // Add isSuperAdmin flag if entityIds is present
+      if (params.entityIds && Array.isArray(params.entityIds)) {
+        params.isSuperAdmin = true
+      }
+      
       const result = await reportsService.downloadDevoteeProfileReport(params)
       lastReportParams.value = { ...params, type: 'devotee-profile' }
       return result
@@ -456,6 +795,12 @@ const downloadAuditLogsReport = async (params) => {
     try {
       loading.value = true
       error.value = null
+      
+      // Add isSuperAdmin flag if entityIds is present
+      if (params.entityIds && Array.isArray(params.entityIds)) {
+        params.isSuperAdmin = true
+      }
+      
       const preview = await reportsService.getDevoteeListPreview(params)
       reportPreview.value = preview
       lastReportParams.value = { ...params, type: 'devotee-list' }
@@ -474,6 +819,12 @@ const downloadAuditLogsReport = async (params) => {
     try {
       loading.value = true
       error.value = null
+      
+      // Add isSuperAdmin flag if entityIds is present
+      if (params.entityIds && Array.isArray(params.entityIds)) {
+        params.isSuperAdmin = true
+      }
+      
       const preview = await reportsService.getDevoteeProfilePreview(params)
       reportPreview.value = preview
       lastReportParams.value = { ...params, type: 'devotee-profile' }
@@ -671,9 +1022,9 @@ const downloadAuditLogsReport = async (params) => {
     reportSummary,
     filteredDevoteeList,
 
-    //audit lgs
+    //audit logs
     fetchAuditLogsReport,
-  downloadAuditLogsReport,
+    downloadAuditLogsReport,
     
     // Actions
     clearError,
@@ -697,6 +1048,20 @@ const downloadAuditLogsReport = async (params) => {
     fetchDevoteeProfile,
     downloadDevoteeProfileReport,
     getDevoteeProfilePreview,
+    // New methods for approval status
+    fetchApprovalStatusReport,
+    downloadApprovalStatusReport,
+    getApprovalStatusPreview,
+
+    // New methods for user details
+    fetchUserDetailsReport,
+    downloadUserDetailsReport,
+    getUserDetailsPreview,
+
+    // Updated utility methods
+    buildApprovalStatusParams,
+    buildUserDetailsParams,
+    validateReportParams,
 
     // Utility methods
     getDefaultDateRange,
