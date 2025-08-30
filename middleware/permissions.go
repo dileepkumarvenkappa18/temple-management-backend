@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"strconv"
-	
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auth"
 )
@@ -52,17 +51,17 @@ func ResolveAccessContext(user auth.User, assignedTenantID *uint) AccessContext 
 		DirectEntityID: user.EntityID,
 		PermissionType: "full", // default
 	}
-	
+
 	// If user is standarduser or monitoringuser with assigned tenant
 	if assignedTenantID != nil {
 		accessContext.AssignedEntityID = assignedTenantID
-		
+
 		// Set permission type based on role
 		if user.Role.RoleName == RoleMonitoringUser {
 			accessContext.PermissionType = "readonly"
 		}
 	}
-	
+
 	return accessContext
 }
 
@@ -72,13 +71,12 @@ func ExtractTenantIDFromContext(c *gin.Context) *uint {
 	if tenantIDStr == "" {
 		return nil
 	}
-	
+
 	tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
 	if err != nil {
 		return nil
 	}
-	
+
 	id := uint(tenantID)
 	return &id
 }
-

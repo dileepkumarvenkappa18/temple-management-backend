@@ -177,7 +177,7 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		superadminRoutes.GET("/reports/devotee-profile", reportsHandler.GetSuperAdminDevoteeProfileReport)
 		superadminRoutes.GET("/reports/audit-logs", reportsHandler.GetSuperAdminAuditLogsReport)
 	superadminRoutes.GET("/reports/approval-status", reportsHandler.GetApprovalStatusReport)
-superadminRoutes.GET("/reports/user-details", reportsHandler.GetUserDetailsReport)
+      superadminRoutes.GET("/reports/user-details", reportsHandler.GetUserDetailsReport)
 
 
 		// Support for tenant-specific routes (for backwards compatibility)
@@ -291,9 +291,18 @@ entityRoutes.Use(middleware.RequireTempleAccess())
 }
 
 		// Special endpoints that bypass temple access check
-		protected.POST("/entities", middleware.RBACMiddleware("templeadmin", "superadmin"), entityHandler.CreateEntity)
-		protected.GET("/entities", middleware.RBACMiddleware("templeadmin", "superadmin"), entityHandler.GetAllEntities)
-	}
+		// CreateEntity - allowed for templeadmin, superadmin, standarduser
+protected.POST("/entities",
+	middleware.RBACMiddleware("templeadmin", "superadmin", "standarduser"),
+	entityHandler.CreateEntity,
+)
+
+// GetAllEntities - allowed for templeadmin, superadmin, standarduser, monitoringuser
+protected.GET("/entities",
+	middleware.RBACMiddleware("templeadmin", "superadmin", "standarduser", "monitoringuser"),
+	entityHandler.GetAllEntities,
+)
+}
 // ========== Event & RSVP ==========
 eventRepo := event.NewRepository(database.DB)
 eventService := event.NewService(eventRepo, auditSvc) // ✅ INJECT AUDIT SERVICE

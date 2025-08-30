@@ -49,7 +49,7 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 		input.Status = "pending"
 	}
 
-	// 🆕 GET IP ADDRESS FOR AUDIT LOGGING
+	// GET IP ADDRESS FOR AUDIT LOGGING
 	ip := middleware.GetIPFromContext(c)
 
 	if err := h.Service.CreateEntity(&input, userID, ip); err != nil {
@@ -61,7 +61,7 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"message": "Temple registration request submitted successfully"})
 }
 
-// Super Admin → View all temples, Temple Admin → View only their created temples
+// Super Admin → View all temples, Temple Admin → View only their created temples, Standard User → View assigned temples
 func (h *Handler) GetAllEntities(c *gin.Context) {
 	// Get authenticated user
 	userVal, exists := c.Get("user")
@@ -69,7 +69,7 @@ func (h *Handler) GetAllEntities(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-	
+
 	user, ok := userVal.(auth.User)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user object"})
@@ -88,44 +88,62 @@ func (h *Handler) GetAllEntities(c *gin.Context) {
 		return
 	}
 
-	var entities []Entity
-	var err error
-
-	// Check user role - if super admin, get all entities
-	if user.Role.RoleName == "superadmin" {
-		entities, err = h.Service.GetAllEntities()
-	} else if user.Role.RoleName == "templeadmin" {
-		// For temple admin, get only entities created by them
-		if accessContext.DirectEntityID != nil {
-			entities, err = h.Service.GetEntitiesByCreator(user.ID)
-		} else {
-			c.JSON(http.StatusForbidden, gin.H{"error": "No entity assigned to this admin"})
-			return
-		}
-	} else if user.Role.RoleName == "standarduser" || user.Role.RoleName == "monitoringuser" {
-		// For standarduser/monitoringuser, get only the entity they're assigned to
-		if accessContext.AssignedEntityID != nil {
-			entity, err := h.Service.GetEntityByID(int(*accessContext.AssignedEntityID))
-			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": "Assigned entity not found"})
-				return
-			}
-			entities = []Entity{entity}
-		} else {
-			c.JSON(http.StatusForbidden, gin.H{"error": "No entity assigned to this user"})
-			return
-		}
-	}
+	// Use the enhanced service method with better error handling
+	entities, err := h.Service.GetEntitiesForUser(
+		user.ID, 
+		user.Role.RoleName, 
+		accessContext.DirectEntityID, 
+		accessContext.AssignedEntityID,
+	)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch temples", "details": err.Error()})
+		log.Printf("GetAllEntities error for user %d: %v", user.ID, err)
+		
+		// Handle specific errors
+		if err == ErrNoAccessibleEntity {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "No entity assigned to this user",
+				"debug_info": map[string]interface{}{
+					"user_id": user.ID,
+					"role": user.Role.RoleName,
+					"user_entity_id": user.EntityID,
+					"direct_entity_id": accessContext.DirectEntityID,
+					"assigned_entity_id": accessContext.AssignedEntityID,
+				},
+			})
+			return
+		}
+		
+		if err == ErrEntityNotFound {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Assigned entity not found",
+				"debug_info": map[string]interface{}{
+					"user_id": user.ID,
+					"role": user.Role.RoleName,
+					"user_entity_id": user.EntityID,
+					"direct_entity_id": accessContext.DirectEntityID,
+					"assigned_entity_id": accessContext.AssignedEntityID,
+				},
+			})
+			return
+		}
+		
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to fetch temples", 
+			"details": err.Error(),
+			"debug_info": map[string]interface{}{
+				"user_id": user.ID,
+				"role": user.Role.RoleName,
+			},
+		})
 		return
 	}
-	
+
+	log.Printf("Successfully fetched %d entities for user %d (%s)", len(entities), user.ID, user.Role.RoleName)
 	c.JSON(http.StatusOK, entities)
 }
 
-// Anyone → View a specific temple by ID
+// Anyone → View a specific temple by ID - UPDATED ACCESS CHECK
 func (h *Handler) GetEntityByID(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -148,18 +166,28 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 	// Check permissions
 	user, _ := c.Get("user")
 	userObj := user.(auth.User)
-	
-	// Allow access if:
-	// 1. User is superadmin
-	// 2. User is templeadmin and owns this entity
-	// 3. User is standarduser/monitoringuser and is assigned to this entity
+
+	// Use the new enhanced access check method
 	entityIDUint := uint(id)
-	hasAccess := userObj.Role.RoleName == "superadmin" ||
-		(accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityIDUint) ||
-		(accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityIDUint)
+	hasAccess := h.Service.CheckUserHasEntityAccess(
+		userObj.ID,
+		userObj.Role.RoleName,
+		entityIDUint,
+		accessContext.DirectEntityID,
+		accessContext.AssignedEntityID,
+	)
 
 	if !hasAccess {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You don't have access to this entity"})
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "You don't have access to this entity",
+			"debug_info": map[string]interface{}{
+				"entity_id": entityIDUint,
+				"user_id": userObj.ID,
+				"role": userObj.Role.RoleName,
+				"direct_entity_id": accessContext.DirectEntityID,
+				"assigned_entity_id": accessContext.AssignedEntityID,
+			},
+		})
 		return
 	}
 
@@ -171,7 +199,7 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 	c.JSON(http.StatusOK, entity)
 }
 
-// Temple Admin → Update existing temple
+// Temple Admin/Standard User → Update existing temple - UPDATED ACCESS CHECK
 func (h *Handler) UpdateEntity(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -210,22 +238,37 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-	userID := user.(auth.User).ID
+	userObj := user.(auth.User)
+	userID := userObj.ID
 
-	// Check if entity ID matches accessible entity
+	// Use the new enhanced access check method
 	entityIDUint := uint(id)
-	hasAccess := (accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityIDUint) ||
-		(accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityIDUint)
+	hasAccess := h.Service.CheckUserHasEntityAccess(
+		userObj.ID,
+		userObj.Role.RoleName,
+		entityIDUint,
+		accessContext.DirectEntityID,
+		accessContext.AssignedEntityID,
+	)
 
 	if !hasAccess {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You don't have access to update this entity"})
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "You don't have access to update this entity",
+			"debug_info": map[string]interface{}{
+				"entity_id": entityIDUint,
+				"user_id": userObj.ID,
+				"role": userObj.Role.RoleName,
+				"direct_entity_id": accessContext.DirectEntityID,
+				"assigned_entity_id": accessContext.AssignedEntityID,
+			},
+		})
 		return
 	}
 
 	input.ID = uint(id)
 	input.UpdatedAt = time.Now()
 
-	// 🆕 GET IP ADDRESS FOR AUDIT LOGGING
+	// GET IP ADDRESS FOR AUDIT LOGGING
 	ip := middleware.GetIPFromContext(c)
 
 	if err := h.Service.UpdateEntity(input, userID, ip); err != nil {
@@ -253,7 +296,7 @@ func (h *Handler) DeleteEntity(c *gin.Context) {
 	}
 	userID := user.(auth.User).ID
 
-	// 🆕 GET IP ADDRESS FOR AUDIT LOGGING
+	// GET IP ADDRESS FOR AUDIT LOGGING
 	ip := middleware.GetIPFromContext(c)
 
 	if err := h.Service.DeleteEntity(id, userID, ip); err != nil {
@@ -265,7 +308,7 @@ func (h *Handler) DeleteEntity(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Temple deleted successfully"})
 }
 
-// Temple Admin → Get devotees by entity
+// Temple Admin/Standard User → Get devotees by entity - UPDATED ACCESS CHECK
 func (h *Handler) GetDevoteesByEntity(c *gin.Context) {
 	entityIDParam := c.Param("id")
 	entityIDUint, err := strconv.ParseUint(entityIDParam, 10, 64)
@@ -287,17 +330,39 @@ func (h *Handler) GetDevoteesByEntity(c *gin.Context) {
 		return
 	}
 
-	// Check permissions
+	// Get user
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	userObj := user.(auth.User)
+
+	// Use the new enhanced access check method
 	entityID := uint(entityIDUint)
-	hasAccess := (accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityID) ||
-		(accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityID)
+	hasAccess := h.Service.CheckUserHasEntityAccess(
+		userObj.ID,
+		userObj.Role.RoleName,
+		entityID,
+		accessContext.DirectEntityID,
+		accessContext.AssignedEntityID,
+	)
 
 	if !hasAccess {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You don't have access to devotees for this entity"})
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "You don't have access to devotees for this entity",
+			"debug_info": map[string]interface{}{
+				"entity_id": entityID,
+				"user_id": userObj.ID,
+				"role": userObj.Role.RoleName,
+				"direct_entity_id": accessContext.DirectEntityID,
+				"assigned_entity_id": accessContext.AssignedEntityID,
+			},
+		})
 		return
 	}
 
-	// ✅ Fetch devotees for the given entity
+	// Fetch devotees for the given entity
 	devotees, err := h.Service.GetDevotees(uint(entityIDUint))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch devotees"})
@@ -307,7 +372,7 @@ func (h *Handler) GetDevoteesByEntity(c *gin.Context) {
 	c.JSON(http.StatusOK, devotees)
 }
 
-// Temple Admin → Get devotee statistics for entity
+// Temple Admin/Standard User → Get devotee statistics for entity - UPDATED ACCESS CHECK
 func (h *Handler) GetDevoteeStats(c *gin.Context) {
 	entityIDStr := c.Param("id")
 	entityIDUint, err := strconv.ParseUint(entityIDStr, 10, 64)
@@ -328,13 +393,35 @@ func (h *Handler) GetDevoteeStats(c *gin.Context) {
 		return
 	}
 
-	// Check permissions
+	// Get user
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	userObj := user.(auth.User)
+
+	// Use the new enhanced access check method
 	entityID := uint(entityIDUint)
-	hasAccess := (accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityID) ||
-		(accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityID)
+	hasAccess := h.Service.CheckUserHasEntityAccess(
+		userObj.ID,
+		userObj.Role.RoleName,
+		entityID,
+		accessContext.DirectEntityID,
+		accessContext.AssignedEntityID,
+	)
 
 	if !hasAccess {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You don't have access to devotee stats for this entity"})
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "You don't have access to devotee stats for this entity",
+			"debug_info": map[string]interface{}{
+				"entity_id": entityID,
+				"user_id": userObj.ID,
+				"role": userObj.Role.RoleName,
+				"direct_entity_id": accessContext.DirectEntityID,
+				"assigned_entity_id": accessContext.AssignedEntityID,
+			},
+		})
 		return
 	}
 
@@ -348,7 +435,7 @@ func (h *Handler) GetDevoteeStats(c *gin.Context) {
 	c.JSON(http.StatusOK, stats)
 }
 
-// Temple Admin → Update devotee membership status
+// Temple Admin/Standard User → Update devotee membership status - UPDATED ACCESS CHECK
 // PATCH /entities/:entityID/devotees/:userID/status
 func (h *Handler) UpdateDevoteeMembershipStatus(c *gin.Context) {
 	entityIDUint, err := strconv.ParseUint(c.Param("entityID"), 10, 64)
@@ -375,13 +462,35 @@ func (h *Handler) UpdateDevoteeMembershipStatus(c *gin.Context) {
 		return
 	}
 
-	// Check entity access
+	// Get user
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	userObj := user.(auth.User)
+
+	// Use the new enhanced access check method
 	entityID := uint(entityIDUint)
-	hasAccess := (accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityID) ||
-		(accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityID)
+	hasAccess := h.Service.CheckUserHasEntityAccess(
+		userObj.ID,
+		userObj.Role.RoleName,
+		entityID,
+		accessContext.DirectEntityID,
+		accessContext.AssignedEntityID,
+	)
 
 	if !hasAccess {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You don't have access to manage devotees for this entity"})
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "You don't have access to manage devotees for this entity",
+			"debug_info": map[string]interface{}{
+				"entity_id": entityID,
+				"user_id": userObj.ID,
+				"role": userObj.Role.RoleName,
+				"direct_entity_id": accessContext.DirectEntityID,
+				"assigned_entity_id": accessContext.AssignedEntityID,
+			},
+		})
 		return
 	}
 
@@ -409,7 +518,7 @@ func (h *Handler) UpdateDevoteeMembershipStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Membership status updated successfully"})
 }
 
-// Temple Admin → Dashboard Summary
+// Temple Admin/Standard User → Dashboard Summary
 // GET /entities/dashboard-summary
 func (h *Handler) GetDashboardSummary(c *gin.Context) {
 	// Get access context
