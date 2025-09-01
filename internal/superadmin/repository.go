@@ -449,14 +449,21 @@ func (r *Repository) GetUsers(ctx context.Context, limit, page int, search, role
 			}
 		}
 
-		// Conditionally populate TenantAssignmentDetails
-if tenantName != nil {
-    user.TenantAssignmentDetails = &TenantAssignmentDetails{
-        TenantName: *tenantName,
-        AssignedOn: *assignmentCreatedAt, // This matches the struct field
-        UpdatedOn:  *assignmentUpdatedAt,  // This also matches the struct field
-    }
-}
+		// Conditionally populate TenantAssignmentDetails and set assignment flags
+		if tenantName != nil {
+			user.TenantAssignmentDetails = &TenantAssignmentDetails{
+				TenantName: *tenantName,
+				AssignedOn: *assignmentCreatedAt,
+				UpdatedOn:  *assignmentUpdatedAt,
+			}
+			// Set assignment flags for UserResponse
+			user.Assigned = true
+			user.AssignedDate = assignmentCreatedAt
+			user.ReassignmentDate = assignmentUpdatedAt
+		} else {
+			user.Assigned = false
+		}
+
 		users = append(users, user)
 	}
 
@@ -543,14 +550,21 @@ func (r *Repository) GetUserWithDetails(ctx context.Context, userID uint) (*User
 		}
 	}
 
-	// Conditionally populate TenantAssignmentDetails
-if tenantName != nil {
-    user.TenantAssignmentDetails = &TenantAssignmentDetails{
-        TenantName: *tenantName,
-        AssignedOn: *assignmentCreatedAt,
-        UpdatedOn:  *assignmentUpdatedAt,
-    }
-}
+	// Conditionally populate TenantAssignmentDetails and set assignment flags
+	if tenantName != nil {
+		user.TenantAssignmentDetails = &TenantAssignmentDetails{
+			TenantName: *tenantName,
+			AssignedOn: *assignmentCreatedAt,
+			UpdatedOn:  *assignmentUpdatedAt,
+		}
+		// Set assignment flags for UserResponse
+		user.Assigned = true
+		user.AssignedDate = assignmentCreatedAt
+		user.ReassignmentDate = assignmentUpdatedAt
+	} else {
+		user.Assigned = false
+	}
+
 	return &user, nil
 }
 

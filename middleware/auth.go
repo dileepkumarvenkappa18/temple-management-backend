@@ -11,6 +11,7 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/auth"
 )
 
+// AuthMiddleware handles JWT authentication and sets up access context
 func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -53,57 +54,61 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 			return
 		}
 
-		// ✅ Set user and user_id in context
+		// Set user in context
 		c.Set("user", user)
-		c.Set("user_id", user.ID) // <-- Needed for reports
+		c.Set("user_id", user.ID)
 		c.Set("claims", claims)
 
-		// ========= Tenant / Entity resolution =========
-		var assignedTenantID *uint
-		if user.RoleID == 1 && strings.Contains(c.Request.URL.Path, "/entities/all/reports/") {
-			id := user.ID
-			assignedTenantID = &id
-
-			if tenantQuery := c.Query("tenant_id"); tenantQuery != "" && tenantQuery != "all" {
-				if tid, err := strconv.ParseUint(tenantQuery, 10, 32); err == nil {
-					id := uint(tid)
-					assignedTenantID = &id
-				}
-			}
-		} else {
-			if tenantIDParam := c.Param("id"); tenantIDParam != "" && tenantIDParam != "all" {
-				if tid, err := strconv.ParseUint(tenantIDParam, 10, 32); err == nil {
-					id := uint(tid)
-					assignedTenantID = &id
-				}
-			} else if tenantQuery := c.Query("tenant_id"); tenantQuery != "" && tenantQuery != "all" {
-				if tid, err := strconv.ParseUint(tenantQuery, 10, 32); err == nil {
-					id := uint(tid)
-					assignedTenantID = &id
-				}
-			} else if tenantsQuery := c.Query("tenants"); tenantsQuery != "" {
-				tenantIDs := strings.Split(tenantsQuery, ",")
-				if len(tenantIDs) > 0 && tenantIDs[0] != "" && tenantIDs[0] != "all" {
-					if tid, err := strconv.ParseUint(tenantIDs[0], 10, 32); err == nil {
-						id := uint(tid)
-						assignedTenantID = &id
-					}
-				}
-			}
-
-			if assignedTenantID == nil {
-				if assignedTenantIDFloat, exists := claims["assigned_tenant_id"]; exists {
-					if tenantID, ok := assignedTenantIDFloat.(float64); ok && tenantID > 0 {
-						id := uint(tenantID)
-						assignedTenantID = &id
-					}
-				}
-			}
-		}
-
+		// FIXED: Proper tenant resolution
+		assignedTenantID := ResolveTenantID(c, user, claims)
+		
+		// Create access context
 		accessContext := ResolveAccessContext(user, assignedTenantID)
 		c.Set("access_context", accessContext)
 
 		c.Next()
 	}
+}
+
+// FIXED: Simplified tenant ID resolution
+func ResolveTenantID(c *gin.Context, user auth.User, claims jwt.MapClaims) *uint {
+	// Priority 1: URL parameter (for specific tenant access)
+	if tenantIDParam := c.Param("id"); tenantIDParam != "" && tenantIDParam != "all" {
+		if tid, err := strconv.ParseUint(tenantIDParam, 10, 32); err == nil {
+			id := uint(tid)
+			return &id
+		}
+	}
+
+	// Priority 2: Query parameter
+	if tenantQuery := c.Query("tenant_id"); tenantQuery != "" && tenantQuery != "all" {
+		if tid, err := strconv.ParseUint(tenantQuery, 10, 32); err == nil {
+			id := uint(tid)
+			return &id
+		}
+	}
+
+	// Priority 3: Header (X-Tenant-ID)
+	if tenantHeader := c.GetHeader("X-Tenant-ID"); tenantHeader != "" && tenantHeader != "all" {
+		if tid, err := strconv.ParseUint(tenantHeader, 10, 32); err == nil {
+			id := uint(tid)
+			return &id
+		}
+	}
+
+	// Priority 4: JWT token assigned_tenant_id
+	if assignedTenantIDFloat, exists := claims["assigned_tenant_id"]; exists {
+		if tenantID, ok := assignedTenantIDFloat.(float64); ok && tenantID > 0 {
+			id := uint(tenantID)
+			return &id
+		}
+	}
+
+	// For standarduser and monitoringuser, they must have an assigned tenant
+	if user.Role.RoleName == "standarduser" || user.Role.RoleName == "monitoringuser" {
+		// Return their own entity ID as the assigned tenant
+		return user.EntityID
+	}
+
+	return nil
 }

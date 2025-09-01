@@ -23,15 +23,15 @@ type TempleApprovalCount struct {
 
 type TenantWithDetails struct {
 	// User details
-	ID           uint      `json:"id"`
-	FullName     string    `json:"full_name"`
-	Email        string    `json:"email"`
-	Phone        string    `json:"phone"`
-	RoleID       uint      `json:"role_id"`
-	Status       string    `json:"status"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	
+	ID        uint      `json:"id"`
+	FullName  string    `json:"full_name"`
+	Email     string    `json:"email"`
+	Phone     string    `json:"phone"`
+	RoleID    uint      `json:"role_id"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+
 	// Temple details
 	TempleDetails *TenantTempleDetails `json:"temple_details,omitempty"`
 }
@@ -55,7 +55,7 @@ type CreateUserRequest struct {
 	Password          string `json:"password" binding:"required,min=6"`
 	Phone             string `json:"phone" binding:"required"`
 	Role              string `json:"role" binding:"required"`
-	
+
 	// Temple admin specific fields (required only for templeadmin role)
 	TempleName        string `json:"templeName"`
 	TemplePlace       string `json:"templePlace"`
@@ -68,7 +68,7 @@ type UpdateUserRequest struct {
 	FullName          string `json:"fullName"`
 	Email             string `json:"email" binding:"email"`
 	Phone             string `json:"phone"`
-	
+
 	// Temple admin specific fields (only for templeadmin role)
 	TempleName        string `json:"templeName"`
 	TemplePlace       string `json:"templePlace"`
@@ -79,30 +79,34 @@ type UpdateUserRequest struct {
 
 // NEW: Struct for tenant selection (different from assignment)
 type TenantSelectionResponse struct {
-    ID           uint   `json:"id"`
-    Name         string `json:"name"`
-    Email        string `json:"email"`
-    TempleName   string `json:"templeName"`
-    Location     string `json:"location"`
-    Status       string `json:"status"`
-    TemplesCount int    `json:"templesCount"`
-    ImageUrl     string `json:"imageUrl,omitempty"`
+	ID           uint   `json:"id"`
+	Name         string `json:"name"`
+	Email        string `json:"email"`
+	TempleName   string `json:"templeName"`
+	Location     string `json:"location"`
+	Status       string `json:"status"`
+	TemplesCount int    `json:"templesCount"`
+	ImageUrl     string `json:"imageUrl,omitempty"`
 }
 
 type UserResponse struct {
-    ID        uint      `json:"id"`
-    FullName  string    `json:"full_name"`
-    Email     string    `json:"email"`
-    Phone     string    `json:"phone"`
-    Role      UserRole  `json:"role"`
-    Status    string    `json:"status"`
-    CreatedAt time.Time `json:"created_at"`
-    UpdatedAt time.Time `json:"updated_at"`
+	ID        uint      `json:"id"`
+	FullName  string    `json:"full_name"`
+	Email     string    `json:"email"`
+	Phone     string    `json:"phone"`
+	Role      UserRole  `json:"role"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 
-    // Temple details for templeadmin users
-    TempleDetails           *TenantTempleDetails    `json:"temple_details,omitempty"`
-    // Add backticks here
-    TenantAssignmentDetails *TenantAssignmentDetails `json:"tenant_assignment_details,omitempty"`
+	// Assignment details exposed directly for Vue
+	Assigned          bool       `json:"assigned"`
+	AssignedDate      *time.Time `json:"assignedDate,omitempty"`
+	ReassignmentDate  *time.Time `json:"reassignmentDate,omitempty"`
+
+	// Temple details for templeadmin users
+	TempleDetails           *TenantTempleDetails     `json:"temple_details,omitempty"`
+	TenantAssignmentDetails *TenantAssignmentDetails `json:"tenant_assignment_details,omitempty"`
 }
 
 type UserRole struct {
@@ -122,17 +126,15 @@ type AssignableTenant struct {
 }
 
 // AssignRequest holds the user IDs and the single tenant ID for assignment.
-// Corrected backend struct definition
 type AssignRequest struct {
-    UserID   uint `json:"userId" binding:"required"`
-    TenantID uint `json:"tenantId" binding:"required"`
+	UserID   uint `json:"userId" binding:"required"`
+	TenantID uint `json:"tenantId" binding:"required"`
 }
 
 // AssignTenantsRequest holds the tenant IDs to be assigned to a user.
 type AssignTenantsRequest struct {
 	TenantIDs []uint `json:"tenant_ids" binding:"required"`
 }
-
 
 // TenantListResponse holds the details of a single tenant for the list view.
 type TenantListResponse struct {
@@ -143,14 +145,13 @@ type TenantListResponse struct {
 }
 
 type TenantAssignmentDetails struct {
-	TenantName  string    `json:"tenant_name"`
-	AssignedOn  time.Time `json:"assigned_on"`
-	UpdatedOn   time.Time `json:"updated_on"`
+	TenantName string    `json:"tenant_name"`
+	AssignedOn time.Time `json:"assigned_on"`
+	UpdatedOn  time.Time `json:"updated_on"`
 }
 
 // ================ TEMPLE DETAILS FOR API RESPONSE ================
 
-// TempleDetails represents the temple details for API response
 type TempleDetails struct {
 	ID    uint   `json:"id"`
 	Name  string `json:"name"`
@@ -180,9 +181,8 @@ type BulkUserCSV struct {
 
 // BulkUploadResult represents response after processing bulk upload.
 type BulkUploadResult struct {
-	
-	TotalRows    int `json:"total_rows"`
-	SuccessCount int `json:"success_count"`
-	FailedCount  int `json:"failed_count"`
-	Errors       []string `json:"errors,omitempty"` // ✅ add this
+	TotalRows    int      `json:"total_rows"`
+	SuccessCount int      `json:"success_count"`
+	FailedCount  int      `json:"failed_count"`
+	Errors       []string `json:"errors,omitempty"`
 }
