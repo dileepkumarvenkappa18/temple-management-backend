@@ -461,12 +461,17 @@ tenantRoutes.Use(middleware.RequireTempleAccess()) // restrict to members of thi
 {
     // Read operations - all 3 roles can access
     tenantRoutes.GET("/management", tenantHandler.GetUsers)
+	// Add this inside the tenant routes group
+tenantRoutes.PATCH("/:id/user/:userId/status", tenantHandler.UpdateUserStatus)
 
     // Write operations - only templeadmin + standarduser
+
+	
     writeRoutes := tenantRoutes.Group("")
     writeRoutes.Use(middleware.RequireWriteAccess())
     {
         writeRoutes.POST("/", tenantHandler.CreateOrUpdateUser)
+		writeRoutes.PUT("/:userId", tenantHandler.UpdateUser)
         // Deleted the DELETE route as per updated requirements
     }
 }

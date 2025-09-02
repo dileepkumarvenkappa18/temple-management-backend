@@ -2,6 +2,7 @@ package tenant
 
 import (
     "errors"
+	"time"
     "gorm.io/gorm"
     "log"
 )
@@ -36,7 +37,7 @@ func (r *Repository) GetUserByEmail(email string) (*User, error) {
     return &user, err
 }
 
-// GetTenantUsers fetches all users assigned to a tenant
+// GetTenantUsers fetches all users assigned to a tenant (both active and inactive)
 func (r *Repository) GetTenantUsers(tenantID uint, role string) ([]UserResponse, error) {
     log.Printf("REPOSITORY: Fetching users for tenant ID: %d", tenantID)
     var userResponses []UserResponse
@@ -45,7 +46,7 @@ func (r *Repository) GetTenantUsers(tenantID uint, role string) ([]UserResponse,
     query := r.db.Table("users u").
         Select("u.id, u.full_name as name, u.email, u.phone, u.status, u.created_at").
         Joins("JOIN tenant_user_assignments tua ON u.id = tua.user_id").
-        Where("tua.tenant_id = ? AND tua.status = 'active'", tenantID)
+        Where("tua.tenant_id = ?", tenantID) // Removed the status filter to show all users
     
     // Execute the query
     err := query.Scan(&userResponses).Error
@@ -124,6 +125,86 @@ func (r *Repository) UpdateTenantUserAssignment(userID, tenantID, createdBy uint
             Update("updated_at", gorm.Expr("NOW()")).
             Error
     }
+}
+
+// CheckUserBelongsToTenant checks if a user is assigned to a tenant
+func (r *Repository) CheckUserBelongsToTenant(userID, tenantID uint) (bool, error) {
+    var count int64
+    err := r.db.Model(&TenantUserAssignment{}).
+        Where("user_id = ? AND tenant_id = ?", userID, tenantID).
+        Count(&count).Error
+    
+    return count > 0, err
+}
+
+// GetUserByID gets a user by their ID
+func (r *Repository) GetUserByID(userID uint) (*User, error) {
+    var user User
+    err := r.db.Where("id = ?", userID).First(&user).Error
+    if err != nil {
+        return nil, err
+    }
+    return &user, nil
+}
+
+// UpdateUserDetails updates a user's details in the users table
+// UpdateUserDetails updates a user's details in the users table
+func (r *Repository) UpdateUserDetails(userID uint, input UserInput) error {
+    // Get role ID from role name if provided
+    var roleID uint
+    var err error
+    if input.Role != "" {
+        roleID, err = r.GetRoleIDByName(input.Role)
+        if err != nil {
+            log.Printf("Error getting role ID: %v", err)
+            // Continue with update even if role lookup fails
+        }
+    }
+
+    // Prepare updates map
+    updates := map[string]interface{}{
+        "full_name": input.Name,
+        "email":     input.Email,
+        "phone":     input.Phone,
+        "updated_at": time.Now(),
+    }
+    
+    // Add role_id if we got a valid one
+    if roleID > 0 {
+        updates["role_id"] = roleID
+    }
+
+    // Debug the update operation
+    log.Printf("🔵 Updating user %d with details: %+v", userID, updates)
+    
+    return r.db.Model(&User{}).Where("id = ?", userID).Updates(updates).Error
+}
+
+// UpdateUserStatus updates a user's status in both tenant_user_assignments and users tables
+func (r *Repository) UpdateUserStatus(userID, tenantID uint, status string) error {
+    // Start a transaction
+    tx := r.db.Begin()
+    
+    // Update tenant_user_assignments table
+    if err := tx.Model(&TenantUserAssignment{}).
+        Where("user_id = ? AND tenant_id = ?", userID, tenantID).
+        Update("status", status).
+        Update("updated_at", time.Now()).Error; err != nil {
+        tx.Rollback()
+        return err
+    }
+    
+    // Update users table
+    if err := tx.Model(&User{}).
+        Where("id = ?", userID).
+        Update("status", status).
+        Update("updated_at", time.Now()).Error; err != nil {
+        tx.Rollback()
+        return err
+    }
+    
+    // Commit the transaction
+    return tx.Commit().Error
 }
 
 // GetRoleIDByName gets role ID by name

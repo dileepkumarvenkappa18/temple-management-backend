@@ -17,6 +17,158 @@ func NewHandler(service *Service) *Handler {
     return &Handler{service: service}
 }
 
+// UpdateUser handles the PUT request to update a user
+// UpdateUser handles the PUT request to update a user
+func (h *Handler) UpdateUser(c *gin.Context) {
+    // Get tenant ID and user ID from route parameters
+    tenantIDStr := c.Param("id")
+    userIDStr := c.Param("userId")
+    
+    log.Printf("🔵 Updating user %s for tenant %s", userIDStr, tenantIDStr)
+    
+    tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tenant ID"})
+        return
+    }
+    
+    userID, err := strconv.ParseUint(userIDStr, 10, 64)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+        return
+    }
+    
+    // First log raw data for debugging
+    var rawData map[string]interface{}
+    if err := c.ShouldBindJSON(&rawData); err != nil {
+        log.Printf("🔴 Error binding raw JSON: %v", err)
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON format"})
+        return
+    }
+    
+    log.Printf("🔵 Received raw update data: %+v", rawData)
+    
+    // Check if this is a status-only update
+    if status, exists := rawData["Status"].(string); exists && len(rawData) <= 2 { // Allow for Status and maybe ID
+        log.Printf("🔵 Processing as status update: %s for user %d", status, userID)
+        
+        // Check if user belongs to this tenant
+        exists, err := h.service.repo.CheckUserBelongsToTenant(uint(userID), uint(tenantID))
+        if err != nil {
+            log.Printf("🔴 Error checking user-tenant relationship: %v", err)
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify user-tenant relationship"})
+            return
+        }
+        
+        if !exists {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "User does not belong to this tenant"})
+            return
+        }
+        
+        // Update status in both tables
+        err = h.service.repo.UpdateUserStatus(uint(userID), uint(tenantID), status)
+        if err != nil {
+            log.Printf("🔴 Error updating status: %v", err)
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update status: " + err.Error()})
+            return
+        }
+        
+        c.JSON(http.StatusOK, gin.H{
+            "message": "Status updated successfully",
+        })
+        return
+    }
+    
+    // Handle as a full user update by creating a UserInput from the raw data
+    input := UserInput{}
+    
+    // Only set fields that are present in the raw data
+    if name, ok := rawData["Name"].(string); ok {
+        input.Name = name
+    }
+    if email, ok := rawData["Email"].(string); ok {
+        input.Email = email
+    }
+    if phone, ok := rawData["Phone"].(string); ok {
+        input.Phone = phone
+    }
+    if role, ok := rawData["Role"].(string); ok {
+        input.Role = role
+    }
+    if password, ok := rawData["Password"].(string); ok {
+        input.Password = password
+    }
+    if status, ok := rawData["Status"].(string); ok {
+        input.Status = status
+    }
+    
+    log.Printf("🔵 Updating user %d for tenant %d: %s (%s), Role: %s, Status: %s", 
+        userID, tenantID, input.Name, input.Email, input.Role, input.Status)
+    
+    // Check if we have the minimum required fields
+    if input.Name == "" || input.Email == "" {
+        log.Printf("🔴 Missing required fields: Name or Email")
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Name and Email are required fields"})
+        return
+    }
+    
+    // Update the user with the gathered input
+    user, err := h.service.UpdateUser(uint(tenantID), uint(userID), input, input.Status)
+    if err != nil {
+        log.Printf("🔴 Error updating user: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user: " + err.Error()})
+        return
+    }
+    
+    log.Printf("✅ User updated successfully: %+v", user)
+    c.JSON(http.StatusOK, gin.H{
+        "message": "User updated successfully",
+        "user": user,
+    })
+}
+
+// UpdateUserStatus updates only a user's status
+func (h *Handler) UpdateUserStatus(c *gin.Context) {
+    tenantIDStr := c.Param("id")
+    userIDStr := c.Param("userId")
+
+    log.Printf("🔵 Updating status for user %s in tenant %s", userIDStr, tenantIDStr)
+
+    tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tenant ID"})
+        return
+    }
+
+    userID, err := strconv.ParseUint(userIDStr, 10, 64)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+        return
+    }
+
+    var statusData struct {
+        Status string `json:"Status"`
+    }
+
+    if err := c.ShouldBindJSON(&statusData); err == nil && statusData.Status != "" {
+        log.Printf("🔵 Received status update: %s for user %d", statusData.Status, userID)
+
+        user, err := h.service.UpdateUser(uint(tenantID), uint(userID), UserInput{}, statusData.Status)
+        if err != nil {
+            log.Printf("🔴 Error updating status: %v", err)
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update status: " + err.Error()})
+            return
+        }
+
+        c.JSON(http.StatusOK, gin.H{
+            "message": "Status updated successfully",
+            "user": user,
+        })
+        return
+    }
+} // ✅ Correctly closed
+
+
 // GetUsers handles the GET request to fetch tenant users
 func (h *Handler) GetUsers(c *gin.Context) {
     // CRITICAL DEBUGGING

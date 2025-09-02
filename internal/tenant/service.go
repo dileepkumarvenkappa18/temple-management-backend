@@ -42,6 +42,83 @@ func (s *Service) GetTenantUsers(tenantID uint, role string) ([]UserResponse, er
     return users, nil
 }
 
+
+// UpdateUser updates a user's details and/or status
+// UpdateUser updates a user's details and/or status
+// UpdateUser updates a user's details and/or status
+func (s *Service) UpdateUser(tenantID, userID uint, input UserInput, status string) (*UserResponse, error) {
+    log.Printf("🔵 SERVICE: Updating user %d for tenant %d", userID, tenantID)
+    
+    // First verify that the user belongs to the tenant
+    exists, err := s.repo.CheckUserBelongsToTenant(userID, tenantID)
+    if err != nil {
+        return nil, err
+    }
+    if !exists {
+        return nil, errors.New("user does not belong to this tenant")
+    }
+    
+    // Get the user before update to preserve data
+    currentUser, err := s.repo.GetUserByID(userID)
+    if err != nil {
+        return nil, err
+    }
+    
+    // Update user details in the user table
+    err = s.repo.UpdateUserDetails(userID, input)
+    if err != nil {
+        return nil, err
+    }
+    
+    // Use the provided status or keep the current one
+    userStatus := status
+    if userStatus == "" {
+        userStatus = currentUser.Status
+    }
+    
+    // Update status if provided
+    if status != "" {
+        err = s.repo.UpdateUserStatus(userID, tenantID, status)
+        if err != nil {
+            return nil, err
+        }
+    }
+    
+    // Get the updated user
+    user, err := s.repo.GetUserByID(userID)
+    if err != nil {
+        return nil, err
+    }
+    
+    // Get role ID or name if available
+    roleName := input.Role
+    if roleName == "" {
+        // If role wasn't provided, try to determine from user's role_id
+        // This is simplified - you may need a more complex mapping
+        switch user.RoleID {
+        case 5:
+            roleName = "StandardUser"
+        case 6:
+            roleName = "MonitoringUser"
+        default:
+            roleName = "StandardUser" // Default
+        }
+    }
+    
+    // Construct response
+    response := &UserResponse{
+        ID:        userID,
+        Name:      user.FullName,
+        Email:     user.Email,
+        Phone:     user.Phone,
+        Status:    userStatus, // Use preserved status
+        CreatedAt: user.CreatedAt,
+        Role:      roleName,
+    }
+    
+    return response, nil
+}
+
 // CreateOrUpdateTenantUser creates a new user or updates an existing user's tenant assignment
 func (s *Service) CreateOrUpdateTenantUser(tenantID uint, input UserInput) (*UserResponse, error) {
     log.Printf("🔴 SERVICE: Creating/updating user for tenant %d: %s (%s)", tenantID, input.Name, input.Email)
@@ -120,3 +197,4 @@ func (s *Service) CreateOrUpdateTenantUser(tenantID uint, input UserInput) (*Use
     
     return response, nil
 }
+
