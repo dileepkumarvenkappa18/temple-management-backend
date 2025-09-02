@@ -10,6 +10,20 @@ import (
 // RBACMiddleware checks if the user has one of the allowed roles
 func RBACMiddleware(allowedRoles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Special case for standard users accessing entities endpoint
+		if c.Request.URL.Path == "/api/v1/entities" && 
+		   (c.Request.Method == "GET" || c.Request.Method == "POST") {
+			userVal, exists := c.Get("user")
+			if exists {
+				if user, ok := userVal.(auth.User); ok && 
+				   (user.Role.RoleName == "standarduser" || user.Role.RoleName == "monitoringuser") {
+					// Allow standard users to access this endpoint for both GET and POST
+					c.Next()
+					return
+				}
+			}
+		}
+
 		userVal, exists := c.Get("user")
 		if !exists {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})

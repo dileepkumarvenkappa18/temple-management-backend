@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"database/sql"
 	"time"
 	"math"
 
@@ -21,6 +22,27 @@ func NewRepository(db *gorm.DB) *Repository {
 // Create a new temple entity
 func (r *Repository) CreateEntity(e *Entity) error {
 	return r.DB.Create(e).Error
+}
+
+// Get tenant ID for a user from tenant_user_assignments table
+func (r *Repository) GetTenantIDForUser(userID uint) (uint, error) {
+	var tenantID uint
+	
+	err := r.DB.Table("tenant_user_assignments").
+		Select("tenant_id").
+		Where("user_id = ? AND status = ?", userID, "active").
+		Limit(1).
+		Scan(&tenantID).
+		Error
+		
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil // User is not assigned to any tenant
+		}
+		return 0, err
+	}
+	
+	return tenantID, nil
 }
 
 // Create an approval request for the temple (linked to auth module)
@@ -258,25 +280,3 @@ func (r *Repository) CountUpcomingEventsThisWeek(entityID uint) (int64, error) {
 		Count(&count).Error
 	return count, err
 }
-// GetUserRole retrieves the role for a specific user
-func (r *Repository) GetUserRole(userID uint) (string, error) {
-    var roleName string
-    err := r.DB.Table("users").
-        Select("user_roles.role_name").
-        Joins("JOIN user_roles ON users.role_id = user_roles.id").
-        Where("users.id = ?", userID).
-        Scan(&roleName).Error
-    return roleName, err
-}
-
-// GetTenantIDForUser retrieves the tenant ID for a standard user
-func (r *Repository) GetTenantIDForUser(userID uint) (uint, error) {
-    var tenantID uint
-    err := r.DB.Table("tenant_user_assignments").
-        Select("tenant_id").
-        Where("user_id = ? AND status = ?", userID, "active").
-        Limit(1).
-        Scan(&tenantID).Error
-    return tenantID, err
-}
-

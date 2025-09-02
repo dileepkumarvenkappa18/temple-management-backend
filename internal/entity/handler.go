@@ -21,6 +21,7 @@ func NewHandler(s *Service) *Handler {
 }
 
 
+// Temple Admin → Create Temple (Triggers approval request)
 func (h *Handler) CreateEntity(c *gin.Context) {
     var input Entity
 
@@ -44,32 +45,38 @@ func (h *Handler) CreateEntity(c *gin.Context) {
     }
     userObj := user.(auth.User)
     userID := userObj.ID
-    
-    // Check permissions explicitly to allow standard users
-    if userObj.Role.RoleName != "superadmin" && 
-       userObj.Role.RoleName != "templeadmin" && 
-       userObj.Role.RoleName != "standarduser" {
-        c.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to create temples"})
-        return
-    }
-    
-    // For standard users, get the tenant ID from the X-Tenant-ID header
-    createdBy := userID
-    if userObj.Role.RoleName == "standarduser" {
-        tenantIDHeader := c.GetHeader("X-Tenant-ID")
-        if tenantIDHeader != "" {
-            // Convert the header value to uint
-            if tenantID, err := strconv.ParseUint(tenantIDHeader, 10, 64); err == nil {
-                createdBy = uint(tenantID)
-                log.Printf("Standard user %d creating temple as tenant %d", userID, createdBy)
+    userRole := userObj.Role.RoleName
+
+    // Set CreatedBy based on user role
+    if userRole == "standarduser" || userRole == "monitoringuser" {
+        // Get access context for tenant ID
+        accessContextVal, exists := c.Get("access_context")
+        if exists {
+            accessContext, ok := accessContextVal.(middleware.AccessContext)
+            if ok && accessContext.AssignedEntityID != nil {
+                // Use the tenant ID that the standard user is assigned to
+                input.CreatedBy = *accessContext.AssignedEntityID
+                log.Printf("Standard user %d creating temple with tenant ID %d as creator", userID, input.CreatedBy)
+            } else {
+                // Fallback to user ID if access context doesn't have assigned entity
+                input.CreatedBy = userID
+                log.Printf("No tenant assignment found for standard user %d, using user ID as creator", userID)
             }
+        } else {
+            // Fallback if access context doesn't exist
+            input.CreatedBy = userID
+            log.Printf("No access context for standard user %d, using user ID as creator", userID)
         }
+    } else {
+        // For superadmin and templeadmin, use their user ID
+        input.CreatedBy = userID
     }
-    
-    // Set the creator ID directly
-    input.CreatedBy = createdBy
-    
-    // 🆕 GET IP ADDRESS FOR AUDIT LOGGING
+
+    if input.Status == "" {
+        input.Status = "pending"
+    }
+
+    // GET IP ADDRESS FOR AUDIT LOGGING
     ip := middleware.GetIPFromContext(c)
 
     if err := h.Service.CreateEntity(&input, userID, ip); err != nil {
@@ -80,9 +87,6 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 
     c.JSON(http.StatusAccepted, gin.H{"message": "Temple registration request submitted successfully"})
 }
-
-
-
 
 
 // Super Admin → View all temples, Temple Admin → View only their created temples
