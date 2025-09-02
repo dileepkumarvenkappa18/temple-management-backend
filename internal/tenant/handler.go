@@ -207,7 +207,6 @@ func (h *Handler) GetUsers(c *gin.Context) {
 }
 
 // CreateOrUpdateUser handles the POST request to create or update a tenant user
-// CreateOrUpdateUser handles the POST request to create or update a tenant user
 func (h *Handler) CreateOrUpdateUser(c *gin.Context) {
     // CRITICAL DEBUGGING
     log.Printf("🔴 CREATE USER - Request path: %s", c.Request.URL.Path)
@@ -251,16 +250,45 @@ func (h *Handler) CreateOrUpdateUser(c *gin.Context) {
         return
     }
     
-    log.Printf("Creating/updating user %s (%s) for tenant %d", input.Name, input.Email, tenantID)
+    // Get the creator ID from the authenticated user
+    // This assumes you have middleware that sets user ID in the context
+    creatorID, exists := c.Get("user_id")
+    if !exists {
+        // If no user ID in context, try to get it from JWT claim or header
+        creatorIDStr := c.GetHeader("X-User-ID")
+        if creatorIDStr != "" {
+            creatorIDUint, err := strconv.ParseUint(creatorIDStr, 10, 64)
+            if err == nil {
+                creatorID = uint(creatorIDUint)
+            }
+        }
+    }
     
-    user, err := h.service.CreateOrUpdateTenantUser(uint(tenantID), input)
+    // Default to 1 if we couldn't get a valid creator ID
+    creatorIDUint := uint(1)
+    if id, ok := creatorID.(uint); ok {
+        creatorIDUint = id
+    } else if id, ok := creatorID.(float64); ok {
+        creatorIDUint = uint(id)
+    } else if id, ok := creatorID.(int); ok {
+        creatorIDUint = uint(id)
+    } else if id, ok := creatorID.(uint64); ok {
+        creatorIDUint = uint(id)
+    }
+    
+    log.Printf("Creating/updating user %s (%s) for tenant %d by creator %d", 
+               input.Name, input.Email, tenantID, creatorIDUint)
+    
+    // Pass the creator ID to the service
+    user, err := h.service.CreateOrUpdateTenantUser(uint(tenantID), input, creatorIDUint)
     if err != nil {
         log.Printf("Failed to create/update user: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create/update user: " + err.Error()})
         return
     }
     
-    log.Printf("User created/updated successfully: %s (ID: %d) for tenant ID: %d", user.Email, user.ID, tenantID)
+    log.Printf("User created/updated successfully: %s (ID: %d) for tenant ID: %d", 
+               user.Email, user.ID, tenantID)
     c.JSON(http.StatusOK, gin.H{
         "message": "User created and assigned successfully",
         "user": user,

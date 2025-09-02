@@ -120,8 +120,10 @@ func (s *Service) UpdateUser(tenantID, userID uint, input UserInput, status stri
 }
 
 // CreateOrUpdateTenantUser creates a new user or updates an existing user's tenant assignment
-func (s *Service) CreateOrUpdateTenantUser(tenantID uint, input UserInput) (*UserResponse, error) {
-    log.Printf("🔴 SERVICE: Creating/updating user for tenant %d: %s (%s)", tenantID, input.Name, input.Email)
+// CreateOrUpdateTenantUser creates a new user or updates an existing user's tenant assignment
+func (s *Service) CreateOrUpdateTenantUser(tenantID uint, input UserInput, creatorID uint) (*UserResponse, error) {
+    log.Printf("🔴 SERVICE: Creating/updating user for tenant %d: %s (%s) by creator %d", 
+               tenantID, input.Name, input.Email, creatorID)
     
     // Check if user exists
     existingUser, err := s.repo.GetUserByEmail(input.Email)
@@ -131,7 +133,6 @@ func (s *Service) CreateOrUpdateTenantUser(tenantID uint, input UserInput) (*Use
     }
     
     var userID uint
-    createdBy := uint(1) // Default to system user, ideally get from context
     
     if existingUser != nil {
         // User exists, use their ID
@@ -174,17 +175,17 @@ func (s *Service) CreateOrUpdateTenantUser(tenantID uint, input UserInput) (*Use
         log.Printf("New user created with ID: %d", userID)
     }
     
-    // Create or update tenant user assignment - explicitly passing tenantID parameter
-    log.Printf("🔴 SERVICE: Passing tenant ID %d to repository", tenantID)
-    err = s.repo.UpdateTenantUserAssignment(userID, tenantID, createdBy)
+    // Create or update tenant user assignment - explicitly passing tenantID and creatorID parameters
+    log.Printf("🔴 SERVICE: Passing tenant ID %d and creator ID %d to repository", tenantID, creatorID)
+    err = s.repo.UpdateTenantUserAssignment(userID, tenantID, creatorID)
     if err != nil {
         log.Printf("Failed to assign user to tenant: %v", err)
         return nil, errors.New("failed to assign user to tenant: " + err.Error())
     }
     
-    log.Printf("User successfully assigned to tenant %d", tenantID)
+    log.Printf("User successfully assigned to tenant %d by creator %d", tenantID, creatorID)
     
-    // Construct user response directly rather than re-fetching
+    // Construct user response
     response := &UserResponse{
         ID:        userID,
         Name:      input.Name,
@@ -192,7 +193,7 @@ func (s *Service) CreateOrUpdateTenantUser(tenantID uint, input UserInput) (*Use
         Phone:     input.Phone,
         Status:    "active",
         CreatedAt: time.Now(),
-        Role:      input.Role, // Use input role for consistency
+        Role:      input.Role,
     }
     
     return response, nil
