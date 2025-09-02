@@ -5,6 +5,7 @@ import (
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/database"
 	"github.com/sharath018/temple-management-backend/internal/auditlog" // NEW IMPORT
+	"github.com/sharath018/temple-management-backend/internal/tenant"
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/donation"
 	"github.com/sharath018/temple-management-backend/internal/entity"
@@ -447,6 +448,28 @@ eventRoutes.Use(middleware.RequireTempleAccess())
 			notificationRoutes.GET("/logs", notificationHandler.GetMyNotifications)
 		}
 	}
+
+
+// ========== Tenant User Management ==========
+tenantRepo := tenant.NewRepository(database.DB)
+tenantService := tenant.NewService(tenantRepo)
+tenantHandler := tenant.NewHandler(tenantService)
+
+// 🔐 Tenant user routes (templeadmin + standarduser manage, monitoringuser read-only)
+tenantRoutes := protected.Group("/tenants/:id/user")
+tenantRoutes.Use(middleware.RequireTempleAccess()) // restrict to members of this temple
+{
+    // Read operations - all 3 roles can access
+    tenantRoutes.GET("/management", tenantHandler.GetUsers)
+
+    // Write operations - only templeadmin + standarduser
+    writeRoutes := tenantRoutes.Group("")
+    writeRoutes.Use(middleware.RequireWriteAccess())
+    {
+        writeRoutes.POST("/", tenantHandler.CreateOrUpdateUser)
+        // Deleted the DELETE route as per updated requirements
+    }
+}
 
 // ========== Reports ==========
 {
