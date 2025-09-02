@@ -100,9 +100,9 @@ type UserResponse struct {
 	UpdatedAt time.Time `json:"updated_at"`
 
 	// Assignment details exposed directly for Vue
-	Assigned          bool       `json:"assigned"`
-	AssignedDate      *time.Time `json:"assignedDate,omitempty"`
-	ReassignmentDate  *time.Time `json:"reassignmentDate,omitempty"`
+	TenantAssigned     string     `json:"tenant_assigned,omitempty"` // now stores tenant name
+	AssignedDate       *time.Time `json:"assignedDate,omitempty"`
+	ReassignmentDate   *time.Time `json:"reassignmentDate,omitempty"`
 
 	// Temple details for templeadmin users
 	TempleDetails           *TenantTempleDetails     `json:"temple_details,omitempty"`

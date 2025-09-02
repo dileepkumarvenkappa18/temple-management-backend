@@ -449,19 +449,126 @@ func (r *Repository) GetUsers(ctx context.Context, limit, page int, search, role
 			}
 		}
 
-		// Conditionally populate TenantAssignmentDetails and set assignment flags
+// Conditionally populate TenantAssignmentDetails and TenantAssigned string
 		if tenantName != nil {
 			user.TenantAssignmentDetails = &TenantAssignmentDetails{
 				TenantName: *tenantName,
 				AssignedOn: *assignmentCreatedAt,
 				UpdatedOn:  *assignmentUpdatedAt,
 			}
-			// Set assignment flags for UserResponse
-			user.Assigned = true
+			// Set tenant name directly in UserResponse
+			user.TenantAssigned = *tenantName
 			user.AssignedDate = assignmentCreatedAt
 			user.ReassignmentDate = assignmentUpdatedAt
 		} else {
-			user.Assigned = false
+			user.TenantAssigned = "" // no tenant assigned
+		}
+
+		users = append(users, user)
+	}
+
+	return users, total, nil
+}
+
+// Get all users with optional tenant assignment details
+func (r *Repository) GetUsersWithDetails(ctx context.Context) ([]UserResponse, int64, error) {
+	var users []UserResponse
+	var total int64
+
+	// Query setup (simplified, replace with your actual query)
+	rows, err := r.db.WithContext(ctx).Table("users").
+		Select(`
+			users.id,
+			users.full_name,
+			users.email,
+			users.phone,
+			users.status,
+			users.created_at,
+			users.updated_at,
+			user_roles.id as role_id,
+			user_roles.role_name,
+			td.id as temple_id,
+			td.temple_name,
+			td.temple_place,
+			td.temple_address,
+			td.temple_phone_no,
+			td.temple_description,
+			td.created_at as temple_created_at,
+			td.updated_at as temple_updated_at,
+			tenant_user.full_name as tenant_name,
+			tua.created_at as assignment_created_at,
+			tua.updated_at as assignment_updated_at
+		`).
+		Joins("JOIN user_roles ON users.role_id = user_roles.id").
+		Joins("LEFT JOIN tenant_details td ON users.id = td.user_id AND user_roles.role_name = 'templeadmin'").
+		Joins("LEFT JOIN tenant_user_assignments tua ON users.id = tua.user_id AND user_roles.role_name IN ('standarduser','monitoringuser') AND tua.status='active'").
+		Joins("LEFT JOIN users tenant_user ON tua.tenant_id = tenant_user.id").
+		Rows()
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var user UserResponse
+		var templeID *uint
+		var templeName, templePlace, templeAddress, templePhoneNo, templeDescription *string
+		var templeCreatedAt, templeUpdatedAt *time.Time
+		var tenantName *string
+		var assignmentCreatedAt, assignmentUpdatedAt *time.Time
+
+		err := rows.Scan(
+			&user.ID,
+			&user.FullName,
+			&user.Email,
+			&user.Phone,
+			&user.Status,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+			&user.Role.ID,
+			&user.Role.RoleName,
+			&templeID,
+			&templeName,
+			&templePlace,
+			&templeAddress,
+			&templePhoneNo,
+			&templeDescription,
+			&templeCreatedAt,
+			&templeUpdatedAt,
+			&tenantName,
+			&assignmentCreatedAt,
+			&assignmentUpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		// Temple details
+		if templeID != nil {
+			user.TempleDetails = &TenantTempleDetails{
+				ID:                *templeID,
+				TempleName:        safeString(templeName),
+				TemplePlace:       safeString(templePlace),
+				TempleAddress:     safeString(templeAddress),
+				TemplePhoneNo:     safeString(templePhoneNo),
+				TempleDescription: safeString(templeDescription),
+				CreatedAt:         safeTime(templeCreatedAt),
+				UpdatedAt:         safeTime(templeUpdatedAt),
+			}
+		}
+
+		// Tenant assignment details
+		if tenantName != nil {
+			user.TenantAssignmentDetails = &TenantAssignmentDetails{
+				TenantName: *tenantName,
+				AssignedOn: safeTime(assignmentCreatedAt),
+				UpdatedOn:  safeTime(assignmentUpdatedAt),
+			}
+			user.TenantAssigned = *tenantName
+			user.AssignedDate = assignmentCreatedAt
+			user.ReassignmentDate = assignmentUpdatedAt
+		} else {
+			user.TenantAssigned = ""
 		}
 
 		users = append(users, user)
@@ -532,42 +639,55 @@ func (r *Repository) GetUserWithDetails(ctx context.Context, userID uint) (*User
 		&assignmentCreatedAt,
 		&assignmentUpdatedAt,
 	)
-
 	if err != nil {
 		return nil, err
 	}
 
+	// Temple details
 	if templeID != nil {
 		user.TempleDetails = &TenantTempleDetails{
 			ID:                *templeID,
-			TempleName:        *templeName,
-			TemplePlace:       *templePlace,
-			TempleAddress:     *templeAddress,
-			TemplePhoneNo:     *templePhoneNo,
-			TempleDescription: *templeDescription,
-			CreatedAt:         *templeCreatedAt,
-			UpdatedAt:         *templeUpdatedAt,
+			TempleName:        safeString(templeName),
+			TemplePlace:       safeString(templePlace),
+			TempleAddress:     safeString(templeAddress),
+			TemplePhoneNo:     safeString(templePhoneNo),
+			TempleDescription: safeString(templeDescription),
+			CreatedAt:         safeTime(templeCreatedAt),
+			UpdatedAt:         safeTime(templeUpdatedAt),
 		}
 	}
 
-	// Conditionally populate TenantAssignmentDetails and set assignment flags
+	// Tenant assignment details
 	if tenantName != nil {
 		user.TenantAssignmentDetails = &TenantAssignmentDetails{
 			TenantName: *tenantName,
-			AssignedOn: *assignmentCreatedAt,
-			UpdatedOn:  *assignmentUpdatedAt,
+			AssignedOn: safeTime(assignmentCreatedAt),
+			UpdatedOn:  safeTime(assignmentUpdatedAt),
 		}
-		// Set assignment flags for UserResponse
-		user.Assigned = true
+		user.TenantAssigned = *tenantName
 		user.AssignedDate = assignmentCreatedAt
 		user.ReassignmentDate = assignmentUpdatedAt
 	} else {
-		user.Assigned = false
+		user.TenantAssigned = ""
 	}
 
 	return &user, nil
 }
 
+// Helper functions to safely dereference pointers
+func safeString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func safeTime(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
+}
 
 // Update user
 func (r *Repository) UpdateUser(ctx context.Context, userID uint, user *auth.User) error {
