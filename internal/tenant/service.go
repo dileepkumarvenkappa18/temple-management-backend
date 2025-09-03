@@ -34,8 +34,18 @@ func (s *Service) GetTenantUsers(tenantID uint, role string) ([]UserResponse, er
     
     // Add role for frontend compatibility
     for i := range users {
-        // Default role if not available from DB
-        users[i].Role = "StandardUser"
+        // Only set default role if not available from DB
+        if users[i].Role == "" {
+            users[i].Role = "StandardUser"
+        } else {
+            // Convert role names to PascalCase for frontend compatibility
+            switch users[i].Role {
+            case "monitoringuser":
+                users[i].Role = "MonitoringUser"
+            case "standarduser":
+                users[i].Role = "StandardUser"
+            }
+        }
     }
     
     log.Printf("Service: Returning %d users", len(users))

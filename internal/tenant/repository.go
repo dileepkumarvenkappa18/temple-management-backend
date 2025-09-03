@@ -38,15 +38,17 @@ func (r *Repository) GetUserByEmail(email string) (*User, error) {
 }
 
 // GetTenantUsers fetches all users assigned to a tenant (both active and inactive)
+// GetTenantUsers fetches all users assigned to a tenant (both active and inactive)
 func (r *Repository) GetTenantUsers(tenantID uint, role string) ([]UserResponse, error) {
     log.Printf("REPOSITORY: Fetching users for tenant ID: %d", tenantID)
     var userResponses []UserResponse
     
-    // Build the query
+    // Build the query - now including the role information
     query := r.db.Table("users u").
-        Select("u.id, u.full_name as name, u.email, u.phone, u.status, u.created_at").
+        Select("u.id, u.full_name as name, u.email, u.phone, u.status, u.created_at, ur.role_name as role").
         Joins("JOIN tenant_user_assignments tua ON u.id = tua.user_id").
-        Where("tua.tenant_id = ?", tenantID) // Removed the status filter to show all users
+        Joins("LEFT JOIN user_roles ur ON u.role_id = ur.id"). // Join with the roles table
+        Where("tua.tenant_id = ?", tenantID)
     
     // Execute the query
     err := query.Scan(&userResponses).Error

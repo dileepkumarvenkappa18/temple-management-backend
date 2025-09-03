@@ -129,12 +129,11 @@ func (h *Handler) GetAllEntities(c *gin.Context) {
 		entities, err = h.Service.GetAllEntities()
 		
 	case "templeadmin":
-		// Temple admins get entities they created
-		if accessContext.DirectEntityID != nil {
-			entities, err = h.Service.GetEntitiesByCreator(user.ID)
-		} else {
-			c.JSON(http.StatusForbidden, gin.H{"error": "No entity assigned to this admin"})
-			return
+		// Temple admins get entities they created - MODIFIED: Remove DirectEntityID check
+		entities, err = h.Service.GetEntitiesByCreator(user.ID)
+		if err != nil || len(entities) == 0 {
+			log.Printf("No entities found for templeadmin %d, proceeding with empty list", user.ID)
+			entities = []Entity{} // Ensure we return an empty array rather than nil
 		}
 		
 	case "standarduser", "monitoringuser":

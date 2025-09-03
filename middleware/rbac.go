@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 	
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auth"
@@ -78,6 +79,13 @@ func RequireTempleAccess() gin.HandlerFunc {
 		accessContext, ok := accessContextVal.(AccessContext)
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid access context"})
+			return
+		}
+		
+		// Check if this is a tenant user management endpoint
+		// Allow these endpoints even if no temple exists
+		if strings.Contains(c.Request.URL.Path, "/tenants/") && strings.Contains(c.Request.URL.Path, "/user") {
+			c.Next()
 			return
 		}
 		
