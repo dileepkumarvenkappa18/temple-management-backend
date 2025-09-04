@@ -2,19 +2,19 @@ package superadmin
 
 import (
 	"context"
+	"encoding/csv"
 	"errors"
+	"fmt"
+	"io"
+	"mime/multipart"
 	"regexp"
 	"strings"
 	"time"
-	"fmt"
+
 	"gorm.io/gorm"
-	"encoding/csv"
-    "io"
-    "mime/multipart"
 
-
-	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
+	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/entity"
 	"github.com/sharath018/temple-management-backend/utils"
 	"golang.org/x/crypto/bcrypt"
@@ -133,10 +133,10 @@ func (s *Service) RejectTenant(ctx context.Context, userID uint, adminID uint, r
 
 	// Log successful rejection
 	s.auditService.LogAction(ctx, &adminID, nil, "TENANT_REJECTED", map[string]interface{}{
-		"target_user_id":      userID,
-		"target_user_email":   user.Email,
-		"target_user_name":    user.FullName,
-		"rejection_reason":    reason,
+		"target_user_id":    userID,
+		"target_user_email": user.Email,
+		"target_user_name":  user.FullName,
+		"rejection_reason":  reason,
 	}, ip, "success")
 
 	return nil
@@ -144,6 +144,11 @@ func (s *Service) RejectTenant(ctx context.Context, userID uint, adminID uint, r
 
 func (s *Service) GetPendingTenants(ctx context.Context) ([]auth.User, error) {
 	return s.repo.GetPendingTenants(ctx)
+}
+
+// GetTenantDetails fetches tenant details including temple information
+func (s *Service) GetTenantDetails(ctx context.Context, tenantID uint) (*TenantTempleDetails, error) {
+	return s.repo.GetTenantDetails(ctx, tenantID)
 }
 
 func (s *Service) GetTenantsWithFilters(ctx context.Context, status string, limit, page int) ([]TenantWithDetails, int64, error) {
@@ -218,10 +223,10 @@ func (s *Service) ApproveEntity(ctx context.Context, entityID uint, adminID uint
 
 	// Log successful approval
 	s.auditService.LogAction(ctx, &adminID, &entityID, "ENTITY_APPROVED", map[string]interface{}{
-		"entity_id":    entityID,
-		"entity_name":  ent.Name,
-		"entity_type":  ent.TempleType,
-		"created_by":   ent.CreatedBy,
+		"entity_id":   entityID,
+		"entity_name": ent.Name,
+		"entity_type": ent.TempleType,
+		"created_by":  ent.CreatedBy,
 	}, ip, "success")
 
 	return nil
@@ -270,11 +275,11 @@ func (s *Service) RejectEntity(ctx context.Context, entityID uint, adminID uint,
 
 	// Log successful rejection
 	s.auditService.LogAction(ctx, &adminID, &entityID, "ENTITY_REJECTED", map[string]interface{}{
-		"entity_id":         entityID,
-		"entity_name":       ent.Name,
-		"entity_type":       ent.TempleType,
-		"created_by":        ent.CreatedBy,
-		"rejection_reason":  reason,
+		"entity_id":        entityID,
+		"entity_name":      ent.Name,
+		"entity_type":      ent.TempleType,
+		"created_by":       ent.CreatedBy,
+		"rejection_reason": reason,
 	}, ip, "success")
 
 	return nil
@@ -441,10 +446,10 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, adminID
 
 	// Log successful user creation
 	s.auditService.LogAction(ctx, &adminID, nil, "USER_CREATED", map[string]interface{}{
-		"target_user_id":   user.ID,
-		"target_email":     req.Email,
-		"target_name":      req.FullName,
-		"target_role":      req.Role,
+		"target_user_id":     user.ID,
+		"target_email":       req.Email,
+		"target_name":        req.FullName,
+		"target_role":        req.Role,
 		"has_temple_details": strings.ToLower(req.Role) == "templeadmin",
 	}, ip, "success")
 
@@ -499,7 +504,7 @@ func (s *Service) UpdateUser(ctx context.Context, userID uint, req UpdateUserReq
 	// Prepare user updates
 	userUpdates := &auth.User{}
 	changes := make(map[string]interface{})
-	
+
 	if req.FullName != "" {
 		userUpdates.FullName = req.FullName
 		changes["full_name"] = req.FullName
@@ -533,13 +538,13 @@ func (s *Service) UpdateUser(ctx context.Context, userID uint, req UpdateUserReq
 	}
 
 	// Update temple details if user is templeadmin and temple details provided
-	if existingUser.Role.RoleName == "templeadmin" && 
-		(req.TempleName != "" || req.TemplePlace != "" || req.TempleAddress != "" || 
-		 req.TemplePhoneNo != "" || req.TempleDescription != "") {
-		
+	if existingUser.Role.RoleName == "templeadmin" &&
+		(req.TempleName != "" || req.TemplePlace != "" || req.TempleAddress != "" ||
+			req.TemplePhoneNo != "" || req.TempleDescription != "") {
+
 		tenantDetails := &auth.TenantDetails{}
 		templeChanges := make(map[string]interface{})
-		
+
 		if req.TempleName != "" {
 			tenantDetails.TempleName = req.TempleName
 			templeChanges["temple_name"] = req.TempleName
@@ -569,16 +574,16 @@ func (s *Service) UpdateUser(ctx context.Context, userID uint, req UpdateUserReq
 			}, ip, "failure")
 			return errors.New("failed to update temple details")
 		}
-		
+
 		changes["temple_details"] = templeChanges
 	}
 
 	// Log successful user update
 	s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATED", map[string]interface{}{
-		"target_user_id":   userID,
-		"target_email":     existingUser.Email,
-		"target_name":      existingUser.FullName,
-		"changes":          changes,
+		"target_user_id": userID,
+		"target_email":   existingUser.Email,
+		"target_name":    existingUser.FullName,
+		"changes":        changes,
 	}, ip, "success")
 
 	return nil
@@ -820,10 +825,10 @@ func (s *Service) UpdateRole(ctx context.Context, roleID uint, req *auth.UpdateR
 		}
 		if exists {
 			s.auditService.LogAction(ctx, &adminID, nil, "ROLE_UPDATE_FAILED", map[string]interface{}{
-				"role_id":      roleID,
-				"role_name":    role.RoleName,
-				"new_name":     req.RoleName,
-				"reason":       "role name already exists",
+				"role_id":   roleID,
+				"role_name": role.RoleName,
+				"new_name":  req.RoleName,
+				"reason":    "role name already exists",
 			}, ip, "failure")
 			return errors.New("role name already exists")
 		}
@@ -916,8 +921,6 @@ func (s *Service) ToggleRoleStatus(ctx context.Context, roleID uint, status stri
 	return nil
 }
 
-
-
 // ================== PASSWORD RESET ==================
 
 // SearchUserByEmail searches for a user by email
@@ -978,29 +981,28 @@ func (s *Service) ResetUserPassword(ctx context.Context, userID uint, newPasswor
 	return nil
 }
 
-
 // ================== NEW: USER ASSIGNMENT ==================
 
 // GetTenantsForAssignment fetches a list of approved temple admins and their temple details
 // suitable for displaying in the "Assign" feature's tenant selection.
 func (s *Service) GetTenantsForAssignment(ctx context.Context, limit, page int) ([]AssignableTenant, int64, error) {
-    // Check for valid pagination parameters
-    if limit <= 0 {
-        limit = 10 // Default limit if not provided or invalid
-    }
-    if page <= 0 {
-        page = 1 // Default page if not provided or invalid
-    }
+	// Check for valid pagination parameters
+	if limit <= 0 {
+		limit = 10 // Default limit if not provided or invalid
+	}
+	if page <= 0 {
+		page = 1 // Default page if not provided or invalid
+	}
 
-    // Call the repository with the new parameters.
-    // The repository should now handle the actual pagination query.
-    tenants, total, err := s.repo.GetAssignableTenants(ctx, limit, page)
-    if err != nil {
-        // Return a generic error to the handler for security and consistency
-        return nil, 0, errors.New("failed to fetch assignable tenants")
-    }
+	// Call the repository with the new parameters.
+	// The repository should now handle the actual pagination query.
+	tenants, total, err := s.repo.GetAssignableTenants(ctx, limit, page)
+	if err != nil {
+		// Return a generic error to the handler for security and consistency
+		return nil, 0, errors.New("failed to fetch assignable tenants")
+	}
 
-    return tenants, total, nil
+	return tenants, total, nil
 }
 
 // AssignUsersToTenant assigns a batch of users (Standard/Monitoring) to a specific temple (entity).
@@ -1082,16 +1084,16 @@ func (s *Service) AssignUsersToTenant(ctx context.Context, userID uint, tenantID
 // NEW: Get tenants for selection based on user role
 func (s *Service) GetTenantsForSelection(ctx context.Context, userID uint, userRole string) ([]TenantSelectionResponse, error) {
 	roleNameLower := strings.ToLower(userRole)
-	
+
 	switch roleNameLower {
 	case "superadmin":
 		// SuperAdmin can see all active temple admins
 		return s.repo.GetTenantsForSelection(ctx)
-		
+
 	case "standarduser", "monitoringuser":
 		// StandardUser and MonitoringUser can only see assigned tenants
 		return s.repo.GetAssignedTenantsForUser(ctx, userID)
-		
+
 	default:
 		return nil, errors.New("unauthorized: invalid role for tenant selection")
 	}
@@ -1100,8 +1102,9 @@ func (s *Service) GetTenantsForSelection(ctx context.Context, userID uint, userR
 // GetTenantsWithTempleDetails fetches tenants with their temple details based on role and status
 // GetTenantsWithTempleDetails fetches tenants with their temple details based on role and status
 func (s *Service) GetTenantsWithTempleDetails(ctx context.Context, role, status string) ([]TenantResponse, error) {
-    return s.repo.GetTenantsWithTempleDetails(ctx, role, status)
+	return s.repo.GetTenantsWithTempleDetails(ctx, role, status)
 }
+
 // BulkUploadUsers parses CSV and inserts users
 func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, adminID uint, ip string) (*BulkUploadResult, error) {
 	reader := csv.NewReader(file)
@@ -1139,10 +1142,10 @@ func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, admi
 		}
 
 		// Parse CSV columns
-		fullName := strings.TrimSpace(record[0])    // Full Name
-		email := strings.TrimSpace(record[1])       // Email
-		phone := strings.TrimSpace(record[2])       // Phone
-		password := strings.TrimSpace(record[3])    // Password - FIXED: Actually use this
+		fullName := strings.TrimSpace(record[0])                  // Full Name
+		email := strings.TrimSpace(record[1])                     // Email
+		phone := strings.TrimSpace(record[2])                     // Phone
+		password := strings.TrimSpace(record[3])                  // Password - FIXED: Actually use this
 		roleName := strings.ToLower(strings.TrimSpace(record[4])) // Role
 		status := strings.ToLower(strings.TrimSpace(record[5]))   // Status
 

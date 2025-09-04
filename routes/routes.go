@@ -48,7 +48,7 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	})
 
 	api := r.Group("/api/v1")
-	api.Use(middleware.RateLimiterMiddleware()) // 🛡 Global rate limit: 5 req/sec per IP
+	api.Use(middleware.RateLimiter()) // 🛡 Global rate limit: 5 req/sec per IP
 	api.Use(middleware.AuditMiddleware())       // 🔍 NEW: Audit middleware to capture IP
 
 	// ========== Initialize Audit Log Module ==========
@@ -120,6 +120,8 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		// 🔁 Paginated list of entities with optional ?status=pending&limit=10&page=1
 		superadminRoutes.GET("/entities", superadminHandler.GetEntitiesWithFilters)
 		superadminRoutes.PATCH("/entities/:id/approval", superadminHandler.UpdateEntityApprovalStatus)
+
+		superadminRoutes.GET("/tenant-details/:id", superadminHandler.GetTenantDetails)
 
 		// ================ DASHBOARD METRICS ================
 		superadminRoutes.GET("/tenant-approval-count", superadminHandler.GetTenantApprovalCounts)

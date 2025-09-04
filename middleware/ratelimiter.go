@@ -10,15 +10,14 @@ import (
 )
 
 // RateLimiterMiddleware returns a Gin middleware that limits requests per IP
-func RateLimiterMiddleware() gin.HandlerFunc {
-	// 🕒 Define the rate limit: 5 requests per second
-	rate := limiter.Rate{
-		Period: 1 * time.Second,
-		Limit:  5,
-	}
-
-	// 🧠 In-memory store (use Redis in prod if you need distributed limiting)
-	store := memory.NewStore()
+// In middleware/ratelimiter.go
+func RateLimiter() gin.HandlerFunc {
+    // Increase these values
+    store := memory.NewStore()
+    rate := limiter.Rate{
+        Period: 1 * time.Minute, // Keep the period
+        Limit:  100,             // Increase from default (likely 60)
+    }
 
 	// 📊 Limiter instance
 	instance := limiter.New(store, rate)

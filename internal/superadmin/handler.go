@@ -180,6 +180,25 @@ func (h *Handler) UpdateEntityApprovalStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Entity status updated successfully"})
 }
 
+// GET /superadmin/tenant-details/:id
+// GET /superadmin/tenant-details/:id
+func (h *Handler) GetTenantDetails(c *gin.Context) {
+    idStr := c.Param("id")
+    tenantID, err := strconv.ParseUint(idStr, 10, 64)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tenant ID"})
+        return
+    }
+    
+    details, err := h.service.GetTenantDetails(c.Request.Context(), uint(tenantID))
+    if err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "Tenant details not found"})
+        return
+    }
+    
+    c.JSON(http.StatusOK, details)
+}
+
 // GET /superadmin/tenant-approval-counts
 func (h *Handler) GetTenantApprovalCounts(c *gin.Context) {
 	ctx := c.Request.Context()

@@ -974,12 +974,11 @@ func (r *Repository) GetAssignedTenantsForUser(ctx context.Context, userID uint)
 
 
 
-// New method to get tenants with temple details
-// New method to get tenants with temple details
+// Get tenants with temple details
 func (r *Repository) GetTenantsWithTempleDetails(ctx context.Context, role, status string) ([]TenantResponse, error) {
     var responses []TenantResponse
     
-    // Base query with dynamic WHERE clause
+    // Updated query with explicit JOIN to tenant_details table
     query := `
         SELECT 
             u.id, 
@@ -988,8 +987,8 @@ func (r *Repository) GetTenantsWithTempleDetails(ctx context.Context, role, stat
             ur.role_name as "role",
             u.status,
             e.id as temple_id, 
-            COALESCE(e.name, td.temple_name) as temple_name, 
-            COALESCE(e.city, td.temple_place) as temple_city, 
+            COALESCE(td.temple_name, e.name) as temple_name, 
+            COALESCE(td.temple_place, e.city) as temple_city, 
             COALESCE(e.state, '') as temple_state
         FROM 
             users u
@@ -1042,19 +1041,58 @@ func (r *Repository) GetTenantsWithTempleDetails(ctx context.Context, role, stat
             return nil, err
         }
         
-        if templeID.Valid && templeName.Valid {
-            tr.Temple = &TempleDetails{
-                ID:    uint(templeID.Int64),
-                Name:  templeName.String,
-                City:  templeCity.String,
-                State: templeState.String,
-            }
+        // Always create a Temple object with available data
+        tr.Temple = &TempleDetails{
+            ID:    uint(templeID.Int64),
+            Name:  templeName.String,
+            City:  templeCity.String,
+            State: templeState.String,
         }
         
         responses = append(responses, tr)
     }
     
     return responses, nil
+}
+
+// GetTenantDetails fetches tenant details including temple information
+func (r *Repository) GetTenantDetails(ctx context.Context, tenantID uint) (*TenantTempleDetails, error) {
+    var details TenantTempleDetails
+    
+    // Try to get details from tenant_details table
+    err := r.db.WithContext(ctx).
+        Table("tenant_details").
+        Where("user_id = ?", tenantID).
+        First(&details).Error
+    
+    if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+        return nil, err
+    }
+    
+    // If not found in tenant_details, try to get from entities table
+    if errors.Is(err, gorm.ErrRecordNotFound) {
+        var entity entity.Entity
+        err = r.db.WithContext(ctx).
+            Where("created_by = ?", tenantID).
+            First(&entity).Error
+        
+        if err != nil {
+            return nil, err
+        }
+        
+        details = TenantTempleDetails{
+            ID:                entity.ID,
+            TempleName:        entity.Name,
+            TemplePlace:       entity.City,
+            TempleAddress:     entity.StreetAddress,
+            TemplePhoneNo:     entity.Phone,
+            TempleDescription: entity.Description,
+            CreatedAt:         entity.CreatedAt,
+            UpdatedAt:         entity.UpdatedAt,
+        }
+    }
+    
+    return &details, nil
 }
 
 // BulkCreateUsers inserts multiple users safely with better error handling
