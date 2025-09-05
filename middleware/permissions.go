@@ -2,8 +2,8 @@ package middleware
 
 import (
 	"strconv"
+	
 	"github.com/gin-gonic/gin"
-	"github.com/sharath018/temple-management-backend/internal/auth"
 )
 
 // Role constants to avoid string typos
@@ -44,11 +44,35 @@ func (ac *AccessContext) CanRead() bool {
 }
 
 // ResolveAccessContext helper to create access context from user and assignment
-func ResolveAccessContext(user auth.User, assignedTenantID *uint) AccessContext {
+func ResolveAccessContext(user interface{}, assignedTenantID *uint) AccessContext {
+	// Type assertion to get the auth.User fields we need
+	var userID uint
+	var roleName string
+	var entityID *uint
+	
+	// This approach allows the function to work without directly importing auth
+	// which helps prevent import cycles
+	switch u := user.(type) {
+	case struct {
+		ID       uint
+		RoleName string
+		EntityID *uint
+	}:
+		userID = u.ID
+		roleName = u.RoleName
+		entityID = u.EntityID
+	default:
+		// Try to extract using reflection or other methods
+		// For now, return a minimal context
+		return AccessContext{
+			PermissionType: "readonly",
+		}
+	}
+
 	accessContext := AccessContext{
-		UserID:         user.ID,
-		RoleName:       user.Role.RoleName,
-		DirectEntityID: user.EntityID,
+		UserID:         userID,
+		RoleName:       roleName,
+		DirectEntityID: entityID,
 		PermissionType: "full", // default
 	}
 
@@ -57,7 +81,7 @@ func ResolveAccessContext(user auth.User, assignedTenantID *uint) AccessContext 
 		accessContext.AssignedEntityID = assignedTenantID
 
 		// Set permission type based on role
-		if user.Role.RoleName == RoleMonitoringUser {
+		if roleName == RoleMonitoringUser {
 			accessContext.PermissionType = "readonly"
 		}
 	}

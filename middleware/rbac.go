@@ -53,7 +53,7 @@ func RBACMiddleware(allowedRoles ...string) gin.HandlerFunc {
 	}
 }
 
-// FIXED: RequireTempleAccess with proper tenant isolation
+// RequireTempleAccess with proper tenant isolation
 func RequireTempleAccess() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get user from context
@@ -115,6 +115,23 @@ func RequireTempleAccess() gin.HandlerFunc {
 				})
 				return
 			}
+			c.Next()
+			return
+		
+		case RoleDevotee, RoleVolunteer:
+			// Devotees and volunteers can access their associated temple
+			if accessContext.AssignedEntityID == nil && accessContext.DirectEntityID == nil {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+					"error": "devotee/volunteer must have an associated entity",
+				})
+				return
+			}
+			
+			// Set permission type to readonly for regular endpoints
+			// This ensures devotees can view but not modify temple data
+			accessContext.PermissionType = "readonly"
+			c.Set("access_context", accessContext)
+			
 			c.Next()
 			return
 			

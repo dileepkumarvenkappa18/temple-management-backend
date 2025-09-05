@@ -116,27 +116,54 @@ func (h *Handler) GetEventByID(c *gin.Context) {
 
 // ===========================
 // 📆 Upcoming Events - GET /events/upcoming
+// GetUpcomingEvents - GET /events/upcoming
+// GetUpcomingEvents - GET /events/upcoming
 func (h *Handler) GetUpcomingEvents(c *gin.Context) {
-	accessContext, ok := getAccessContextFromContext(c)
-	if !ok {
-		return
-	}
+    accessContext, ok := getAccessContextFromContext(c)
+    if !ok {
+        return
+    }
 
-	// Check if user has access to an entity
-	entityID := accessContext.GetAccessibleEntityID()
-	if entityID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple"})
-		return
-	}
+    // Get tenant ID from request header for cross-tenant access
+    tenantIDHeader := c.GetHeader("X-Tenant-ID")
+    var tenantID *uint
+    if tenantIDHeader != "" {
+        id, err := strconv.ParseUint(tenantIDHeader, 10, 32)
+        if err == nil {
+            uintID := uint(id)
+            tenantID = &uintID
+        }
+    }
 
-	events, err := h.Service.GetUpcomingEvents(accessContext)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch events"})
-		return
-	}
+    // Use tenant ID from header if present, otherwise use entity ID from access context
+    var targetEntityID *uint
+    if tenantID != nil {
+        targetEntityID = tenantID
+    } else {
+        targetEntityID = accessContext.GetAccessibleEntityID()
+    }
 
-	c.JSON(http.StatusOK, events)
+    if targetEntityID == nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple"})
+        return
+    }
+
+    // Allow access for devotees and volunteers regardless of entity
+    if accessContext.RoleName == "devotee" || accessContext.RoleName == "volunteer" || accessContext.CanRead() {
+        events, err := h.Service.GetUpcomingEvents(accessContext)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch events"})
+            return
+        }
+
+        c.JSON(http.StatusOK, events)
+        return
+    }
+
+    // If not a devotee/volunteer and doesn't have read access
+    c.JSON(http.StatusForbidden, gin.H{"error": "read access denied"})
 }
+
 
 // ===========================
 // 📄 List Events - GET /events?limit=&offset=&search=
@@ -157,13 +184,20 @@ func (h *Handler) ListEvents(c *gin.Context) {
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	search := c.Query("search")
 
-	events, err := h.Service.ListEventsByEntity(accessContext, limit, offset, search)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list events"})
+	// Allow access for devotees and volunteers regardless of entity, similar to GetUpcomingEvents
+	if accessContext.RoleName == "devotee" || accessContext.RoleName == "volunteer" || accessContext.CanRead() {
+		events, err := h.Service.ListEventsByEntity(accessContext, limit, offset, search)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list events"})
+			return
+		}
+
+		c.JSON(http.StatusOK, events)
 		return
 	}
 
-	c.JSON(http.StatusOK, events)
+	// If not a devotee/volunteer and doesn't have read access
+	c.JSON(http.StatusForbidden, gin.H{"error": "read access denied"})
 }
 
 // ===========================

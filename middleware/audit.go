@@ -1,4 +1,3 @@
-
 package middleware
 
 import (
@@ -72,34 +71,3 @@ func GetIPFromContext(c *gin.Context) string {
 	}
 	return getClientIP(c)
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

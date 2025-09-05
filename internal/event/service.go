@@ -190,6 +190,8 @@ func (s *Service) GetEventByID(id uint, accessContext middleware.AccessContext) 
 
 // ===========================
 // 📆 Get Upcoming Events
+// ===========================
+// 📆 Get Upcoming Events
 func (s *Service) GetUpcomingEvents(accessContext middleware.AccessContext) ([]Event, error) {
 	// Get accessible entity ID
 	entityID := accessContext.GetAccessibleEntityID()
@@ -197,11 +199,14 @@ func (s *Service) GetUpcomingEvents(accessContext middleware.AccessContext) ([]E
 		return nil, errors.New("no accessible entity")
 	}
 
-	// Check read permissions
-	if !accessContext.CanRead() {
+	// Check read permissions - We need to ensure devotees have access
+	if !accessContext.CanRead() && accessContext.RoleName != "devotee" && accessContext.RoleName != "volunteer" {
 		return nil, errors.New("read access denied")
 	}
 
+	// Check for cross-tenant access via X-Tenant-ID header
+	// If present, this will be handled by the handler
+	// Here we just need to ensure we return events for the entity ID
 	return s.Repo.GetUpcomingEvents(*entityID)
 }
 
@@ -214,8 +219,8 @@ func (s *Service) ListEventsByEntity(accessContext middleware.AccessContext, lim
 		return nil, errors.New("no accessible entity")
 	}
 
-	// Check read permissions
-	if !accessContext.CanRead() {
+	// Allow devotees and volunteers to see events without explicit read permission
+	if !(accessContext.RoleName == "devotee" || accessContext.RoleName == "volunteer") && !accessContext.CanRead() {
 		return nil, errors.New("read access denied")
 	}
 

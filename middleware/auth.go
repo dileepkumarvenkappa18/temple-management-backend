@@ -59,15 +59,36 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 		c.Set("user_id", user.ID)
 		c.Set("claims", claims)
 
-		// FIXED: Proper tenant resolution
+		// Extract entity ID from path if available
+		entityIDFromPath := ExtractEntityIDFromPath(c)
+
+		// FIXED: Proper tenant and entity resolution
 		assignedTenantID := ResolveTenantID(c, user, claims)
 		
-		// Create access context
-		accessContext := ResolveAccessContext(user, assignedTenantID)
+		// Create access context with enhanced devotee handling
+		accessContext := ResolveAccessContextWithDevotee(c, user, assignedTenantID, entityIDFromPath)
 		c.Set("access_context", accessContext)
 
 		c.Next()
 	}
+}
+
+// ExtractEntityIDFromPath attempts to extract an entity ID from URL paths like /entity/123/...
+func ExtractEntityIDFromPath(c *gin.Context) *uint {
+	path := c.Request.URL.Path
+	if strings.Contains(path, "/entity/") {
+		parts := strings.Split(path, "/")
+		for i, part := range parts {
+			if part == "entity" && i+1 < len(parts) {
+				entityIDFromPath, err := strconv.ParseUint(parts[i+1], 10, 32)
+				if err == nil {
+					uintID := uint(entityIDFromPath)
+					return &uintID
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // FIXED: Simplified tenant ID resolution
@@ -111,4 +132,56 @@ func ResolveTenantID(c *gin.Context, user auth.User, claims jwt.MapClaims) *uint
 	}
 
 	return nil
+}
+
+// ResolveAccessContextWithDevotee creates an access context with special handling for devotee roles
+func ResolveAccessContextWithDevotee(c *gin.Context, user auth.User, assignedTenantID, entityIDFromPath *uint) AccessContext {
+	// Start with basic access context
+	accessContext := AccessContext{
+		UserID:   user.ID,
+		RoleName: user.Role.RoleName,
+	}
+
+	// Handle permissions and entity access based on role
+	switch user.Role.RoleName {
+	case RoleSuperAdmin:
+		accessContext.PermissionType = "full"
+		accessContext.AssignedEntityID = assignedTenantID
+		
+	case RoleTempleAdmin:
+		accessContext.PermissionType = "full"
+		accessContext.DirectEntityID = user.EntityID
+		
+	case RoleStandardUser:
+		accessContext.PermissionType = "full"
+		accessContext.AssignedEntityID = assignedTenantID
+		
+	case RoleMonitoringUser:
+		accessContext.PermissionType = "readonly"
+		accessContext.AssignedEntityID = assignedTenantID
+		
+	case RoleDevotee, RoleVolunteer:
+		// Devotees and volunteers get readonly access
+		accessContext.PermissionType = "readonly"
+		
+		// Try multiple approaches to find the entity ID, in order of priority:
+		if entityIDFromPath != nil {
+			// 1. Entity ID from URL path (e.g., /entity/123/devotee/dashboard)
+			accessContext.AssignedEntityID = entityIDFromPath
+		} else if entityHeader := c.GetHeader("X-Entity-ID"); entityHeader != "" {
+			// 2. Entity ID from X-Entity-ID header
+			if eid, err := strconv.ParseUint(entityHeader, 10, 32); err == nil {
+				id := uint(eid)
+				accessContext.AssignedEntityID = &id
+			}
+		} else if assignedTenantID != nil {
+			// 3. Tenant ID (often the same as entity ID)
+			accessContext.AssignedEntityID = assignedTenantID
+		} else if user.EntityID != nil {
+			// 4. User's own entity ID
+			accessContext.DirectEntityID = user.EntityID
+		}
+	}
+
+	return accessContext
 }

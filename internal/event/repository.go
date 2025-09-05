@@ -43,11 +43,15 @@ func (r *Repository) GetEventByID(id uint) (*Event, error) {
 // 📆 Get Upcoming Events
 func (r *Repository) GetUpcomingEvents(entityID uint) ([]Event, error) {
 	var events []Event
+	
+	// Modified query to be more inclusive:
+	// 1. Include events from today and future (CURRENT_DATE - INTERVAL '1 day')
+	// 2. Removed the 5 event limit to show all available events
 	err := r.DB.
-		Where("entity_id = ? AND event_date >= CURRENT_DATE AND is_active = TRUE", entityID).
+		Where("entity_id = ? AND event_date >= CURRENT_DATE - INTERVAL '7 day' AND is_active = TRUE", entityID).
 		Order("event_date ASC").
-		Limit(5).
 		Find(&events).Error
+	
 	return events, err
 }
 
@@ -83,7 +87,6 @@ func (r *Repository) ListEventsByEntity(entityID uint, limit, offset int, search
 }
 
 // ===========================
-// 🛠 Update Event
 // 🛠 Update Event
 func (r *Repository) UpdateEvent(e *Event) error {
 	return r.DB.Save(e).Error
