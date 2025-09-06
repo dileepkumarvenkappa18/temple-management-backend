@@ -30,9 +30,12 @@ type Service interface {
 	RequestPasswordReset(email string) error
 	ResetPassword(token string, newPassword string) error
 	Logout() error
-	
-	// NEW: Public roles method
+
+	// Public roles method
 	GetPublicRoles() ([]PublicRoleResponse, error)
+
+	// Check if email exists
+	IsEmailExists(email string) (bool, error)
 }
 
 type service struct {
@@ -77,30 +80,33 @@ func (s *service) Register(in RegisterInput) error {
 		return errors.New("invalid role")
 	}
 
-	// ✅ Enforce Gmail-only email validation
+	// Full name validation: only letters and spaces
+	namePattern := regexp.MustCompile(`^[A-Za-z\s]+$`)
+	if !namePattern.MatchString(in.FullName) {
+		return errors.New("full name must contain only letters and spaces")
+	}
+
+	// Enforce Gmail-only email
 	if !strings.HasSuffix(strings.ToLower(in.Email), "@gmail.com") {
 		return errors.New("only @gmail.com emails are allowed")
 	}
 
-	// ✅ Hash password
+	// Hash password
 	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 
-	// ✅ Status logic
 	status := "active"
 	if roleName == "templeadmin" {
 		status = "pending"
 	}
 
-	// ✅ Clean phone number
 	phone, err := cleanPhone(in.Phone)
 	if err != nil {
 		return err
 	}
 
-	// ✅ Create the user
 	user := &User{
 		FullName:     in.FullName,
 		Email:        in.Email,
@@ -108,14 +114,13 @@ func (s *service) Register(in RegisterInput) error {
 		RoleID:       role.ID,
 		Status:       status,
 		Phone:        phone,
-		CreatedBy: "system",
+		CreatedBy:    "system",
 	}
 
 	if err := s.repo.Create(user); err != nil {
 		return err
 	}
 
-	// ✅ Extra step for templeadmin: Save tenant details + approval request
 	if roleName == "templeadmin" {
 		tenant := &TenantDetails{
 			UserID:            user.ID,
@@ -173,11 +178,11 @@ func (s *service) Login(in LoginInput) (*TokenPair, *User, error) {
 		}
 	}
 
-	// Build tokens
 	accessToken, err := s.generateAccessToken(user)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	refreshToken, err := s.generateRefreshToken(user)
 	if err != nil {
 		return nil, nil, err
@@ -195,24 +200,20 @@ func (s *service) generateAccessToken(user *User) (string, error) {
 		"role_id": user.RoleID,
 		"exp":     time.Now().Add(s.accessTTL).Unix(),
 	}
-	
-	// Add entity_id if it exists
+
 	if user.EntityID != nil {
 		claims["entity_id"] = *user.EntityID
 	}
-	
-	// NEW: Add assigned tenant info for standarduser/monitoringuser
+
 	if user.Role.RoleName == "standarduser" || user.Role.RoleName == "monitoringuser" {
 		assignedTenantID, err := s.repo.GetAssignedTenantID(user.ID)
 		if err == nil && assignedTenantID != nil {
 			claims["assigned_tenant_id"] = *assignedTenantID
-			
-			// Add permission type based on role
 			permissionType, _ := s.repo.GetUserPermissionType(user.ID)
 			claims["permission_type"] = permissionType
 		}
 	}
-	
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.accessSecret))
 }
@@ -228,7 +229,7 @@ func (s *service) generateRefreshToken(user *User) (string, error) {
 }
 
 // =============================
-// Refresh
+// Refresh Token
 // =============================
 
 func (s *service) Refresh(refreshToken string) (string, error) {
@@ -240,7 +241,7 @@ func (s *service) Refresh(refreshToken string) (string, error) {
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok || claims["user_id"] == nil || claims["role_id"] == nil {
+	if !ok || claims["user_id"] == nil {
 		return "", errors.New("invalid token claims")
 	}
 
@@ -267,13 +268,11 @@ func (s *service) RequestPasswordReset(email string) error {
 	ttl := 15 * time.Minute
 	key := fmt.Sprintf("reset_token:%s", resetToken)
 
-	// Store user ID as value
 	err = utils.SetToken(key, fmt.Sprint(user.ID), ttl)
 	if err != nil {
 		return errors.New("could not save reset token")
 	}
 
-	// Send reset link via email
 	if err := utils.SendResetLink(user.Email, resetToken); err != nil {
 		return errors.New("failed to send email")
 	}
@@ -288,7 +287,6 @@ func (s *service) ResetPassword(token string, newPassword string) error {
 		return errors.New("invalid or expired token")
 	}
 
-	// Convert userID string back to uint
 	var userID uint
 	_, err = fmt.Sscan(val, &userID)
 	if err != nil {
@@ -311,8 +309,7 @@ func (s *service) ResetPassword(token string, newPassword string) error {
 		return errors.New("failed to update password")
 	}
 
-	_ = utils.DeleteToken(key) // Cleanup token
-
+	_ = utils.DeleteToken(key)
 	return nil
 }
 
@@ -321,7 +318,6 @@ func (s *service) ResetPassword(token string, newPassword string) error {
 // =============================
 
 func (s *service) Logout() error {
-	// JWT is stateless — frontend should just clear token
 	return nil
 }
 
@@ -334,7 +330,22 @@ func (s *service) GetUserByID(userID uint) (User, error) {
 }
 
 // =============================
-// Helpers (for reset tokens)
+// Check if email exists
+// =============================
+
+func (s *service) IsEmailExists(email string) (bool, error) {
+	_, err := s.repo.FindByEmail(email)
+	if err != nil {
+		if strings.Contains(err.Error(), "record not found") {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// =============================
+// Helpers
 // =============================
 
 func generateSecureToken() string {
@@ -347,7 +358,6 @@ func cleanPhone(raw string) (string, error) {
 	re := regexp.MustCompile(`\D`)
 	cleaned := re.ReplaceAllString(raw, "")
 
-	// Strip leading 91 if present and length is 12
 	if len(cleaned) == 12 && strings.HasPrefix(cleaned, "91") {
 		cleaned = cleaned[2:]
 	}
@@ -376,3 +386,5 @@ func (s *service) GetPublicRoles() ([]PublicRoleResponse, error) {
 
 	return publicRoles, nil
 }
+
+
