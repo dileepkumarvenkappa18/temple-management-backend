@@ -2,8 +2,8 @@ package event
 
 import (
 	"time"
-
 	"gorm.io/gorm"
+	"fmt"
 )
 
 type Repository struct {
@@ -21,7 +21,7 @@ func (r *Repository) CreateEvent(e *Event) error {
 }
 
 // ===========================
-// 🔍 Get Event By ID
+// 🔍 Get Event By ID with entity validation and proper RSVP counting
 func (r *Repository) GetEventByID(id uint) (*Event, error) {
 	var e Event
 	err := r.DB.First(&e, id).Error
@@ -29,8 +29,12 @@ func (r *Repository) GetEventByID(id uint) (*Event, error) {
 		return nil, err
 	}
 
+	// Get RSVP count for this specific event with entity validation
 	var count int64
-	err = r.DB.Table("rsvps").Where("event_id = ?", id).Count(&count).Error
+	err = r.DB.Table("rsvps").
+		Joins("JOIN events ON events.id = rsvps.event_id").
+		Where("rsvps.event_id = ? AND events.entity_id = ?", id, e.EntityID).
+		Count(&count).Error
 	if err != nil {
 		return nil, err
 	}
@@ -40,23 +44,35 @@ func (r *Repository) GetEventByID(id uint) (*Event, error) {
 }
 
 // ===========================
-// 📆 Get Upcoming Events
+// 📆 Get Upcoming Events - FIXED to use proper entity filtering
 func (r *Repository) GetUpcomingEvents(entityID uint) ([]Event, error) {
 	var events []Event
 	
-	// Modified query to be more inclusive:
-	// 1. Include events from today and future (CURRENT_DATE - INTERVAL '1 day')
-	// 2. Removed the 5 event limit to show all available events
+	// Ensure we only get events from the specified entity
 	err := r.DB.
 		Where("entity_id = ? AND event_date >= CURRENT_DATE - INTERVAL '7 day' AND is_active = TRUE", entityID).
 		Order("event_date ASC").
 		Find(&events).Error
 	
-	return events, err
+	if err != nil {
+		return nil, err
+	}
+
+	// Add RSVP counts for each event - FIXED to ensure entity filtering
+	for i := range events {
+		var count int64
+		r.DB.Table("rsvps").
+			Joins("JOIN events ON events.id = rsvps.event_id").
+			Where("rsvps.event_id = ? AND events.entity_id = ?", events[i].ID, entityID).
+			Count(&count)
+		events[i].RSVPCount = int(count)
+	}
+
+	return events, nil
 }
 
 // ===========================
-// 📄 List Events With Pagination & Search
+// 📄 List Events With Pagination & Search - FIXED entity filtering
 func (r *Repository) ListEventsByEntity(entityID uint, limit, offset int, search string) ([]Event, error) {
 	var events []Event
 
@@ -77,9 +93,13 @@ func (r *Repository) ListEventsByEntity(entityID uint, limit, offset int, search
 		return nil, err
 	}
 
+	// FIXED: Ensure RSVP counts are only from events belonging to the specified entity
 	for i := range events {
 		var count int64
-		r.DB.Table("rsvps").Where("event_id = ?", events[i].ID).Count(&count)
+		r.DB.Table("rsvps").
+			Joins("JOIN events ON events.id = rsvps.event_id").
+			Where("rsvps.event_id = ? AND events.entity_id = ?", events[i].ID, entityID).
+			Count(&count)
 		events[i].RSVPCount = int(count)
 	}
 
@@ -92,7 +112,6 @@ func (r *Repository) UpdateEvent(e *Event) error {
 	return r.DB.Save(e).Error
 }
 
-
 // ===========================
 // ❌ Delete Event
 func (r *Repository) DeleteEvent(id uint, entityID uint) error {
@@ -102,15 +121,37 @@ func (r *Repository) DeleteEvent(id uint, entityID uint) error {
 }
 
 // ===========================
-// 🔢 Count RSVPs for an Event
+// 🔢 Count RSVPs for an Event - FIXED to validate entity ownership
 func (r *Repository) CountRSVPs(eventID uint) (int, error) {
+	// First get the event to determine its entity_id
+	var event Event
+	err := r.DB.First(&event, eventID).Error
+	if err != nil {
+		return 0, err
+	}
+
+	// Now count RSVPs with proper entity validation
 	var count int64
-	err := r.DB.Table("rsvps").Where("event_id = ?", eventID).Count(&count).Error
+	err = r.DB.Table("rsvps").
+		Joins("JOIN events ON events.id = rsvps.event_id").
+		Where("rsvps.event_id = ? AND events.entity_id = ?", eventID, event.EntityID).
+		Count(&count).Error
 	return int(count), err
 }
 
 // ===========================
-// 📊 Event Dashboard Stats
+// 🔢 Count RSVPs for an Event by Entity - Enhanced method for entity-specific counting
+func (r *Repository) CountRSVPsByEntity(eventID uint, entityID uint) (int, error) {
+	var count int64
+	err := r.DB.Table("rsvps").
+		Joins("JOIN events ON events.id = rsvps.event_id").
+		Where("rsvps.event_id = ? AND events.entity_id = ?", eventID, entityID).
+		Count(&count).Error
+	return int(count), err
+}
+
+// ===========================
+// 📊 Event Dashboard Stats - FIXED to use proper entity filtering
 type EventStatsResponse struct {
 	TotalEvents     int `json:"total_events"`
 	ThisMonthEvents int `json:"this_month_events"`
@@ -125,22 +166,22 @@ func (r *Repository) GetEventStats(entityID uint) (*EventStatsResponse, error) {
 	now := time.Now()
 	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 
-	// Total Events
+	// Total Events for this entity only
 	r.DB.Model(&Event{}).
 		Where("entity_id = ?", entityID).
 		Count(&total)
 
-	// This Month's Events
+	// This Month's Events for this entity only
 	r.DB.Model(&Event{}).
 		Where("entity_id = ? AND event_date >= ?", entityID, startOfMonth).
 		Count(&thisMonth)
 
-	// Upcoming Events
+	// Upcoming Events for this entity only
 	r.DB.Model(&Event{}).
 		Where("entity_id = ? AND event_date >= CURRENT_DATE", entityID).
 		Count(&upcoming)
 
-	// Total RSVPs
+	// FIXED: Total RSVPs for events belonging to this entity only
 	r.DB.Table("rsvps").
 		Joins("JOIN events ON events.id = rsvps.event_id").
 		Where("events.entity_id = ?", entityID).
@@ -152,4 +193,26 @@ func (r *Repository) GetEventStats(entityID uint) (*EventStatsResponse, error) {
 	stats.TotalRSVPs = int(totalRSVPs)
 
 	return &stats, nil
+}
+
+// ===========================
+// 🔢 NEW: Get Total RSVP Count by Entity - Additional helper method
+func (r *Repository) GetTotalRSVPsByEntity(entityID uint) (int, error) {
+	var count int64
+	err := r.DB.Table("rsvps").
+		Joins("JOIN events ON events.id = rsvps.event_id").
+		Where("events.entity_id = ?", entityID).
+		Count(&count).Error
+	return int (count), err
+}
+
+// ===========================
+// 🔢 NEW: Get Event Count by Entity - Additional helper method
+func (r *Repository) GetEventCountByEntity(entityID uint) (int, error) {
+	var count int64
+	err := r.DB.Model(&Event{}).
+		Where("entity_id = ?", entityID).
+		Count(&count).Error
+    fmt.Println("count ()=",count)
+	return int(count), err
 }

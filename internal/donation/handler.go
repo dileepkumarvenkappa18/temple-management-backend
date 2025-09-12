@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/middleware"
 )
 
@@ -20,23 +19,77 @@ func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
+// ===========================
+// 📌 Extract Access Context - NEW: Same as event handler
+func getAccessContextFromContext(c *gin.Context) (middleware.AccessContext, bool) {
+	accessContextRaw, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+		return middleware.AccessContext{}, false
+	}
+	
+	accessContext, ok := accessContextRaw.(middleware.AccessContext)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid access context"})
+		return middleware.AccessContext{}, false
+	}
+	
+	return accessContext, true
+}
+
+// ===========================
+// 🌟 Extract Entity ID - FIXED: Removed unused variable
+func getEntityIDFromRequest(c *gin.Context, accessContext middleware.AccessContext) (uint, error) {
+	// Try URL parameter first
+	entityIDParam := c.Param("entity_id")
+	if entityIDParam != "" {
+		id, err := strconv.ParseUint(entityIDParam, 10, 32)
+		if err == nil {
+			return uint(id), nil
+		}
+	}
+	
+	// Try header next
+	entityIDHeader := c.GetHeader("X-Entity-ID")
+	if entityIDHeader != "" {
+		id, err := strconv.ParseUint(entityIDHeader, 10, 32)
+		if err == nil {
+			return uint(id), nil
+		}
+	}
+	
+	// Try query parameter
+	entityIDQuery := c.Query("entity_id")
+	if entityIDQuery != "" {
+		id, err := strconv.ParseUint(entityIDQuery, 10, 32)
+		if err == nil {
+			return uint(id), nil
+		}
+	}
+	
+	// Fall back to access context
+	contextEntityID := accessContext.GetAccessibleEntityID()
+	if contextEntityID != nil {
+		return *contextEntityID, nil
+	}
+	
+	return 0, nil
+}
+
 // ==============================
-// 🌟 1. Create Razorpay Order & Log Donation Intent (DEVOTEE - UNCHANGED)
+// 🌟 1. Create Donation - UPDATED: Entity-based approach
 // ==============================
 func (h *Handler) CreateDonation(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	currentUser, ok := user.(auth.User)
+	// NEW: Use access context instead of direct user context
+	accessContext, ok := getAccessContextFromContext(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user context"})
 		return
 	}
-
-	if currentUser.EntityID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to any entity"})
+	
+	// NEW: Extract entity ID using the same logic as events
+	entityID, err := getEntityIDFromRequest(c, accessContext)
+	if err != nil || entityID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
 		return
 	}
 
@@ -46,9 +99,10 @@ func (h *Handler) CreateDonation(c *gin.Context) {
 		return
 	}
 
-	req.UserID = currentUser.ID
-	req.EntityID = *currentUser.EntityID
-	req.IPAddress = middleware.GetIPFromContext(c) // ✅ NEW: Extract IP for audit logging
+	// NEW: Use access context data and extracted entity ID
+	req.UserID = accessContext.UserID
+	req.EntityID = entityID // NEW: Use extracted entity ID
+	req.IPAddress = middleware.GetIPFromContext(c)
 
 	order, err := h.svc.StartDonation(req)
 	if err != nil {
@@ -63,7 +117,7 @@ func (h *Handler) CreateDonation(c *gin.Context) {
 }
 
 // ==============================
-// ✅ 2. Verify Razorpay Signature (DEVOTEE - UNCHANGED)
+// ✅ 2. Verify Razorpay Signature - UNCHANGED
 // ==============================
 func (h *Handler) VerifyDonation(c *gin.Context) {
 	var req VerifyPaymentRequest
@@ -72,7 +126,7 @@ func (h *Handler) VerifyDonation(c *gin.Context) {
 		return
 	}
 
-	req.IPAddress = middleware.GetIPFromContext(c) // ✅ NEW: Extract IP for audit logging
+	req.IPAddress = middleware.GetIPFromContext(c)
 
 	if err := h.svc.VerifyAndUpdateDonation(req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -86,21 +140,24 @@ func (h *Handler) VerifyDonation(c *gin.Context) {
 }
 
 // ==============================
-// 🔍 3. Get My Donations (DEVOTEE - UNCHANGED)
+// 🔍 3. Get My Donations - UPDATED: Entity-based approach
 // ==============================
 func (h *Handler) GetMyDonations(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	// NEW: Use access context
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
 		return
 	}
-	currentUser, ok := user.(auth.User)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user context"})
+	
+	// NEW: Extract entity ID for filtering
+	entityID, err := getEntityIDFromRequest(c, accessContext)
+	if err != nil || entityID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
 		return
 	}
 
-	donations, err := h.svc.GetDonationsByUser(currentUser.ID)
+	// NEW: Pass entity ID to service for filtering
+	donations, err := h.svc.GetDonationsByUserAndEntity(accessContext.UserID, entityID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -114,25 +171,24 @@ func (h *Handler) GetMyDonations(c *gin.Context) {
 }
 
 // ==============================
-// 🔍 4. Get All Donations for Temple (TEMPLE ADMIN - UPDATED)
+// 🔍 4. Get All Donations for Temple - UPDATED: Enhanced entity handling
 // ==============================
 func (h *Handler) GetDonationsByEntity(c *gin.Context) {
-	accessContext, exists := c.Get("access_context")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
 		return
 	}
-	ctx := accessContext.(middleware.AccessContext)
 
-	entityID := ctx.GetAccessibleEntityID()
-	if entityID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no accessible entity"})
+	// NEW: Extract entity ID using same logic as events
+	entityID, err := getEntityIDFromRequest(c, accessContext)
+	if err != nil || entityID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
 		return
 	}
 
 	// Parse query parameters
 	filters := DonationFilters{
-		EntityID: *entityID,
+		EntityID: entityID, // NEW: Use extracted entity ID
 		Page:     parseIntQuery(c, "page", 1),
 		Limit:    parseIntQuery(c, "limit", 20),
 		Status:   c.Query("status"),
@@ -183,7 +239,7 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 		filters.From = &yearAgo
 	}
 
-	donations, total, err := h.svc.GetDonationsWithFilters(filters, ctx)
+	donations, total, err := h.svc.GetDonationsWithFilters(filters, accessContext)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -200,23 +256,22 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 }
 
 // ==============================
-// 📊 5. Get Donation Dashboard Stats (TEMPLE ADMIN - UPDATED)
+// 📊 5. Get Donation Dashboard Stats - UPDATED: Enhanced entity handling
 // ==============================
 func (h *Handler) GetDashboard(c *gin.Context) {
-	accessContext, exists := c.Get("access_context")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
-		return
-	}
-	ctx := accessContext.(middleware.AccessContext)
-
-	entityID := ctx.GetAccessibleEntityID()
-	if entityID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no accessible entity"})
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
 		return
 	}
 
-	stats, err := h.svc.GetDashboardStats(*entityID, ctx)
+	// NEW: Extract entity ID using same logic as events
+	entityID, err := getEntityIDFromRequest(c, accessContext)
+	if err != nil || entityID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
+		return
+	}
+
+	stats, err := h.svc.GetDashboardStats(entityID, accessContext)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -229,24 +284,23 @@ func (h *Handler) GetDashboard(c *gin.Context) {
 }
 
 // ==============================
-// 🏆 6. Get Top Donors (TEMPLE ADMIN - UPDATED)
+// 🏆 6. Get Top Donors - UPDATED: Enhanced entity handling
 // ==============================
 func (h *Handler) GetTopDonors(c *gin.Context) {
-	accessContext, exists := c.Get("access_context")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
 		return
 	}
-	ctx := accessContext.(middleware.AccessContext)
 
-	entityID := ctx.GetAccessibleEntityID()
-	if entityID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no accessible entity"})
+	// NEW: Extract entity ID using same logic as events
+	entityID, err := getEntityIDFromRequest(c, accessContext)
+	if err != nil || entityID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
 		return
 	}
 
 	limit := parseIntQuery(c, "limit", 5)
-	topDonors, err := h.svc.GetTopDonors(*entityID, limit, ctx)
+	topDonors, err := h.svc.GetTopDonors(entityID, limit, accessContext)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -259,7 +313,7 @@ func (h *Handler) GetTopDonors(c *gin.Context) {
 }
 
 // ==============================
-// 📄 7. Generate Receipt (BOTH DEVOTEE AND TEMPLE ADMIN - UPDATED)
+// 📄 7. Generate Receipt - UPDATED: Enhanced entity and user handling
 // ==============================
 func (h *Handler) GenerateReceipt(c *gin.Context) {
 	donationIDStr := c.Param("id")
@@ -269,28 +323,32 @@ func (h *Handler) GenerateReceipt(c *gin.Context) {
 		return
 	}
 
-	user, exists := c.Get("user")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	currentUser, ok := user.(auth.User)
+	// NEW: Use access context instead of direct user context
+	accessContext, ok := getAccessContextFromContext(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user context"})
 		return
 	}
 
-	// Get access context for temple admin users
-	var accessContext *middleware.AccessContext
-	if currentUser.Role.RoleName != "devotee" {
-		if ctx, exists := c.Get("access_context"); exists {
-			if ac, ok := ctx.(middleware.AccessContext); ok {
-				accessContext = &ac
-			}
+	// NEW: For devotees, ensure they can only access their own donations by entity
+	var entityID uint
+	if accessContext.RoleName == "devotee" {
+		extractedEntityID, err := getEntityIDFromRequest(c, accessContext)
+		if err != nil || extractedEntityID == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
+			return
 		}
+		entityID = extractedEntityID
+	} else {
+		// For temple admins, get their accessible entity
+		extractedEntityID, err := getEntityIDFromRequest(c, accessContext)
+		if err != nil || extractedEntityID == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
+			return
+		}
+		entityID = extractedEntityID
 	}
 
-	receipt, err := h.svc.GenerateReceipt(uint(donationID), currentUser.ID, accessContext)
+	receipt, err := h.svc.GenerateReceipt(uint(donationID), accessContext.UserID, &accessContext, entityID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -303,24 +361,23 @@ func (h *Handler) GenerateReceipt(c *gin.Context) {
 }
 
 // ==============================
-// 📈 8. Get Donation Analytics (TEMPLE ADMIN - UPDATED)
+// 📈 8. Get Donation Analytics - UPDATED: Enhanced entity handling
 // ==============================
 func (h *Handler) GetAnalytics(c *gin.Context) {
-	accessContext, exists := c.Get("access_context")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
 		return
 	}
-	ctx := accessContext.(middleware.AccessContext)
 
-	entityID := ctx.GetAccessibleEntityID()
-	if entityID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no accessible entity"})
+	// NEW: Extract entity ID using same logic as events
+	entityID, err := getEntityIDFromRequest(c, accessContext)
+	if err != nil || entityID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
 		return
 	}
 
 	days := parseIntQuery(c, "days", 30)
-	analytics, err := h.svc.GetAnalytics(*entityID, days, ctx)
+	analytics, err := h.svc.GetAnalytics(entityID, days, accessContext)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -333,19 +390,18 @@ func (h *Handler) GetAnalytics(c *gin.Context) {
 }
 
 // ==============================
-// 📊 9. Export Donations (TEMPLE ADMIN - UPDATED)
+// 📊 9. Export Donations - UPDATED: Enhanced entity handling
 // ==============================
 func (h *Handler) ExportDonations(c *gin.Context) {
-	accessContext, exists := c.Get("access_context")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
 		return
 	}
-	ctx := accessContext.(middleware.AccessContext)
 
-	entityID := ctx.GetAccessibleEntityID()
-	if entityID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no accessible entity"})
+	// NEW: Extract entity ID using same logic as events
+	entityID, err := getEntityIDFromRequest(c, accessContext)
+	if err != nil || entityID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
 		return
 	}
 
@@ -353,7 +409,7 @@ func (h *Handler) ExportDonations(c *gin.Context) {
 
 	// Build filters for export
 	filters := DonationFilters{
-		EntityID: *entityID,
+		EntityID: entityID, // NEW: Use extracted entity ID
 		Status:   c.Query("status"),
 		Type:     c.Query("type"),
 		Method:   c.Query("method"),
@@ -374,7 +430,7 @@ func (h *Handler) ExportDonations(c *gin.Context) {
 		}
 	}
 
-	fileContent, filename, err := h.svc.ExportDonations(filters, format, ctx)
+	fileContent, filename, err := h.svc.ExportDonations(filters, format, accessContext)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -386,17 +442,11 @@ func (h *Handler) ExportDonations(c *gin.Context) {
 }
 
 // ==============================
-// 🕐 10. Get Recent Donations (BOTH - UPDATED FOR CONTEXT)
+// 🕐 10. Get Recent Donations - UPDATED: Enhanced entity handling
 // ==============================
 func (h *Handler) GetRecentDonations(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	currentUser, ok := user.(auth.User)
+	accessContext, ok := getAccessContextFromContext(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user context"})
 		return
 	}
 
@@ -406,9 +456,16 @@ func (h *Handler) GetRecentDonations(c *gin.Context) {
 		limit = 10
 	}
 
-	// For devotees, get their own donations
-	if currentUser.Role.RoleName == "devotee" {
-		recent, err := h.svc.GetRecentDonationsByUser(c.Request.Context(), currentUser.ID, limit)
+	// NEW: Extract entity ID using same logic as events
+	entityID, err := getEntityIDFromRequest(c, accessContext)
+	if err != nil || entityID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
+		return
+	}
+
+	// For devotees, get their own donations within the entity
+	if accessContext.RoleName == "devotee" {
+		recent, err := h.svc.GetRecentDonationsByUserAndEntity(c.Request.Context(), accessContext.UserID, entityID, limit)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch recent donations"})
 			return
@@ -422,20 +479,7 @@ func (h *Handler) GetRecentDonations(c *gin.Context) {
 	}
 
 	// For temple admins, get donations for their accessible entity
-	accessContext, exists := c.Get("access_context")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
-		return
-	}
-	ctx := accessContext.(middleware.AccessContext)
-
-	entityID := ctx.GetAccessibleEntityID()
-	if entityID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no accessible entity"})
-		return
-	}
-
-	recent, err := h.svc.GetRecentDonationsByEntity(c.Request.Context(), *entityID, limit, ctx)
+	recent, err := h.svc.GetRecentDonationsByEntity(c.Request.Context(), entityID, limit, accessContext)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch recent donations"})
 		return

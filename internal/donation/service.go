@@ -24,8 +24,9 @@ type Service interface {
 	StartDonation(req CreateDonationRequest) (*CreateDonationResponse, error)
 	VerifyAndUpdateDonation(req VerifyPaymentRequest) error
 	
-	// Data retrieval - DEVOTEE (UNCHANGED) and TEMPLE ADMIN (UPDATED)
+	// Data retrieval - UPDATED for entity-based approach
 	GetDonationsByUser(userID uint) ([]DonationWithUser, error)
+	GetDonationsByUserAndEntity(userID uint, entityID uint) ([]DonationWithUser, error) // NEW
 	GetDonationsWithFilters(filters DonationFilters, accessContext middleware.AccessContext) ([]DonationWithUser, int, error)
 	
 	// Analytics and reporting - TEMPLE ADMIN (UPDATED)
@@ -34,11 +35,12 @@ type Service interface {
 	GetAnalytics(entityID uint, days int, accessContext middleware.AccessContext) (*AnalyticsData, error)
 	
 	// Receipt and export - BOTH (UPDATED)
-	GenerateReceipt(donationID uint, userID uint, accessContext *middleware.AccessContext) (*Receipt, error)
+	GenerateReceipt(donationID uint, userID uint, accessContext *middleware.AccessContext, entityID uint) (*Receipt, error) // NEW: Added entityID
 	ExportDonations(filters DonationFilters, format string, accessContext middleware.AccessContext) ([]byte, string, error)
 
 	// Recent donations - BOTH (UPDATED)
 	GetRecentDonationsByUser(ctx context.Context, userID uint, limit int) ([]RecentDonation, error)
+	GetRecentDonationsByUserAndEntity(ctx context.Context, userID uint, entityID uint, limit int) ([]RecentDonation, error) // NEW
 	GetRecentDonationsByEntity(ctx context.Context, entityID uint, limit int, accessContext middleware.AccessContext) ([]RecentDonation, error)
 }
 
@@ -46,7 +48,7 @@ type service struct {
 	repo       Repository
 	client     *razorpay.Client
 	cfg        *config.Config
-	auditSvc   auditlog.Service // ✅ NEW: Audit service dependency
+	auditSvc   auditlog.Service
 }
 
 func NewService(repo Repository, cfg *config.Config, auditSvc auditlog.Service) Service {
@@ -55,7 +57,7 @@ func NewService(repo Repository, cfg *config.Config, auditSvc auditlog.Service) 
 		repo:     repo,
 		client:   client,
 		cfg:      cfg,
-		auditSvc: auditSvc, // ✅ NEW: Inject audit service
+		auditSvc: auditSvc,
 	}
 }
 
@@ -87,7 +89,6 @@ func (s *service) StartDonation(req CreateDonationRequest) (*CreateDonationRespo
 
 	order, err := s.client.Order.Create(data, nil)
 	if err != nil {
-		// ✅ NEW: Log donation initiation failure
 		s.auditSvc.LogAction(ctx, &req.UserID, &req.EntityID, "DONATION_INITIATED", map[string]interface{}{
 			"amount":        req.Amount,
 			"donation_type": req.DonationType,
@@ -99,7 +100,6 @@ func (s *service) StartDonation(req CreateDonationRequest) (*CreateDonationRespo
 
 	orderID, ok := order["id"].(string)
 	if !ok {
-		// ✅ NEW: Log order ID extraction failure
 		s.auditSvc.LogAction(ctx, &req.UserID, &req.EntityID, "DONATION_INITIATED", map[string]interface{}{
 			"amount":        req.Amount,
 			"donation_type": req.DonationType,
@@ -123,7 +123,6 @@ func (s *service) StartDonation(req CreateDonationRequest) (*CreateDonationRespo
 	}
 
 	if err := s.repo.Create(context.Background(), donation); err != nil {
-		// ✅ NEW: Log donation record creation failure
 		s.auditSvc.LogAction(ctx, &req.UserID, &req.EntityID, "DONATION_INITIATED", map[string]interface{}{
 			"amount":        req.Amount,
 			"donation_type": req.DonationType,
@@ -134,7 +133,6 @@ func (s *service) StartDonation(req CreateDonationRequest) (*CreateDonationRespo
 		return nil, fmt.Errorf("failed to create donation record: %w", err)
 	}
 
-	// ✅ NEW: Log successful donation initiation
 	s.auditSvc.LogAction(ctx, &req.UserID, &req.EntityID, "DONATION_INITIATED", map[string]interface{}{
 		"amount":        req.Amount,
 		"donation_type": req.DonationType,
@@ -160,7 +158,6 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 	computedSignature := hex.EncodeToString(expected.Sum(nil))
 
 	if computedSignature != req.RazorpaySig {
-		// ✅ NEW: Log payment verification failure due to invalid signature
 		s.auditSvc.LogAction(ctx, nil, nil, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
 			"order_id":   req.OrderID,
 			"payment_id": req.PaymentID,
@@ -173,7 +170,6 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 	// Step 2: Fetch payment details from Razorpay
 	payment, err := s.client.Payment.Fetch(req.PaymentID, nil, nil)
 	if err != nil {
-		// ✅ NEW: Log Razorpay fetch failure
 		s.auditSvc.LogAction(ctx, nil, nil, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
 			"order_id":   req.OrderID,
 			"payment_id": req.PaymentID,
@@ -186,7 +182,6 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 
 	status, ok := payment["status"].(string)
 	if !ok {
-		// ✅ NEW: Log invalid payment status format
 		s.auditSvc.LogAction(ctx, nil, nil, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
 			"order_id":   req.OrderID,
 			"payment_id": req.PaymentID,
@@ -199,7 +194,6 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 	// Step 3: Get donation record
 	donation, err := s.repo.GetByOrderID(context.Background(), req.OrderID)
 	if err != nil {
-		// ✅ NEW: Log donation record not found
 		s.auditSvc.LogAction(ctx, nil, nil, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
 			"order_id":   req.OrderID,
 			"payment_id": req.PaymentID,
@@ -210,7 +204,6 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 	}
 
 	if donation.Status == StatusSuccess {
-		// ✅ NEW: Log already processed donation
 		s.auditSvc.LogAction(ctx, &donation.UserID, &donation.EntityID, "DONATION_ALREADY_PROCESSED", map[string]interface{}{
 			"order_id":   req.OrderID,
 			"payment_id": req.PaymentID,
@@ -229,7 +222,6 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 		amountPaise, _ := val.Float64()
 		amount = amountPaise / 100
 	default:
-		// ✅ NEW: Log unsupported amount type
 		s.auditSvc.LogAction(ctx, &donation.UserID, &donation.EntityID, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
 			"order_id":   req.OrderID,
 			"payment_id": req.PaymentID,
@@ -269,7 +261,6 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 	})
 
 	if err != nil {
-		// ✅ NEW: Log database update failure
 		s.auditSvc.LogAction(ctx, &donation.UserID, &donation.EntityID, "DONATION_UPDATE_FAILED", map[string]interface{}{
 			"order_id":   req.OrderID,
 			"payment_id": req.PaymentID,
@@ -281,7 +272,6 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 		return err
 	}
 
-	// ✅ NEW: Log final donation status (success or failure)
 	s.auditSvc.LogAction(ctx, &donation.UserID, &donation.EntityID, auditAction, map[string]interface{}{
 		"order_id":       req.OrderID,
 		"payment_id":     req.PaymentID,
@@ -296,7 +286,7 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 }
 
 // ==============================
-// Data Retrieval - DEVOTEE (UNCHANGED) and TEMPLE ADMIN (UPDATED)
+// Data Retrieval - UPDATED for entity-based approach
 // ==============================
 
 func (s *service) GetDonationsByUser(userID uint) ([]DonationWithUser, error) {
@@ -305,16 +295,35 @@ func (s *service) GetDonationsByUser(userID uint) ([]DonationWithUser, error) {
 		return nil, err
 	}
 
-	// FIXED: Ensure proper field mapping for devotee view
 	for i := range donations {
-		// Ensure all required fields are properly mapped
 		donations[i].Date = donations[i].CreatedAt
 		donations[i].Type = donations[i].DonationType
 		donations[i].DonorName = donations[i].UserName
 		donations[i].DonorEmail = donations[i].UserEmail
 		donations[i].PaymentMethod = donations[i].Method
 		
-		// If donated_at is null, use created_at for display
+		if donations[i].DonatedAt == nil {
+			donations[i].DonatedAt = &donations[i].CreatedAt
+		}
+	}
+
+	return donations, nil
+}
+
+// NEW: Get donations by user filtered by entity
+func (s *service) GetDonationsByUserAndEntity(userID uint, entityID uint) ([]DonationWithUser, error) {
+	donations, err := s.repo.ListByUserIDAndEntity(context.Background(), userID, entityID)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range donations {
+		donations[i].Date = donations[i].CreatedAt
+		donations[i].Type = donations[i].DonationType
+		donations[i].DonorName = donations[i].UserName
+		donations[i].DonorEmail = donations[i].UserEmail
+		donations[i].PaymentMethod = donations[i].Method
+		
 		if donations[i].DonatedAt == nil {
 			donations[i].DonatedAt = &donations[i].CreatedAt
 		}
@@ -340,16 +349,13 @@ func (s *service) GetDonationsWithFilters(filters DonationFilters, accessContext
 		return nil, 0, err
 	}
 
-	// FIXED: Ensure proper field mapping for entity admin view
 	for i := range donations {
-		// Ensure all required fields are properly mapped
 		donations[i].Date = donations[i].CreatedAt
 		donations[i].Type = donations[i].DonationType
 		donations[i].DonorName = donations[i].UserName
 		donations[i].DonorEmail = donations[i].UserEmail
 		donations[i].PaymentMethod = donations[i].Method
 		
-		// If donated_at is null, use created_at for display
 		if donations[i].DonatedAt == nil {
 			donations[i].DonatedAt = &donations[i].CreatedAt
 		}
@@ -479,7 +485,8 @@ func (s *service) GetAnalytics(entityID uint, days int, accessContext middleware
 // Receipt and Export - BOTH (UPDATED)
 // ==============================
 
-func (s *service) GenerateReceipt(donationID uint, userID uint, accessContext *middleware.AccessContext) (*Receipt, error) {
+// NEW: Updated to include entity validation
+func (s *service) GenerateReceipt(donationID uint, userID uint, accessContext *middleware.AccessContext, entityID uint) (*Receipt, error) {
 	ctx := context.Background()
 	
 	donation, err := s.repo.GetByIDWithUser(ctx, donationID)
@@ -490,15 +497,15 @@ func (s *service) GenerateReceipt(donationID uint, userID uint, accessContext *m
 	// Check access permissions
 	hasAccess := false
 	
-	// For devotees - can only access their own donations
-	if donation.UserID == userID {
+	// For devotees - can only access their own donations within their entity
+	if donation.UserID == userID && donation.EntityID == entityID {
 		hasAccess = true
 	}
 	
 	// For temple admins - can access donations for their entity
 	if accessContext != nil {
-		entityID := accessContext.GetAccessibleEntityID()
-		if entityID != nil && *entityID == donation.EntityID && accessContext.CanRead() {
+		accessibleEntityID := accessContext.GetAccessibleEntityID()
+		if accessibleEntityID != nil && *accessibleEntityID == donation.EntityID && accessContext.CanRead() {
 			hasAccess = true
 		}
 	}
@@ -630,6 +637,11 @@ func (s *service) exportAsCSV(donations []DonationWithUser) ([]byte, string, err
 // ==============================
 func (s *service) GetRecentDonationsByUser(ctx context.Context, userID uint, limit int) ([]RecentDonation, error) {
 	return s.repo.GetRecentDonationsByUser(ctx, userID, limit)
+}
+
+// NEW: Get recent donations by user filtered by entity
+func (s *service) GetRecentDonationsByUserAndEntity(ctx context.Context, userID uint, entityID uint, limit int) ([]RecentDonation, error) {
+	return s.repo.GetRecentDonationsByUserAndEntity(ctx, userID, entityID, limit)
 }
 
 func (s *service) GetRecentDonationsByEntity(ctx context.Context, entityID uint, limit int, accessContext middleware.AccessContext) ([]RecentDonation, error) {

@@ -273,7 +273,7 @@ func (r *Repository) MarkApprovalApproved(ctx context.Context, userID uint, admi
 			"status":      "approved",
 			"approved_by": adminID,
 			"approved_at": time.Now(),
-			"entity_id":   entityID,
+			//"entity_id":   entityID,
 			"updated_at":  time.Now(),
 		}).Error
 }
@@ -1055,46 +1055,115 @@ func (r *Repository) GetTenantsWithTempleDetails(ctx context.Context, role, stat
     return responses, nil
 }
 
-// GetTenantDetails fetches tenant details including temple information
+// Add these methods to your Repository struct in repository.go
+
+// GetTenantDetails fetches tenant details for a single tenant
 func (r *Repository) GetTenantDetails(ctx context.Context, tenantID uint) (*TenantTempleDetails, error) {
-    var details TenantTempleDetails
-    
-    // Try to get details from tenant_details table
-    err := r.db.WithContext(ctx).
-        Table("tenant_details").
-        Where("user_id = ?", tenantID).
-        First(&details).Error
-    
-    if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-        return nil, err
-    }
-    
-    // If not found in tenant_details, try to get from entities table
-    if errors.Is(err, gorm.ErrRecordNotFound) {
-        var entity entity.Entity
-        err = r.db.WithContext(ctx).
-            Where("created_by = ?", tenantID).
-            First(&entity).Error
-        
-        if err != nil {
-            return nil, err
-        }
-        
-        details = TenantTempleDetails{
-            ID:                entity.ID,
-            TempleName:        entity.Name,
-            TemplePlace:       entity.City,
-            TempleAddress:     entity.StreetAddress,
-            TemplePhoneNo:     entity.Phone,
-            TempleDescription: entity.Description,
-            CreatedAt:         entity.CreatedAt,
-            UpdatedAt:         entity.UpdatedAt,
-        }
-    }
-    
-    return &details, nil
+	var details TenantTempleDetails
+	
+	query := `
+		SELECT 
+			u.id,
+			u.full_name,
+			u.email,
+			u.phone,
+			u.status,
+			u.created_at,
+			u.updated_at,
+			COALESCE(td.id, 0) as temple_id,
+			COALESCE(td.temple_name, '') as temple_name,
+			COALESCE(td.temple_place, '') as temple_place,
+			COALESCE(td.temple_address, '') as temple_address,
+			COALESCE(td.temple_phone_no, '') as temple_phone_no,
+			COALESCE(td.temple_description, '') as temple_description,
+			COALESCE(td.created_at, '1970-01-01'::timestamp) as temple_created_at,
+			COALESCE(td.updated_at, '1970-01-01'::timestamp) as temple_updated_at
+		FROM users u
+		JOIN user_roles ur ON u.role_id = ur.id
+		LEFT JOIN tenant_details td ON u.id = td.user_id
+		WHERE u.id = ? AND ur.role_name = 'templeadmin'
+	`
+	
+	err := r.db.WithContext(ctx).Raw(query, tenantID).Scan(&details).Error
+	if err != nil {
+		return nil, err
+	}
+	
+	// Check if user was found
+	if details.ID == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	
+	return &details, nil
 }
 
+// GetAllTenantDetails fetches all tenant details
+func (r *Repository) GetAllTenantDetails(ctx context.Context) ([]TenantTempleDetails, error) {
+	var tenants []TenantTempleDetails
+	
+	query := `
+		SELECT 
+			u.id,
+			u.full_name,
+			u.email,
+			u.phone,
+			u.status,
+			u.created_at,
+			u.updated_at,
+			COALESCE(td.id, 0) as temple_id,
+			COALESCE(td.temple_name, '') as temple_name,
+			COALESCE(td.temple_place, '') as temple_place,
+			COALESCE(td.temple_address, '') as temple_address,
+			COALESCE(td.temple_phone_no, '') as temple_phone_no,
+			COALESCE(td.temple_description, '') as temple_description,
+			COALESCE(td.created_at, '1970-01-01'::timestamp) as temple_created_at,
+			COALESCE(td.updated_at, '1970-01-01'::timestamp) as temple_updated_at
+		FROM users u
+		JOIN user_roles ur ON u.role_id = ur.id
+		LEFT JOIN tenant_details td ON u.id = td.user_id
+		WHERE ur.role_name = 'templeadmin'
+		ORDER BY u.created_at DESC
+	`
+	
+	err := r.db.WithContext(ctx).Raw(query).Scan(&tenants).Error
+	return tenants, err
+}
+
+// GetMultipleTenantDetails fetches details for multiple tenants by IDs
+func (r *Repository) GetMultipleTenantDetails(ctx context.Context, tenantIDs []uint) ([]TenantTempleDetails, error) {
+	if len(tenantIDs) == 0 {
+		return []TenantTempleDetails{}, nil
+	}
+	
+	var tenants []TenantTempleDetails
+	
+	query := `
+		SELECT 
+			u.id,
+			u.full_name,
+			u.email,
+			u.phone,
+			u.status,
+			u.created_at,
+			u.updated_at,
+			COALESCE(td.id, 0) as temple_id,
+			COALESCE(td.temple_name, '') as temple_name,
+			COALESCE(td.temple_place, '') as temple_place,
+			COALESCE(td.temple_address, '') as temple_address,
+			COALESCE(td.temple_phone_no, '') as temple_phone_no,
+			COALESCE(td.temple_description, '') as temple_description,
+			COALESCE(td.created_at, '1970-01-01'::timestamp) as temple_created_at,
+			COALESCE(td.updated_at, '1970-01-01'::timestamp) as temple_updated_at
+		FROM users u
+		JOIN user_roles ur ON u.role_id = ur.id
+		LEFT JOIN tenant_details td ON u.id = td.user_id
+		WHERE u.id IN ? AND ur.role_name = 'templeadmin'
+		ORDER BY u.created_at DESC
+	`
+	
+	err := r.db.WithContext(ctx).Raw(query, tenantIDs).Scan(&tenants).Error
+	return tenants, err
+}
 // BulkCreateUsers inserts multiple users safely with better error handling
 func (r *Repository) BulkCreateUsers(ctx context.Context, users []auth.User) error {
 	if len(users) == 0 {

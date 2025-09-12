@@ -16,6 +16,7 @@ type Repository interface {
 
 	// Data retrieval with filtering
 	ListByUserID(ctx context.Context, userID uint) ([]DonationWithUser, error)
+	ListByUserIDAndEntity(ctx context.Context, userID uint, entityID uint) ([]DonationWithUser, error) // NEW: Entity-based filtering for users
 	ListWithFilters(ctx context.Context, filters DonationFilters) ([]DonationWithUser, int, error)
 
 	// Analytics queries
@@ -27,8 +28,9 @@ type Repository interface {
 	GetDonationsByType(ctx context.Context, entityID uint) ([]TypeData, error)
 	GetDonationsByMethod(ctx context.Context, entityID uint) ([]MethodData, error)
 	
-	// Recent donations - BOTH USER AND ENTITY
+	// Recent donations - BOTH USER AND ENTITY with enhanced filtering
 	GetRecentDonationsByUser(ctx context.Context, userID uint, limit int) ([]RecentDonation, error)
+	GetRecentDonationsByUserAndEntity(ctx context.Context, userID uint, entityID uint, limit int) ([]RecentDonation, error) // NEW: User donations within specific entity
 	GetRecentDonationsByEntity(ctx context.Context, entityID uint, limit int) ([]RecentDonation, error)
 }
 
@@ -41,7 +43,7 @@ func NewRepository(db *gorm.DB) Repository {
 }
 
 // ==============================
-// Basic CRUD Operations
+// Basic CRUD Operations - UNCHANGED
 // ==============================
 
 func (r *repository) Create(ctx context.Context, donation *Donation) error {
@@ -101,7 +103,7 @@ func (r *repository) UpdatePaymentDetails(ctx context.Context, orderID string, p
 }
 
 // ==============================
-// Data Retrieval with Filtering - FIXED ANONYMOUS NAMES
+// Data Retrieval with Filtering - ENHANCED with entity-based filtering
 // ==============================
 
 func (r *repository) ListByUserID(ctx context.Context, userID uint) ([]DonationWithUser, error) {
@@ -125,11 +127,33 @@ func (r *repository) ListByUserID(ctx context.Context, userID uint) ([]DonationW
 	return donations, err
 }
 
+// NEW: Get donations by user filtered by specific entity - SAME PATTERN AS EVENTS
+func (r *repository) ListByUserIDAndEntity(ctx context.Context, userID uint, entityID uint) ([]DonationWithUser, error) {
+	var donations []DonationWithUser
+	err := r.db.WithContext(ctx).
+		Table("donations d").
+		Select(`
+			d.id, d.user_id, d.entity_id, d.amount, d.donation_type, d.reference_id,
+			d.method, d.status, d.order_id, d.payment_id, d.note, d.donated_at,
+			d.created_at, d.updated_at,
+			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name, 
+			COALESCE(u.email, '') as user_email,
+			COALESCE(e.name, '') as entity_name
+		`).
+		Joins("LEFT JOIN users u ON d.user_id = u.id").
+		Joins("LEFT JOIN entities e ON d.entity_id = e.id").
+		Where("d.user_id = ? AND d.entity_id = ?", userID, entityID). // NEW: Entity-based filtering
+		Order("d.created_at DESC").
+		Find(&donations).Error
+
+	return donations, err
+}
+
 func (r *repository) ListWithFilters(ctx context.Context, filters DonationFilters) ([]DonationWithUser, int, error) {
 	var donations []DonationWithUser
 	var total int64
 
-	// Build base query with proper field selection - FIXED ANONYMOUS NAMES
+	// Build base query with proper field selection
 	query := r.db.WithContext(ctx).
 		Table("donations d").
 		Select(`
@@ -142,7 +166,7 @@ func (r *repository) ListWithFilters(ctx context.Context, filters DonationFilter
 		`).
 		Joins("LEFT JOIN users u ON d.user_id = u.id").
 		Joins("LEFT JOIN entities e ON d.entity_id = e.id").
-		Where("d.entity_id = ?", filters.EntityID)
+		Where("d.entity_id = ?", filters.EntityID) // CRITICAL: Entity-based filtering
 
 	// Apply filters
 	query = r.applyFilters(query, filters)
@@ -151,7 +175,7 @@ func (r *repository) ListWithFilters(ctx context.Context, filters DonationFilter
 	countQuery := r.db.WithContext(ctx).
 		Table("donations d").
 		Joins("LEFT JOIN users u ON d.user_id = u.id").
-		Where("d.entity_id = ?", filters.EntityID)
+		Where("d.entity_id = ?", filters.EntityID) // CRITICAL: Entity-based filtering for count too
 	countQuery = r.applyFilters(countQuery, filters)
 	countQuery.Count(&total)
 
@@ -197,7 +221,7 @@ func (r *repository) applyFilters(query *gorm.DB, filters DonationFilters) *gorm
 		query = query.Where("d.amount <= ?", *filters.MaxAmount)
 	}
 
-	// Search filter - FIXED TO HANDLE ANONYMOUS NAMES
+	// Search filter
 	if filters.Search != "" {
 		searchTerm := "%" + filters.Search + "%"
 		query = query.Where(`
@@ -212,7 +236,7 @@ func (r *repository) applyFilters(query *gorm.DB, filters DonationFilters) *gorm
 }
 
 // ==============================
-// Analytics Queries
+// Analytics Queries - UNCHANGED (Already entity-based)
 // ==============================
 
 func (r *repository) GetTotalStats(ctx context.Context, entityID uint) (*StatsResult, error) {
@@ -337,8 +361,9 @@ func (r *repository) GetDonationsByMethod(ctx context.Context, entityID uint) ([
 }
 
 // ==============================
-// Recent Donations - BOTH USER AND ENTITY
+// Recent Donations - ENHANCED with entity-based filtering
 // ==============================
+
 func (r *repository) GetRecentDonationsByUser(ctx context.Context, userID uint, limit int) ([]RecentDonation, error) {
 	var recent []RecentDonation
 	err := r.db.WithContext(ctx).
@@ -351,7 +376,27 @@ func (r *repository) GetRecentDonationsByUser(ctx context.Context, userID uint, 
 		`).
 		Joins("LEFT JOIN users u ON d.user_id = u.id").
 		Joins("LEFT JOIN entities e ON d.entity_id = e.id").
-		Where("d.user_id = ?", userID).  // ← THIS IS THE CRITICAL FIX
+		Where("d.user_id = ?", userID).
+		Order("COALESCE(d.donated_at, d.created_at) DESC").
+		Limit(limit).
+		Scan(&recent).Error
+	return recent, err
+}
+
+// NEW: Get recent donations by user filtered by entity - SAME PATTERN AS EVENTS
+func (r *repository) GetRecentDonationsByUserAndEntity(ctx context.Context, userID uint, entityID uint, limit int) ([]RecentDonation, error) {
+	var recent []RecentDonation
+	err := r.db.WithContext(ctx).
+		Table("donations d").
+		Select(`
+			d.amount, d.donation_type, d.method, d.status, 
+			COALESCE(d.donated_at, d.created_at) as donated_at,
+			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name,
+			COALESCE(e.name, '') as entity_name
+		`).
+		Joins("LEFT JOIN users u ON d.user_id = u.id").
+		Joins("LEFT JOIN entities e ON d.entity_id = e.id").
+		Where("d.user_id = ? AND d.entity_id = ?", userID, entityID). // NEW: Entity-based filtering
 		Order("COALESCE(d.donated_at, d.created_at) DESC").
 		Limit(limit).
 		Scan(&recent).Error
@@ -370,7 +415,7 @@ func (r *repository) GetRecentDonationsByEntity(ctx context.Context, entityID ui
 		`).
 		Joins("LEFT JOIN users u ON d.user_id = u.id").
 		Joins("LEFT JOIN entities e ON d.entity_id = e.id").
-		Where("d.entity_id = ?", entityID).  // Filter by entity instead of user
+		Where("d.entity_id = ?", entityID). // Filter by entity instead of user
 		Order("COALESCE(d.donated_at, d.created_at) DESC").
 		Limit(limit).
 		Scan(&recent).Error

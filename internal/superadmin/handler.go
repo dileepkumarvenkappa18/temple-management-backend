@@ -180,23 +180,96 @@ func (h *Handler) UpdateEntityApprovalStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Entity status updated successfully"})
 }
 
-// GET /superadmin/tenant-details/:id
-// GET /superadmin/tenant-details/:id
+// Replace the duplicate GetTenantDetails functions with this single comprehensive one
+
+// GET /superadmin/tenant-details (get all tenants)
+// GET /superadmin/tenant-details/:id (get single tenant by ID)
+// GET /superadmin/tenant-details/:ids (get multiple tenants by comma-separated IDs)
 func (h *Handler) GetTenantDetails(c *gin.Context) {
-    idStr := c.Param("id")
-    tenantID, err := strconv.ParseUint(idStr, 10, 64)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tenant ID"})
-        return
-    }
-    
-    details, err := h.service.GetTenantDetails(c.Request.Context(), uint(tenantID))
-    if err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"error": "Tenant details not found"})
-        return
-    }
-    
-    c.JSON(http.StatusOK, details)
+	idStr := c.Param("id")
+	
+	// Case 1: No ID parameter -> return all tenants
+	if idStr == "" {
+		tenants, err := h.service.GetAllTenantDetails(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tenant details"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"data":  tenants,
+			"total": len(tenants),
+		})
+		return
+	}
+	
+	// Case 2: Check if multiple IDs (comma separated)
+	if strings.Contains(idStr, ",") {
+		ids := strings.Split(idStr, ",")
+		tenantIDs := make([]uint, 0, len(ids))
+		
+		for _, id := range ids {
+			tid, err := strconv.ParseUint(strings.TrimSpace(id), 10, 64)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tenant ID in list"})
+				return
+			}
+			tenantIDs = append(tenantIDs, uint(tid))
+		}
+		
+		details, err := h.service.GetMultipleTenantDetails(c.Request.Context(), tenantIDs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tenant details"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"data":  details,
+			"total": len(details),
+		})
+		return
+	}
+	
+	// Case 3: Single ID
+	tenantID, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tenant ID"})
+		return
+	}
+
+	details, err := h.service.GetTenantDetails(c.Request.Context(), uint(tenantID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Tenant details not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": details})
+}
+
+// POST /superadmin/tenant-details/multiple (alternative approach for multiple IDs via request body)
+func (h *Handler) GetMultipleTenantDetailsByBody(c *gin.Context) {
+	var req struct {
+		TenantIDs []uint `json:"tenant_ids" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		return
+	}
+
+	if len(req.TenantIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "At least one tenant ID is required"})
+		return
+	}
+
+	details, err := h.service.GetMultipleTenantDetails(c.Request.Context(), req.TenantIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tenant details"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":  details,
+		"total": len(details),
+	})
 }
 
 // GET /superadmin/tenant-approval-counts

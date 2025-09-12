@@ -1,8 +1,10 @@
+
 package middleware
 
 import (
 	"net/http"
 	"strconv"
+	"fmt"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -59,18 +61,123 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 		c.Set("user_id", user.ID)
 		c.Set("claims", claims)
 
-		// Extract entity ID from path if available
-		entityIDFromPath := ExtractEntityIDFromPath(c)
-
-		// FIXED: Proper tenant and entity resolution
-		assignedTenantID := ResolveTenantID(c, user, claims)
+		// FIXED: Comprehensive entity ID resolution - TempleAdmin can access requested entities
+		entityID := ResolveEntityIDForOperation(c, user, claims)
 		
-		// Create access context with enhanced devotee handling
-		accessContext := ResolveAccessContextWithDevotee(c, user, assignedTenantID, entityIDFromPath)
+		// Create access context with proper entity ID
+		accessContext := CreateAccessContext(c, user, claims, entityID)
 		c.Set("access_context", accessContext)
+
+		// Also set the resolved entity_id for easy access
+		if entityID != nil {
+			c.Set("entity_id", *entityID)
+		}
 
 		c.Next()
 	}
+}
+
+// ResolveEntityIDForOperation determines the correct entity ID for the current operation
+func ResolveEntityIDForOperation(c *gin.Context, user auth.User, claims jwt.MapClaims) *uint {
+	// Universal priority order for all roles (except specific restrictions)
+	
+	// Priority 1: X-Entity-ID header (most explicit)
+	if entityHeader := c.GetHeader("X-Entity-ID"); entityHeader != "" && entityHeader != "all" {
+		if eid, err := strconv.ParseUint(entityHeader, 10, 32); err == nil {
+			id := uint(eid)
+			fmt.Printf("%s using entity ID from X-Entity-ID header: %d\n", user.Role.RoleName, id)
+			return &id
+		}
+	}
+
+	// Priority 2: Entity ID from URL path (e.g., /entity/123/...)
+	if entityIDFromPath := ExtractEntityIDFromPath(c); entityIDFromPath != nil {
+		fmt.Printf("%s using entity ID from URL path: %d\n", user.Role.RoleName, *entityIDFromPath)
+		return entityIDFromPath
+	}
+
+	// Priority 3: Query parameter entity_id
+	if entityQuery := c.Query("entity_id"); entityQuery != "" && entityQuery != "all" {
+		if eid, err := strconv.ParseUint(entityQuery, 10, 32); err == nil {
+			id := uint(eid)
+			fmt.Printf("%s using entity ID from query parameter: %d\n", user.Role.RoleName, id)
+			return &id
+		}
+	}
+
+	// Priority 4: Role-specific fallbacks
+	switch user.Role.RoleName {
+	case RoleSuperAdmin:
+		// Try X-Tenant-ID header or tenant param for multi-tenant operations
+		if tenantID := ResolveTenantIDFromRequest(c, claims); tenantID != nil {
+			fmt.Printf("SuperAdmin using tenant ID as entity ID: %d\n", *tenantID)
+			return tenantID
+		}
+		// SuperAdmin without specific entity - return nil for global access
+		fmt.Printf("SuperAdmin with global access (no specific entity)\n")
+		return nil
+
+	case RoleTempleAdmin:
+		// TempleAdmin: Fallback to their assigned entity if no specific request
+		if user.EntityID != nil {
+			fmt.Printf("TempleAdmin fallback to assigned entity ID: %d\n", *user.EntityID)
+			return user.EntityID
+		}
+
+	case RoleStandardUser, RoleMonitoringUser:
+		// Use assigned tenant ID from claims
+		if assignedTenantIDFloat, exists := claims["assigned_tenant_id"]; exists {
+			if tenantID, ok := assignedTenantIDFloat.(float64); ok && tenantID > 0 {
+				id := uint(tenantID)
+				fmt.Printf("%s using assigned tenant ID: %d\n", user.Role.RoleName, id)
+				return &id
+			}
+		}
+		// Fallback to their own entity ID if no assigned tenant
+		if user.EntityID != nil {
+			fmt.Printf("%s fallback to own entity ID: %d\n", user.Role.RoleName, *user.EntityID)
+			return user.EntityID
+		}
+
+	case RoleDevotee, RoleVolunteer:
+		// Fallback to user's own entity
+		if user.EntityID != nil {
+			fmt.Printf("%s using own entity ID: %d\n", user.Role.RoleName, *user.EntityID)
+			return user.EntityID
+		}
+	}
+
+	fmt.Printf("WARNING: Could not resolve entity ID for user %d (role: %s)\n", user.ID, user.Role.RoleName)
+	return nil
+}
+
+// ResolveTenantIDFromRequest extracts tenant ID from request for multi-tenant operations
+func ResolveTenantIDFromRequest(c *gin.Context, claims jwt.MapClaims) *uint {
+	// Try URL parameter
+	if tenantIDParam := c.Param("id"); tenantIDParam != "" && tenantIDParam != "all" {
+		if tid, err := strconv.ParseUint(tenantIDParam, 10, 32); err == nil {
+			id := uint(tid)
+			return &id
+		}
+	}
+
+	// Try query parameter
+	if tenantQuery := c.Query("tenant_id"); tenantQuery != "" && tenantQuery != "all" {
+		if tid, err := strconv.ParseUint(tenantQuery, 10, 32); err == nil {
+			id := uint(tid)
+			return &id
+		}
+	}
+
+	// Try header
+	if tenantHeader := c.GetHeader("X-Tenant-ID"); tenantHeader != "" && tenantHeader != "all" {
+		if tid, err := strconv.ParseUint(tenantHeader, 10, 32); err == nil {
+			id := uint(tid)
+			return &id
+		}
+	}
+
+	return nil
 }
 
 // ExtractEntityIDFromPath attempts to extract an entity ID from URL paths like /entity/123/...
@@ -91,97 +198,42 @@ func ExtractEntityIDFromPath(c *gin.Context) *uint {
 	return nil
 }
 
-// FIXED: Simplified tenant ID resolution
-func ResolveTenantID(c *gin.Context, user auth.User, claims jwt.MapClaims) *uint {
-	// Priority 1: URL parameter (for specific tenant access)
-	if tenantIDParam := c.Param("id"); tenantIDParam != "" && tenantIDParam != "all" {
-		if tid, err := strconv.ParseUint(tenantIDParam, 10, 32); err == nil {
-			id := uint(tid)
-			return &id
-		}
-	}
-
-	// Priority 2: Query parameter
-	if tenantQuery := c.Query("tenant_id"); tenantQuery != "" && tenantQuery != "all" {
-		if tid, err := strconv.ParseUint(tenantQuery, 10, 32); err == nil {
-			id := uint(tid)
-			return &id
-		}
-	}
-
-	// Priority 3: Header (X-Tenant-ID)
-	if tenantHeader := c.GetHeader("X-Tenant-ID"); tenantHeader != "" && tenantHeader != "all" {
-		if tid, err := strconv.ParseUint(tenantHeader, 10, 32); err == nil {
-			id := uint(tid)
-			return &id
-		}
-	}
-
-	// Priority 4: JWT token assigned_tenant_id
-	if assignedTenantIDFloat, exists := claims["assigned_tenant_id"]; exists {
-		if tenantID, ok := assignedTenantIDFloat.(float64); ok && tenantID > 0 {
-			id := uint(tenantID)
-			return &id
-		}
-	}
-
-	// For standarduser and monitoringuser, they must have an assigned tenant
-	if user.Role.RoleName == "standarduser" || user.Role.RoleName == "monitoringuser" {
-		// Return their own entity ID as the assigned tenant
-		return user.EntityID
-	}
-
-	return nil
-}
-
-// ResolveAccessContextWithDevotee creates an access context with special handling for devotee roles
-func ResolveAccessContextWithDevotee(c *gin.Context, user auth.User, assignedTenantID, entityIDFromPath *uint) AccessContext {
-	// Start with basic access context
+// CreateAccessContext creates the access context with proper entity resolution
+func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, entityID *uint) AccessContext {
 	accessContext := AccessContext{
 		UserID:   user.ID,
 		RoleName: user.Role.RoleName,
 	}
 
-	// Handle permissions and entity access based on role
 	switch user.Role.RoleName {
 	case RoleSuperAdmin:
 		accessContext.PermissionType = "full"
-		accessContext.AssignedEntityID = assignedTenantID
-		
+		accessContext.AssignedEntityID = entityID // Could be nil for global access
+
 	case RoleTempleAdmin:
 		accessContext.PermissionType = "full"
 		accessContext.DirectEntityID = user.EntityID
-		
+		// Use the resolved entity ID (can be requested entity or assigned entity)
+		accessContext.AssignedEntityID = entityID
+
 	case RoleStandardUser:
 		accessContext.PermissionType = "full"
-		accessContext.AssignedEntityID = assignedTenantID
-		
+		accessContext.AssignedEntityID = entityID
+
 	case RoleMonitoringUser:
 		accessContext.PermissionType = "readonly"
-		accessContext.AssignedEntityID = assignedTenantID
-		
+		accessContext.AssignedEntityID = entityID
+
 	case RoleDevotee, RoleVolunteer:
-		// Devotees and volunteers get readonly access
 		accessContext.PermissionType = "readonly"
-		
-		// Try multiple approaches to find the entity ID, in order of priority:
-		if entityIDFromPath != nil {
-			// 1. Entity ID from URL path (e.g., /entity/123/devotee/dashboard)
-			accessContext.AssignedEntityID = entityIDFromPath
-		} else if entityHeader := c.GetHeader("X-Entity-ID"); entityHeader != "" {
-			// 2. Entity ID from X-Entity-ID header
-			if eid, err := strconv.ParseUint(entityHeader, 10, 32); err == nil {
-				id := uint(eid)
-				accessContext.AssignedEntityID = &id
-			}
-		} else if assignedTenantID != nil {
-			// 3. Tenant ID (often the same as entity ID)
-			accessContext.AssignedEntityID = assignedTenantID
-		} else if user.EntityID != nil {
-			// 4. User's own entity ID
+		if entityID != nil {
+			accessContext.AssignedEntityID = entityID
+		} else {
 			accessContext.DirectEntityID = user.EntityID
 		}
 	}
 
 	return accessContext
 }
+
+

@@ -146,9 +146,43 @@ func (s *Service) GetPendingTenants(ctx context.Context) ([]auth.User, error) {
 	return s.repo.GetPendingTenants(ctx)
 }
 
-// GetTenantDetails fetches tenant details including temple information
+// Add these methods to your Service struct in service.go
+
+// GetAllTenantDetails fetches all tenant details
+func (s *Service) GetAllTenantDetails(ctx context.Context) ([]TenantTempleDetails, error) {
+	return s.repo.GetAllTenantDetails(ctx)
+}
+
+// GetMultipleTenantDetails fetches details for multiple tenants by IDs
+func (s *Service) GetMultipleTenantDetails(ctx context.Context, tenantIDs []uint) ([]TenantTempleDetails, error) {
+	if len(tenantIDs) == 0 {
+		return []TenantTempleDetails{}, nil
+	}
+	
+	// Optional: Add limit to prevent too many IDs at once
+	if len(tenantIDs) > 100 {
+		return nil, errors.New("maximum 100 tenant IDs allowed per request")
+	}
+	
+	return s.repo.GetMultipleTenantDetails(ctx, tenantIDs)
+}
+
+// Update the existing GetTenantDetails to include better error handling
 func (s *Service) GetTenantDetails(ctx context.Context, tenantID uint) (*TenantTempleDetails, error) {
-	return s.repo.GetTenantDetails(ctx, tenantID)
+	if tenantID == 0 {
+		return nil, errors.New("invalid tenant ID")
+	}
+	
+	details, err := s.repo.GetTenantDetails(ctx, tenantID)
+	if err != nil {
+		// Check if it's a record not found error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("tenant not found")
+		}
+		return nil, errors.New("failed to fetch tenant details")
+	}
+	
+	return details, nil
 }
 
 func (s *Service) GetTenantsWithFilters(ctx context.Context, status string, limit, page int) ([]TenantWithDetails, int64, error) {
