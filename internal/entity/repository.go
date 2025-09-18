@@ -2,8 +2,8 @@ package entity
 
 import (
 	"database/sql"
-	"time"
 	"math"
+	"time"
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"gorm.io/gorm"
@@ -17,7 +17,23 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{DB: db}
 }
 
-// ========== ENTITY CORE ==========
+// ===================== NEW METHOD =====================
+
+// CheckUserEntityMembership verifies if a user is a member of a given entity.
+// It returns true if a record exists with status "active".
+func (r *Repository) CheckUserEntityMembership(userID, entityID uint) (bool, error) {
+	var count int64
+	err := r.DB.
+		Table("user_entity_memberships").
+		Where("user_id = ? AND entity_id = ? AND status = ?", userID, entityID, "active").
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// ===================== ENTITY CORE =====================
 
 // Create a new temple entity
 func (r *Repository) CreateEntity(e *Entity) error {
@@ -27,21 +43,21 @@ func (r *Repository) CreateEntity(e *Entity) error {
 // Get tenant ID for a user from tenant_user_assignments table
 func (r *Repository) GetTenantIDForUser(userID uint) (uint, error) {
 	var tenantID uint
-	
+
 	err := r.DB.Table("tenant_user_assignments").
 		Select("tenant_id").
 		Where("user_id = ? AND status = ?", userID, "active").
 		Limit(1).
 		Scan(&tenantID).
 		Error
-		
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return 0, nil // User is not assigned to any tenant
 		}
 		return 0, err
 	}
-	
+
 	return tenantID, nil
 }
 
@@ -57,10 +73,12 @@ func (r *Repository) GetAllEntities() ([]Entity, error) {
 	return entities, err
 }
 
-// Fetch entities created by a specific user (ordered by most recent)
+// Fetch entities created by a specific user
 func (r *Repository) GetEntitiesByCreator(creatorID uint) ([]Entity, error) {
 	var entities []Entity
-	err := r.DB.Where("created_by = ?", creatorID).Order("created_at DESC").Find(&entities).Error
+	err := r.DB.Where("created_by = ?", creatorID).
+		Order("created_at DESC").
+		Find(&entities).Error
 	return entities, err
 }
 
@@ -74,31 +92,32 @@ func (r *Repository) GetEntityByID(id int) (Entity, error) {
 // Update an existing temple entity
 func (r *Repository) UpdateEntity(e Entity) error {
 	e.UpdatedAt = time.Now()
-	
-	// Create a map of all fields to update, even if they're zero values
+
 	updates := map[string]interface{}{
-		"name":                 e.Name,
-		"main_deity":           e.MainDeity,
-		"temple_type":          e.TempleType,
-		"established_year":     e.EstablishedYear,
-		"email":                e.Email,
-		"phone":                e.Phone,
-		"description":          e.Description,
-		"street_address":       e.StreetAddress,
-		"landmark":             e.Landmark,
-		"city":                 e.City,
-		"district":             e.District,
-		"state":                e.State,
-		"pincode":              e.Pincode,
-		"map_link":             e.MapLink,
+		"name":                  e.Name,
+		"main_deity":            e.MainDeity,
+		"temple_type":           e.TempleType,
+		"established_year":      e.EstablishedYear,
+		"email":                 e.Email,
+		"phone":                 e.Phone,
+		"description":           e.Description,
+		"street_address":        e.StreetAddress,
+		"landmark":              e.Landmark,
+		"city":                  e.City,
+		"district":              e.District,
+		"state":                 e.State,
+		"pincode":               e.Pincode,
+		"map_link":              e.MapLink,
 		"registration_cert_url": e.RegistrationCertURL,
-		"trust_deed_url":       e.TrustDeedURL,
-		"property_docs_url":    e.PropertyDocsURL,
-		"additional_docs_urls": e.AdditionalDocsURLs,
-		"updated_at":           e.UpdatedAt,
+		"trust_deed_url":        e.TrustDeedURL,
+		"property_docs_url":     e.PropertyDocsURL,
+		"additional_docs_urls":  e.AdditionalDocsURLs,
+		"updated_at":            e.UpdatedAt,
 	}
-	
-	return r.DB.Model(&Entity{}).Where("id = ?", e.ID).Updates(updates).Error
+
+	return r.DB.Model(&Entity{}).
+		Where("id = ?", e.ID).
+		Updates(updates).Error
 }
 
 // Delete a temple entity by ID
@@ -106,9 +125,8 @@ func (r *Repository) DeleteEntity(id int) error {
 	return r.DB.Delete(&Entity{}, id).Error
 }
 
-// ========== DEVOTEE MANAGEMENT ==========
+// ===================== DEVOTEE MANAGEMENT =====================
 
-// DevoteeDTO represents the devotee information returned by queries
 type DevoteeDTO struct {
 	UserID   uint   `json:"user_id"`
 	FullName string `json:"full_name"`
@@ -117,7 +135,6 @@ type DevoteeDTO struct {
 	Status   string `json:"status"`
 }
 
-// Get all devotees for a specific entity
 func (r *Repository) GetDevoteesByEntityID(entityID uint) ([]DevoteeDTO, error) {
 	var devotees []DevoteeDTO
 
@@ -132,19 +149,15 @@ func (r *Repository) GetDevoteesByEntityID(entityID uint) ([]DevoteeDTO, error) 
 	return devotees, err
 }
 
-// DevoteeStats represents statistics about devotees for an entity
 type DevoteeStats struct {
 	TotalDevotees  int64 `json:"total_devotees"`
 	ActiveDevotees int64 `json:"active_devotees"`
 	NewThisMonth   int64 `json:"new_this_month"`
-	// ProfileCompletionRate float64 `json:"profile_completion_rate"` // Optional
 }
 
-// Get devotee statistics for a specific entity
 func (r *Repository) GetDevoteeStats(entityID uint) (DevoteeStats, error) {
 	var stats DevoteeStats
 
-	// Total Devotees
 	err := r.DB.Table("user_entity_memberships").
 		Joins("JOIN users ON users.id = user_entity_memberships.user_id").
 		Joins("JOIN user_roles ON user_roles.id = users.role_id").
@@ -154,31 +167,25 @@ func (r *Repository) GetDevoteeStats(entityID uint) (DevoteeStats, error) {
 		return stats, err
 	}
 
-	// Active Devotees
 	err = r.DB.Table("user_entity_memberships").
 		Joins("JOIN users ON users.id = user_entity_memberships.user_id").
 		Joins("JOIN user_roles ON user_roles.id = users.role_id").
-		Where("user_entity_memberships.entity_id = ? AND user_roles.role_name = ? AND user_entity_memberships.status = ?", entityID, "devotee", "active").
+		Where("user_entity_memberships.entity_id = ? AND user_roles.role_name = ? AND user_entity_memberships.status = ?",
+			entityID, "devotee", "active").
 		Count(&stats.ActiveDevotees).Error
 	if err != nil {
 		return stats, err
 	}
 
-	// New Devotees This Month
 	err = r.DB.Table("user_entity_memberships").
 		Joins("JOIN users ON users.id = user_entity_memberships.user_id").
 		Joins("JOIN user_roles ON user_roles.id = users.role_id").
-		Where("user_entity_memberships.entity_id = ? AND user_roles.role_name = ? AND user_entity_memberships.created_at >= DATE_TRUNC('month', NOW())", entityID, "devotee").
+		Where("user_entity_memberships.entity_id = ? AND user_roles.role_name = ? AND user_entity_memberships.created_at >= DATE_TRUNC('month', NOW())",
+			entityID, "devotee").
 		Count(&stats.NewThisMonth).Error
-	if err != nil {
-		return stats, err
-	}
-
-	return stats, nil
+	return stats, err
 }
 
-
-// Count total devotees for an entity
 func (r *Repository) CountDevotees(entityID uint) (int64, error) {
 	var count int64
 	err := r.DB.
@@ -189,18 +196,17 @@ func (r *Repository) CountDevotees(entityID uint) (int64, error) {
 	return count, err
 }
 
-// Count devotees added this month
 func (r *Repository) CountDevoteesThisMonth(entityID uint) (int64, error) {
 	var count int64
 	err := r.DB.
 		Table("user_entity_memberships AS uem").
 		Joins("JOIN user_roles ur ON ur.id = (SELECT role_id FROM users WHERE users.id = uem.user_id)").
-		Where("uem.entity_id = ? AND ur.role_name = ? AND uem.created_at >= DATE_TRUNC('month', NOW())", entityID, "devotee").
+		Where("uem.entity_id = ? AND ur.role_name = ? AND uem.created_at >= DATE_TRUNC('month', NOW())",
+			entityID, "devotee").
 		Count(&count).Error
 	return count, err
 }
 
-// Count today's seva bookings
 func (r *Repository) CountSevaBookingsToday(entityID uint) (int64, error) {
 	var count int64
 	err := r.DB.
@@ -210,7 +216,6 @@ func (r *Repository) CountSevaBookingsToday(entityID uint) (int64, error) {
 	return count, err
 }
 
-// Count seva bookings in current month
 func (r *Repository) CountSevaBookingsThisMonth(entityID uint) (int64, error) {
 	var count int64
 	err := r.DB.
@@ -220,11 +225,9 @@ func (r *Repository) CountSevaBookingsThisMonth(entityID uint) (int64, error) {
 	return count, err
 }
 
-// Get total donation ₹ this month and % change vs last month
 func (r *Repository) GetMonthDonationsWithChange(entityID uint) (float64, float64, error) {
 	var currentMonth, previousMonth float64
 
-	// This month
 	err := r.DB.
 		Table("donations").
 		Select("COALESCE(SUM(amount), 0)").
@@ -234,30 +237,25 @@ func (r *Repository) GetMonthDonationsWithChange(entityID uint) (float64, float6
 		return 0, 0, err
 	}
 
-	// Last month
 	err = r.DB.
 		Table("donations").
 		Select("COALESCE(SUM(amount), 0)").
-		Where("entity_id = ? AND created_at >= DATE_TRUNC('month', NOW()) - INTERVAL '1 month' AND created_at < DATE_TRUNC('month', NOW())", entityID).
+		Where("entity_id = ? AND created_at >= DATE_TRUNC('month', NOW()) - INTERVAL '1 month' AND created_at < DATE_TRUNC('month', NOW())",
+			entityID).
 		Scan(&previousMonth).Error
 	if err != nil {
 		return 0, 0, err
 	}
 
-	// % change (guard against divide by zero)
 	var percentChange float64
 	if previousMonth > 0 {
 		percentChange = ((currentMonth - previousMonth) / previousMonth) * 100
 	} else if currentMonth > 0 {
 		percentChange = 100
-	} else {
-		percentChange = 0
 	}
-
 	return currentMonth, math.Round(percentChange*100) / 100, nil
 }
 
-// Count total upcoming events (future start_date)
 func (r *Repository) CountUpcomingEvents(entityID uint) (int64, error) {
 	var count int64
 	err := r.DB.
@@ -267,16 +265,15 @@ func (r *Repository) CountUpcomingEvents(entityID uint) (int64, error) {
 	return count, err
 }
 
-// Count events in this week (Sun–Sat)
 func (r *Repository) CountUpcomingEventsThisWeek(entityID uint) (int64, error) {
 	var count int64
 	err := r.DB.
 		Table("events").
 		Where(`
-	entity_id = ?
-	AND event_date >= DATE_TRUNC('week', CURRENT_DATE)
-	AND event_date < DATE_TRUNC('week', CURRENT_DATE) + INTERVAL '7 days'
-`, entityID).
+			entity_id = ?
+			AND event_date >= DATE_TRUNC('week', CURRENT_DATE)
+			AND event_date < DATE_TRUNC('week', CURRENT_DATE) + INTERVAL '7 days'
+		`, entityID).
 		Count(&count).Error
 	return count, err
 }

@@ -9,9 +9,11 @@ services:
       - "8080:8080"            # Exposes your Go server on localhost:8080
     env_file:
       - .env                   # Picks up DB_HOST, DB_USER, JWT_SECRET, etc.
+    
     volumes:
-      - ./uploads:/app/uploads # Mount uploads folder to host machine
-      - ./logs:/app/logs       # Optional: mount logs folder too
+      - uploads_data:/data/uploads
+      - logs_data:/data/logs
+
     depends_on:
       - postgres
       - redis
@@ -77,6 +79,8 @@ volumes:
   redis_data:
   kafka_data:
   kafka_meta:
+  uploads_data:
+  logs_data:
 
 networks:
   temple_network:

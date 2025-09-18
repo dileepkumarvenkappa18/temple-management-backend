@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,18 +23,45 @@ import (
 
 type Handler struct {
 	Service   *Service
-	UploadDir string // filesystem base, e.g. "./uploads"
-	BaseURL   string // URL base, e.g. "/api/v1/uploads"
+	UploadDir string // filesystem base, now using persistent volume at /data/uploads
+	BaseURL   string // URL base for secure endpoints, e.g. "/api/v1/entities"
 	MaxSize   int64  // 10MB default
 }
 
+type TempFileInfo struct {
+	TempPath     string
+	FileType     string // registration_cert, trust_deed, property_docs, additional_docs
+	FileName     string
+	OriginalName string
+	FileSize     int64
+	ContentType  string
+	UploadedAt   time.Time
+}
+
+type EntityDirectory struct {
+	EntityID   string   `json:"entity_id"`
+	FilesCount int      `json:"files_count"`
+	Files      []string `json:"files"`
+}
+
+type FileDetails struct {
+	FileName string `json:"file_name"`
+	FileURL  string `json:"file_url"`
+	Size     int64  `json:"size"`
+}
+
 func NewHandler(s *Service, uploadDir, baseURL string) *Handler {
+	// Use persistent volume path if not specified
+	if uploadDir == "" || uploadDir == "./uploads" {
+		uploadDir = "/data/uploads"
+	}
+	
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		log.Printf("Failed to create upload directory: %v", err)
 	}
-	// Sensible defaults: BaseURL should point to the secured binary route (/api/v1/uploads)
+	// Use secure endpoint base URL
 	if strings.TrimSpace(baseURL) == "" {
-		baseURL = "/files"
+		baseURL = "/api/v1/entities"
 	}
 	return &Handler{
 		Service:   s,
@@ -42,6 +70,373 @@ func NewHandler(s *Service, uploadDir, baseURL string) *Handler {
 		MaxSize:   10 * 1024 * 1024,
 	}
 }
+
+// ========== SECURE FILE SERVING HANDLERS ==========
+
+// SecureFileHandler handles authenticated individual file downloads
+func (h *Handler) SecureFileHandler(c *gin.Context) {
+	entityID := c.Param("entityID")
+	filename := c.Param("filename")
+
+	// Validate parameters
+	if entityID == "" || filename == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid parameters",
+			"message": "Entity ID and filename are required",
+		})
+		return
+	}
+
+	// Get authenticated user
+	userVal, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":   "Authentication required",
+			"message": "You must be logged in to access files",
+		})
+		return
+	}
+
+	user, ok := userVal.(auth.User)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Invalid user context",
+		})
+		return
+	}
+
+	// Convert entityID to uint
+	entityIDInt, err := strconv.Atoi(entityID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid entity ID format",
+		})
+		return
+	}
+	entityIDUint := uint(entityIDInt)
+
+	// Check if user has access to this entity
+	hasAccess, err := h.validateEntityAccess(user, entityIDUint)
+	if err != nil {
+		log.Printf("Error validating entity access for user %d, entity %d: %v", user.ID, entityIDUint, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Access validation failed",
+		})
+		return
+	}
+
+	if !hasAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":   "Access denied",
+			"message": "You don't have permission to access files for this entity",
+		})
+		return
+	}
+
+	// Construct and validate file path using persistent volume path
+	filePath := filepath.Join(h.UploadDir, entityID, filename)
+	cleanPath := filepath.Clean(filePath)
+	expectedPrefix := filepath.Clean(filepath.Join(h.UploadDir, entityID))
+
+	// Security check - ensure path is within expected directory
+	if !strings.HasPrefix(cleanPath, expectedPrefix) {
+		log.Printf("Security violation: Attempted path traversal by user %d for path %s", user.ID, cleanPath)
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":   "Access denied",
+			"message": "Invalid file path",
+		})
+		return
+	}
+
+	// Check if file exists
+	fileInfo, err := os.Stat(cleanPath)
+	if os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":   "File not found",
+			"message": "The requested file does not exist",
+		})
+		return
+	}
+
+	if err != nil {
+		log.Printf("Error accessing file %s: %v", cleanPath, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "File access error",
+		})
+		return
+	}
+
+	// Set appropriate headers based on file type and request
+	h.setFileHeaders(c, filename, fileInfo.Size())
+
+	// Log file access for audit
+	log.Printf("File accessed: %s by user %d (%s)", cleanPath, user.ID, user.Email)
+
+	// Serve the file
+	c.File(cleanPath)
+}
+
+// SecureBulkDownloadHandler handles authenticated bulk file downloads as ZIP
+func (h *Handler) SecureBulkDownloadHandler(c *gin.Context) {
+	entityID := c.Param("entityID")
+
+	// Validate parameters
+	if entityID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid parameters",
+			"message": "Entity ID is required",
+		})
+		return
+	}
+
+	// Get authenticated user
+	userVal, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":   "Authentication required",
+			"message": "You must be logged in to download files",
+		})
+		return
+	}
+
+	user, ok := userVal.(auth.User)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Invalid user context",
+		})
+		return
+	}
+
+	// Convert entityID to uint
+	entityIDInt, err := strconv.Atoi(entityID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid entity ID format",
+		})
+		return
+	}
+	entityIDUint := uint(entityIDInt)
+
+	// Check if user has access to this entity
+	hasAccess, err := h.validateEntityAccess(user, entityIDUint)
+	if err != nil {
+		log.Printf("Error validating entity access for user %d, entity %d: %v", user.ID, entityIDUint, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Access validation failed",
+		})
+		return
+	}
+
+	if !hasAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":   "Access denied",
+			"message": "You don't have permission to download files for this entity",
+		})
+		return
+	}
+
+	// Check if entity directory exists using persistent volume path
+	entityDir := filepath.Join(h.UploadDir, entityID)
+	if _, err := os.Stat(entityDir); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":   "No files found",
+			"message": "No files found for this entity",
+		})
+		return
+	}
+
+	// Set ZIP download headers
+	zipFileName := fmt.Sprintf("Entity_%s_Documents_%s.zip", entityID, time.Now().Format("20060102_150405"))
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", zipFileName))
+	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+	c.Header("Pragma", "no-cache")
+	c.Header("Expires", "0")
+
+	// Create ZIP and stream to response
+	err = h.createZipStream(c.Writer, entityDir)
+	if err != nil {
+		log.Printf("Error creating ZIP for entity %s: %v", entityID, err)
+		// Can't send JSON error here as headers are already sent
+		return
+	}
+
+	// Log bulk download for audit
+	log.Printf("Bulk download: Entity %s by user %d (%s)", entityID, user.ID, user.Email)
+}
+
+// ========== ACCESS VALIDATION ==========
+
+// validateEntityAccess checks if user has access to the specified entity
+func (h *Handler) validateEntityAccess(user auth.User, entityID uint) (bool, error) {
+	switch user.Role.RoleName {
+	case "superadmin":
+		// Super admins can access all entities
+		return true, nil
+
+	case "templeadmin":
+		// Temple admins can access entities they created
+		entities, err := h.Service.GetEntitiesByCreator(user.ID)
+		if err != nil {
+			return false, err
+		}
+		for _, entity := range entities {
+			if entity.ID == entityID {
+				return true, nil
+			}
+		}
+		return false, nil
+
+	case "standarduser", "monitoringuser":
+		// Check if user is assigned to this entity via tenant
+		tenantID, err := h.Service.Repo.GetTenantIDForUser(user.ID)
+		if err != nil {
+			return false, err
+		}
+
+		// Check if the entity belongs to the user's tenant
+		entities, err := h.Service.GetEntitiesByCreator(tenantID)
+		if err != nil {
+			return false, err
+		}
+
+		for _, entity := range entities {
+			if entity.ID == entityID {
+				return true, nil
+			}
+		}
+
+		// Also check if entity ID matches tenant ID (for mock entities)
+		if entityID == tenantID {
+			return true, nil
+		}
+
+		return false, nil
+
+	case "devotee", "volunteer":
+		// Devotees and volunteers can only access entities they're members of
+		// Use the repository to check membership directly
+		hasActiveMembership, err := h.Service.Repo.CheckUserEntityMembership(user.ID, entityID)
+		if err != nil {
+			return false, err
+		}
+		return hasActiveMembership, nil
+
+	default:
+		return false, nil
+	}
+}
+
+// ========== HELPER FUNCTIONS ==========
+
+// setFileHeaders sets appropriate HTTP headers for file serving
+func (h *Handler) setFileHeaders(c *gin.Context, filename string, fileSize int64) {
+	ext := strings.ToLower(filepath.Ext(filename))
+
+	// Set content type based on file extension
+	switch ext {
+	case ".pdf":
+		c.Header("Content-Type", "application/pdf")
+	case ".jpg", ".jpeg":
+		c.Header("Content-Type", "image/jpeg")
+	case ".png":
+		c.Header("Content-Type", "image/png")
+	case ".gif":
+		c.Header("Content-Type", "image/gif")
+	case ".doc":
+		c.Header("Content-Type", "application/msword")
+	case ".docx":
+		c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+	case ".xls":
+		c.Header("Content-Type", "application/vnd.ms-excel")
+	case ".xlsx":
+		c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	case ".txt":
+		c.Header("Content-Type", "text/plain")
+	default:
+		c.Header("Content-Type", "application/octet-stream")
+	}
+
+	// Set content length
+	c.Header("Content-Length", fmt.Sprintf("%d", fileSize))
+
+	// Check if download is requested
+	download := c.Query("download")
+	if download == "true" || download == "1" {
+		// Force download
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+		c.Header("Content-Description", "File Transfer")
+		c.Header("Content-Transfer-Encoding", "binary")
+		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		c.Header("Pragma", "no-cache")
+		c.Header("Expires", "0")
+	} else {
+		// Inline viewing (for PDFs, images, etc.)
+		c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
+		// Set cache headers for better performance
+		c.Header("Cache-Control", "public, max-age=3600")
+		c.Header("Last-Modified", time.Now().Format(http.TimeFormat))
+	}
+
+	// Security headers
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("X-Frame-Options", "SAMEORIGIN")
+}
+
+// createZipStream creates a ZIP file and streams it directly to the response writer
+func (h *Handler) createZipStream(w io.Writer, sourceDir string) error {
+	zipWriter := zip.NewWriter(w)
+	defer func() {
+		if err := zipWriter.Close(); err != nil {
+			log.Printf("Error closing zip writer: %v", err)
+		}
+	}()
+
+	return filepath.Walk(sourceDir, func(filePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			log.Printf("Error walking file %s: %v", filePath, err)
+			return nil // Continue with other files
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(sourceDir, filePath)
+		if err != nil {
+			log.Printf("Error getting relative path for %s: %v", filePath, err)
+			return nil // Continue with other files
+		}
+
+		zipFile, err := zipWriter.Create(relPath)
+		if err != nil {
+			log.Printf("Error creating zip entry for %s: %v", relPath, err)
+			return nil // Continue with other files
+		}
+
+		srcFile, err := os.Open(filePath)
+		if err != nil {
+			log.Printf("Error opening file %s: %v", filePath, err)
+			return nil // Continue with other files
+		}
+		defer srcFile.Close()
+
+		_, err = io.Copy(zipFile, srcFile)
+		if err != nil {
+			log.Printf("Error copying file %s to zip: %v", filePath, err)
+			return nil // Continue with other files
+		}
+
+		return nil
+	})
+}
+
+// buildSecureFileURL creates a URL that points to the secure file endpoint
+func (h *Handler) buildSecureFileURL(entityID uint, filename string) string {
+	return fmt.Sprintf("%s/%d/files/%s", h.BaseURL, entityID, filename)
+}
+
+// ========== ENTITY CREATION WITH FILE UPLOADS ==========
 
 // CreateEntity handles temple creation with optional uploads
 func (h *Handler) CreateEntity(c *gin.Context) {
@@ -65,7 +460,7 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 		}
 	}
 
-	// Required fields
+	// Required fields validation
 	if input.TempleType == "" || input.State == "" || input.EstablishedYear == nil {
 		h.cleanupTempFiles(tempFiles)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Temple Type, State, and Established Year are required"})
@@ -77,7 +472,7 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 		return
 	}
 
-	// Auth and access
+	// Auth and access validation
 	userVal, exists := c.Get("user")
 	if !exists {
 		h.cleanupTempFiles(tempFiles)
@@ -93,7 +488,7 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 		accessContext, _ = v.(middleware.AccessContext)
 	}
 
-	// Decide CreatedBy
+	// Determine CreatedBy based on user role
 	switch userRole {
 	case "superadmin":
 		if accessContext.AssignedEntityID != nil {
@@ -132,7 +527,7 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 	}
 	ip := middleware.GetIPFromContext(c)
 
-	// Create without file URLs first
+	// Create entity without file URLs first
 	if err := h.Service.CreateEntity(&input, userID, ip); err != nil {
 		log.Printf("Service Error: %v", err)
 		h.cleanupTempFiles(tempFiles)
@@ -166,23 +561,13 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 	})
 }
 
-type TempFileInfo struct {
-	TempPath     string
-	FileType     string // registration_cert, trust_deed, property_docs, additional_docs
-	FileName     string
-	OriginalName string
-	FileSize     int64
-	ContentType  string
-	UploadedAt   time.Time
-}
-
 func (h *Handler) handleMultipartFormData(c *gin.Context, input *Entity, tempFiles *[]TempFileInfo) error {
 	form, err := c.MultipartForm()
 	if err != nil {
 		return fmt.Errorf("failed to parse multipart form: %v", err)
 	}
 
-	// Text fields
+	// Parse text fields
 	input.Name = h.getFormValue(form, "name")
 	if v := h.getFormValue(form, "main_deity"); v != "" {
 		input.MainDeity = &v
@@ -212,6 +597,7 @@ func (h *Handler) handleMultipartFormData(c *gin.Context, input *Entity, tempFil
 }
 
 func (h *Handler) processFileUploadsToTemp(form *multipart.Form, tempFiles *[]TempFileInfo) error {
+	// Create temp directory in persistent volume
 	tempSessionDir := filepath.Join(h.UploadDir, "temp_uploads", uuid.New().String())
 	if err := os.MkdirAll(tempSessionDir, 0755); err != nil {
 		return fmt.Errorf("failed to create temp directory: %v", err)
@@ -241,7 +627,7 @@ func (h *Handler) processFileUploadsToTemp(form *multipart.Form, tempFiles *[]Te
 		*tempFiles = append(*tempFiles, info)
 	}
 
-	// Multiple additional docs: additional_docs_0..9
+	// Multiple additional docs
 	for i := 0; i < 10; i++ {
 		field := fmt.Sprintf("additional_docs_%d", i)
 		if add := form.File[field]; len(add) > 0 {
@@ -297,6 +683,7 @@ func (h *Handler) uploadFileToTemp(file *multipart.FileHeader, tempDir, fileType
 }
 
 func (h *Handler) moveFilesToFinalLocation(entity *Entity, tempFiles []TempFileInfo, finalFileInfos *map[string]FileInfo) error {
+	// Use persistent volume path for entity directory
 	entityDir := filepath.Join(h.UploadDir, strconv.FormatUint(uint64(entity.ID), 10))
 	if err := os.MkdirAll(entityDir, 0755); err != nil {
 		return fmt.Errorf("failed to create entity directory: %v", err)
@@ -310,7 +697,7 @@ func (h *Handler) moveFilesToFinalLocation(entity *Entity, tempFiles []TempFileI
 		finalFileName := tf.FileName
 		finalPath := filepath.Join(entityDir, finalFileName)
 
-		// Prefer rename; fall back to copy+remove
+		// Move file
 		if err := os.Rename(tf.TempPath, finalPath); err != nil {
 			if err := copyFile(tf.TempPath, finalPath); err != nil {
 				log.Printf("Failed to move/copy file %s to %s: %v", tf.TempPath, finalPath, err)
@@ -319,8 +706,8 @@ func (h *Handler) moveFilesToFinalLocation(entity *Entity, tempFiles []TempFileI
 			_ = os.Remove(tf.TempPath)
 		}
 
-		rel := filepath.ToSlash(filepath.Join(strconv.FormatUint(uint64(entity.ID), 10), finalFileName))
-		fileURL := h.buildFileURL(rel)
+		// Build secure URL using the new endpoint
+		fileURL := h.buildSecureFileURL(entity.ID, finalFileName)
 
 		fi := FileInfo{
 			FileName:     finalFileName,
@@ -355,7 +742,7 @@ func (h *Handler) moveFilesToFinalLocation(entity *Entity, tempFiles []TempFileI
 		}
 	}
 
-	// Persist additional as arrays
+	// Handle additional docs
 	if len(additionalFiles) > 0 {
 		var urlList []string
 		for _, x := range additionalFiles {
@@ -373,7 +760,7 @@ func (h *Handler) moveFilesToFinalLocation(entity *Entity, tempFiles []TempFileI
 		}
 	}
 
-	// Clean temp
+	// Clean temp files
 	h.cleanupTempFiles(tempFiles)
 
 	log.Printf("Successfully processed %d files for entity %d", len(tempFiles), entity.ID)
@@ -408,29 +795,13 @@ func (h *Handler) getFormValue(form *multipart.Form, key string) string {
 func (h *Handler) cleanupTempFiles(tempFiles []TempFileInfo) {
 	for _, tf := range tempFiles {
 		_ = os.Remove(tf.TempPath)
-		// try remove dir if empty
 		_ = os.Remove(filepath.Dir(tf.TempPath))
 	}
 }
 
-// FIXED: Build a file URL from a relative upload path like "<entityID>/<file>"
-func (h *Handler) buildFileURL(rel string) string {
-	// Clean the relative path
-	rel = strings.TrimLeft(rel, "/")
-	
-	// For direct file access (recommended for downloads)
-	return fmt.Sprintf("/files/%s", rel)
-}
+// ========== DIRECTORY INTROSPECTION ==========
 
-// ================= Directory Introspection =================
-
-type EntityDirectory struct {
-	EntityID   string   `json:"entity_id"`
-	FilesCount int      `json:"files_count"`
-	Files      []string `json:"files"`
-}
-
-// Superadmin only
+// GetAllEntityDirectories - Superadmin only
 func (h *Handler) GetAllEntityDirectories(c *gin.Context) {
 	userVal, exists := c.Get("user")
 	if !exists {
@@ -479,13 +850,7 @@ func (h *Handler) GetAllEntityDirectories(c *gin.Context) {
 	})
 }
 
-type FileDetails struct {
-	FileName string `json:"file_name"`
-	FileURL  string `json:"file_url"`
-	Size     int64  `json:"size"`
-}
-
-// Requires temple access
+// GetEntityFiles - Requires temple access
 func (h *Handler) GetEntityFiles(c *gin.Context) {
 	entityID := c.Param("id")
 
@@ -528,6 +893,7 @@ func (h *Handler) GetEntityFiles(c *gin.Context) {
 		return
 	}
 
+	// Use persistent volume path
 	entityDir := filepath.Join(h.UploadDir, entityID)
 	if _, err := os.Stat(entityDir); os.IsNotExist(err) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "No files found for this entity"})
@@ -550,8 +916,8 @@ func (h *Handler) GetEntityFiles(c *gin.Context) {
 		if err != nil {
 			continue
 		}
-		rel := filepath.ToSlash(filepath.Join(entityID, e.Name()))
-		url := h.buildFileURL(rel)
+		// Use secure URL for files
+		url := h.buildSecureFileURL(entityIDUint, e.Name())
 		out = append(out, FileDetails{
 			FileName: e.Name(),
 			FileURL:  url,
@@ -566,40 +932,10 @@ func (h *Handler) GetEntityFiles(c *gin.Context) {
 	})
 }
 
-// ===== helpers =====
+// ========== EXISTING ENTITY CRUD METHODS ==========
 
-func sniffOrByExt(ext string) string {
-	if mt := mime.TypeByExtension(ext); mt != "" {
-		return mt
-	}
-	// Default for unknown
-	return "application/octet-stream"
-}
-
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-		return err
-	}
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = out.Close() }()
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return out.Sync()
-}
-
-// Rest of your existing methods remain the same...
 // GetAllEntities retrieves entities based on user role and permissions
 func (h *Handler) GetAllEntities(c *gin.Context) {
-	// Get authenticated user
 	userVal, exists := c.Get("user")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -612,7 +948,6 @@ func (h *Handler) GetAllEntities(c *gin.Context) {
 		return
 	}
 
-	// Get access context
 	accessContextVal, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
@@ -627,29 +962,23 @@ func (h *Handler) GetAllEntities(c *gin.Context) {
 	var entities []Entity
 	var err error
 
-	// Role-based entity retrieval
 	switch user.Role.RoleName {
 	case "superadmin":
-		// Super admins get all entities
 		entities, err = h.Service.GetAllEntities()
 		
 	case "templeadmin":
-		// Temple admins get entities they created
 		entities, err = h.Service.GetEntitiesByCreator(user.ID)
 		if err != nil || len(entities) == 0 {
 			log.Printf("No entities found for templeadmin %d, returning empty list", user.ID)
-			entities = []Entity{} // Return empty array instead of nil
+			entities = []Entity{}
 		}
 		
 	case "standarduser", "monitoringuser":
-		// For standard users, try multiple strategies to find entities
 		if accessContext.AssignedEntityID != nil {
 			tenantID := *accessContext.AssignedEntityID
 			
-			// Try to get entities created by the tenant
 			entities, err = h.Service.GetEntitiesByCreator(tenantID)
 			
-			// If no entities found, create a mock entity for UI consistency
 			if err != nil || len(entities) == 0 {
 				log.Printf("No entities found for tenant %d, creating mock entity", tenantID)
 				mockEntity := Entity{
@@ -662,7 +991,7 @@ func (h *Handler) GetAllEntities(c *gin.Context) {
 					UpdatedAt:   time.Now(),
 				}
 				entities = []Entity{mockEntity}
-				err = nil // Clear any error
+				err = nil
 			}
 		} else {
 			c.JSON(http.StatusForbidden, gin.H{"error": "No entity assigned to this user"})
@@ -691,7 +1020,6 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 		return
 	}
 
-	// Get access context
 	accessContextVal, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
@@ -703,7 +1031,6 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 		return
 	}
 
-	// Get user info
 	userVal, exists := c.Get("user")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
@@ -715,15 +1042,12 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 		return
 	}
 	
-	// Try to get the entity first
 	entity, err := h.Service.GetEntityByID(id)
 	if err != nil {
-		// For standard users with matching tenant ID, create mock entity
 		if (user.Role.RoleName == "standarduser" || user.Role.RoleName == "monitoringuser") && 
 		   accessContext.AssignedEntityID != nil && 
 		   *accessContext.AssignedEntityID == uint(id) {
 			
-			// Create mock entity using the ID
 			entity = Entity{
 				ID:          uint(id),
 				Name:        "Temple " + strconv.Itoa(id),
@@ -739,7 +1063,6 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 		}
 	}
 	
-	// Check permissions based on user role
 	hasAccess := false
 	
 	switch user.Role.RoleName {
@@ -776,7 +1099,6 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		return
 	}
 
-	// Get access context
 	accessContextVal, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
@@ -788,7 +1110,6 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		return
 	}
 
-	// Check write permissions
 	if !accessContext.CanWrite() {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient write permissions"})
 		return
@@ -801,7 +1122,6 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		return
 	}
 
-	// Get authenticated user for audit logging
 	user, exists := c.Get("user")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -809,7 +1129,6 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 	}
 	userID := user.(auth.User).ID
 
-	// Check if entity ID matches accessible entity
 	entityIDUint := uint(id)
 	hasAccess := (accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityIDUint) ||
 		(accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityIDUint)
@@ -822,7 +1141,6 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 	input.ID = uint(id)
 	input.UpdatedAt = time.Now()
 
-	// Get IP address for audit logging
 	ip := middleware.GetIPFromContext(c)
 
 	if err := h.Service.UpdateEntity(input, userID, ip); err != nil {
@@ -842,7 +1160,6 @@ func (h *Handler) DeleteEntity(c *gin.Context) {
 		return
 	}
 
-	// Get authenticated user
 	user, exists := c.Get("user")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -851,13 +1168,11 @@ func (h *Handler) DeleteEntity(c *gin.Context) {
 	userObj := user.(auth.User)
 	userID := userObj.ID
 
-	// Check if user is superadmin (only superadmins should delete entities)
 	if userObj.Role.RoleName != "superadmin" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Only superadmins can delete temples"})
 		return
 	}
 
-	// Get IP address for audit logging
 	ip := middleware.GetIPFromContext(c)
 
 	if err := h.Service.DeleteEntity(id, userID, ip); err != nil {
@@ -878,7 +1193,6 @@ func (h *Handler) GetDevoteesByEntity(c *gin.Context) {
 		return
 	}
 
-	// Get access context
 	accessContextVal, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
@@ -890,7 +1204,6 @@ func (h *Handler) GetDevoteesByEntity(c *gin.Context) {
 		return
 	}
 
-	// Check permissions
 	entityID := uint(entityIDUint)
 	hasAccess := (accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityID) ||
 		(accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityID)
@@ -900,7 +1213,6 @@ func (h *Handler) GetDevoteesByEntity(c *gin.Context) {
 		return
 	}
 
-	// Fetch devotees for the given entity
 	devotees, err := h.Service.GetDevotees(entityID)
 	if err != nil {
 		log.Printf("Error fetching devotees for entity %d: %v", entityID, err)
@@ -920,7 +1232,6 @@ func (h *Handler) GetDevoteeStats(c *gin.Context) {
 		return
 	}
 
-	// Get access context
 	accessContextVal, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
@@ -932,7 +1243,6 @@ func (h *Handler) GetDevoteeStats(c *gin.Context) {
 		return
 	}
 
-	// Check permissions
 	entityID := uint(entityIDUint)
 	hasAccess := (accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityID) ||
 		(accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityID)
@@ -966,7 +1276,6 @@ func (h *Handler) UpdateDevoteeMembershipStatus(c *gin.Context) {
 		return
 	}
 
-	// Get access context
 	accessContextVal, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
@@ -978,13 +1287,11 @@ func (h *Handler) UpdateDevoteeMembershipStatus(c *gin.Context) {
 		return
 	}
 
-	// Check write permissions
 	if !accessContext.CanWrite() {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient write permissions"})
 		return
 	}
 
-	// Check entity access
 	entityID := uint(entityIDUint)
 	hasAccess := (accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityID) ||
 		(accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityID)
@@ -1015,7 +1322,6 @@ func (h *Handler) UpdateDevoteeMembershipStatus(c *gin.Context) {
 
 // GetDashboardSummary retrieves dashboard summary for the accessible entity
 func (h *Handler) GetDashboardSummary(c *gin.Context) {
-	// Get access context
 	accessContextVal, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
@@ -1027,14 +1333,12 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 		return
 	}
 
-	// Get the accessible entity ID
 	entityID := accessContext.GetAccessibleEntityID()
 	if entityID == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "No accessible entity found"})
 		return
 	}
 
-	// Call service to get dashboard summary
 	summary, err := h.Service.GetDashboardSummary(*entityID)
 	if err != nil {
 		log.Printf("Dashboard Summary Error for entity %d: %v", *entityID, err)
@@ -1043,4 +1347,33 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, summary)
+}
+
+// ========== HELPER FUNCTIONS ==========
+
+func sniffOrByExt(ext string) string {
+	if mt := mime.TypeByExtension(ext); mt != "" {
+		return mt
+	}
+	return "application/octet-stream"
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = out.Close() }()
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Sync()
 }

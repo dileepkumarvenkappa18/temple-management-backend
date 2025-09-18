@@ -32,9 +32,9 @@ import (
 
 // Debug route to check upload directory structure
 func addUploadDebugging(r *gin.Engine) {
-	// Debug route to check upload directory structure
+	// Debug route to check upload directory structure - Updated to use persistent volume
 	r.GET("/debug/uploads", func(c *gin.Context) {
-		uploadPath := "./uploads"
+		uploadPath := "/data/uploads" // Changed from ./uploads to /data/uploads
 		
 		// Check if uploads directory exists
 		if _, err := os.Stat(uploadPath); os.IsNotExist(err) {
@@ -90,10 +90,10 @@ func addUploadDebugging(r *gin.Engine) {
 		})
 	})
 
-	// Debug route to check specific file
+	// Debug route to check specific file - Updated path
 	r.GET("/debug/file/*filepath", func(c *gin.Context) {
 		filePath := c.Param("filepath")
-		fullPath := filepath.Join("./uploads", filePath)
+		fullPath := filepath.Join("/data/uploads", filePath) // Changed from ./uploads
 		
 		// Check if file exists
 		info, err := os.Stat(fullPath)
@@ -126,8 +126,8 @@ func addUploadDebugging(r *gin.Engine) {
 }
 
 func Setup(r *gin.Engine, cfg *config.Config) {
-	// Ensure uploads directory exists
-	uploadPath := "./uploads"
+	// Ensure uploads directory exists - Updated to use persistent volume
+	uploadPath := "/data/uploads" // Changed from ./uploads
 	if err := os.MkdirAll(uploadPath, 0755); err != nil {
 		fmt.Printf("Warning: Could not create uploads directory: %v\n", err)
 	}
@@ -135,8 +135,7 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	// Add static file serving for the public directory
 	r.Static("/public", "./public")
 	
-	// ✅ FIXED: Removed duplicate /uploads route - now handled in main.go only
-	// The /uploads static route was causing conflicts with main.go
+	// The /uploads static route is now handled in main.go only
 	// File serving is now handled by the /files/*filepath route in main.go
 
 	// Add debugging routes (remove in production)
@@ -359,8 +358,8 @@ devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
 		profileService := userprofile.NewService(profileRepo, authRepo, auditSvc)
 
 		entityService := entity.NewService(entityRepo, profileService, auditSvc)
-		// FIXED: Use proper file serving path
-		entityHandler := entity.NewHandler(entityService, "./uploads", "/files")
+		// UPDATED: Use persistent volume path and proper file serving path
+		entityHandler := entity.NewHandler(entityService, "/data/uploads", "/files")
 
 		// Add special endpoint for templeadmins to view their created entities
 		protected.GET("/entities/by-creator", middleware.RBACMiddleware("templeadmin"), func(c *gin.Context) {
@@ -406,7 +405,7 @@ devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
 			entityRoutes.GET("/:id/devotees", entityHandler.GetDevoteesByEntity)
 			entityRoutes.GET("/:id/devotee-stats", entityHandler.GetDevoteeStats)
 			entityRoutes.GET("/dashboard-summary", entityHandler.GetDashboardSummary)
-			// FIXED: Add file routes for entity documents
+			// File routes for entity documents
 			entityRoutes.GET("/:id/files", entityHandler.GetEntityFiles)
 			entityRoutes.GET("/directories", entityHandler.GetAllEntityDirectories)
 		}
@@ -596,8 +595,8 @@ tenantRoutes.Use(middleware.RequireTempleAccess()) // restrict to members of thi
 {
 	reportsRepo := reports.NewRepository(database.DB)
 	reportsExporter := reports.NewReportExporter()
-	reportsService := reports.NewReportService(reportsRepo, reportsExporter, auditSvc) // ✅ INJECT AUDIT SERVICE
-	reportsHandler := reports.NewHandler(reportsService, reportsRepo, auditSvc)        // ✅ INJECT AUDIT SERVICE
+	reportsService := reports.NewReportService(reportsRepo, reportsExporter, auditSvc)
+	reportsHandler := reports.NewHandler(reportsService, reportsRepo, auditSvc)
 
 	reportsRoutes := protected.Group("/entities/:id/reports")
 	reportsRoutes.Use(middleware.RequireTempleAccess()) // Allow templeadmin, standarduser, monitoringuser
@@ -611,8 +610,7 @@ tenantRoutes.Use(middleware.RequireTempleAccess()) // restrict to members of thi
 		reportsRoutes.GET("/devotee-birthdays", reportsHandler.GetDevoteeBirthdaysReport)
 		reportsRoutes.GET("/devotee-list", reportsHandler.GetDevoteeListReport)
 		reportsRoutes.GET("/devotee-profile", reportsHandler.GetDevoteeProfileReport)
-		reportsRoutes.GET("/audit-logs", reportsHandler.GetAuditLogsReport)  // fixed typo
-		
+		reportsRoutes.GET("/audit-logs", reportsHandler.GetAuditLogsReport)
 		
 		// If you want to restrict export functionality to only users with write access, 
 		// you can create a separate group with write access requirement:
@@ -637,12 +635,13 @@ tenantRoutes.Use(middleware.RequireTempleAccess()) // restrict to members of thi
 			return
 		}
 
-		// For upload files that don't exist, provide helpful error
+		// For upload files that don't exist, provide helpful error - Updated path
 		if strings.HasPrefix(c.Request.URL.Path, "/uploads") {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": "File not found",
 				"message": "The requested file does not exist or has been moved",
 				"path": c.Request.URL.Path,
+				"note": "Files are now served from /data/uploads directory",
 			})
 			return
 		}

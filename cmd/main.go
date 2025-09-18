@@ -96,15 +96,15 @@ func main() {
         c.Status(204) 
     })
 
-    // Create uploads directory
-    uploadDir := "./uploads"
+    // Create uploads directory - Changed to persistent volume mount
+    uploadDir := "/data/uploads"
     if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
         panic(fmt.Sprintf("❌ Failed to create upload directory: %v", err))
     }
 
     // ======= STATIC FILE SERVING =======
-    // Enhanced static file serving with CORS headers
-    router.Static("/uploads", "./uploads")
+    // Enhanced static file serving with CORS headers - Updated path
+    router.Static("/uploads", "/data/uploads")
 
     // ======= ENHANCED FILE ROUTES =======
 
