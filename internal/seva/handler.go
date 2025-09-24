@@ -514,15 +514,77 @@ func (h *Handler) BookSeva(c *gin.Context) {
 	})
 }
 
+// UPDATED: Enhanced GetMyBookings with entity ID handling and filters
 func (h *Handler) GetMyBookings(c *gin.Context) {
-	// Keep devotee logic unchanged
+	// Get user from context (devotee authentication)
 	user := c.MustGet("user").(auth.User)
-	bookings, err := h.service.GetBookingsForUser(c, user.ID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch bookings"})
+	if user.Role.RoleName != "devotee" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"bookings": bookings})
+
+	// Get entity ID from query parameter, URL path, or header (similar to other functions)
+	var entityID uint
+	entityIDParam := c.Query("entity_id")
+	if entityIDParam != "" {
+		id, err := strconv.ParseUint(entityIDParam, 10, 32)
+		if err == nil {
+			entityID = uint(id)
+		}
+	} else {
+		// Try getting from URL path
+		entityIDPath := c.Param("entity_id")
+		if entityIDPath != "" {
+			id, err := strconv.ParseUint(entityIDPath, 10, 32)
+			if err == nil {
+				entityID = uint(id)
+			}
+		} else {
+			// Check for entity ID in header
+			entityIDHeader := c.GetHeader("X-Entity-ID")
+			if entityIDHeader != "" {
+				id, err := strconv.ParseUint(entityIDHeader, 10, 32)
+				if err == nil {
+					entityID = uint(id)
+				}
+			}
+		}
+	}
+
+	// If no entity ID found from parameters, fall back to user's entity
+	if entityID == 0 {
+		if user.EntityID == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple and no entity_id provided"})
+			return
+		}
+		entityID = *user.EntityID
+	}
+
+	// Parse pagination parameters
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	offset := (page - 1) * limit
+
+	// Parse filter parameters
+	status := c.Query("status")           // pending, approved, rejected
+	sevaType := c.Query("seva_type")     // filter by seva type
+	search := c.Query("search")          // search in seva names
+
+	fmt.Println("entityID for GetMyBookings:", entityID) // Debug log
+
+	// Get bookings with filters and pagination
+	bookings, total, err := h.service.GetBookingsForUserWithFilters(c, user.ID, entityID, status, sevaType, search, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch bookings: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"bookings": bookings,
+		"total":    total,
+		"page":     page,
+		"limit":    limit,
+	})
 }
 
 // 📊 Get Entity Bookings - UPDATED (Similar to Event pattern)

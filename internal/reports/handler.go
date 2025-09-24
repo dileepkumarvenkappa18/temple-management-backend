@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
@@ -842,7 +843,15 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 				return
 			}
 			if len(ids) == 0 {
-				c.JSON(http.StatusOK, gin.H{"data": []DevoteeBirthdayReportRow{}})
+				c.JSON(http.StatusOK, gin.H{
+					"data":         []DevoteeBirthdayReportRow{},
+					"total_count":  0,
+					"message":      "No entities found for user",
+					"date_range":   dateRange,
+					"start_date":   start.Format("2006-01-02"),
+					"end_date":     end.Format("2006-01-02"),
+					"generated_at": time.Now(),
+				})
 				return
 			}
 			for _, id := range ids {
@@ -870,6 +879,12 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 		entityIDs = append(entityIDs, fmt.Sprint(eid))
 	}
 
+	// Validate that we have entity IDs to work with
+	if len(entityIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no valid entity IDs found"})
+		return
+	}
+
 	req := DevoteeBirthdaysReportRequest{
 		DateRange: dateRange,
 		StartDate: start,
@@ -891,8 +906,25 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 		// If no format is specified, return JSON preview
 		data, err := h.service.GetDevoteeBirthdaysReport(req, entityIDs)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get devotee birthdays: %v", err)})
 			return
+		}
+		
+		// Prepare response with additional metadata
+		response := gin.H{
+			"data":        data,
+			"total_count": len(data),
+			"date_range":  dateRange,
+			"start_date":  start.Format("2006-01-02"),
+			"end_date":    end.Format("2006-01-02"),
+			"entity_ids":  entityIDs,
+			"generated_at": time.Now(),
+			"generated_by": ctx.UserID,
+		}
+		
+		// Add message if no data found
+		if len(data) == 0 {
+			response["message"] = "No devotee birthdays found for the specified date range and entities"
 		}
 		
 		// Log report view (optional - for JSON preview)
@@ -901,21 +933,31 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 			"format":     "json_preview",
 			"entity_ids": entityIDs,
 			"date_range": dateRange,
+			"start_date": start.Format("2006-01-02"),
+			"end_date":   end.Format("2006-01-02"),
+			"record_count": len(data),
 		}
 		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "DEVOTEE_BIRTHDAYS_REPORT_VIEWED", details, ip, "success")
 		
-		c.JSON(http.StatusOK, data)
+		c.JSON(http.StatusOK, response)
 		return
 	}
 
 	// Export file (format is present)
 	bytes, fname, mime, err := h.service.ExportDevoteeBirthdaysReport(c.Request.Context(), req, entityIDs, reportType, &ctx.UserID, ip)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to export report: %v", err)})
+		return
+	}
+
+	// Validate that we have content to return
+	if len(bytes) == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "generated report is empty"})
 		return
 	}
 
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Header("Content-Length", fmt.Sprint(len(bytes)))
 	c.Data(http.StatusOK, mime, bytes)
 }
 
@@ -946,6 +988,19 @@ func (h *Handler) GetSuperAdminDevoteeBirthdaysReport(c *gin.Context) {
 	}
 	
 	tenantIDs := strings.Split(tenantsParam, ",")
+	// Clean up tenant IDs (remove empty strings and trim spaces)
+	cleanTenantIDs := make([]string, 0)
+	for _, tenantID := range tenantIDs {
+		trimmed := strings.TrimSpace(tenantID)
+		if trimmed != "" {
+			cleanTenantIDs = append(cleanTenantIDs, trimmed)
+		}
+	}
+	
+	if len(cleanTenantIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no valid tenant IDs provided"})
+		return
+	}
 	
 	dateRange := c.Query("date_range")
 	if dateRange == "" {
@@ -964,7 +1019,9 @@ func (h *Handler) GetSuperAdminDevoteeBirthdaysReport(c *gin.Context) {
 
 	// Collect entity IDs for all specified tenants
 	var allEntityIDs []string
-	for _, tenantIDStr := range tenantIDs {
+	validTenantCount := 0
+	
+	for _, tenantIDStr := range cleanTenantIDs {
 		tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
 		if err != nil {
 			continue // Skip invalid tenant IDs
@@ -976,14 +1033,27 @@ func (h *Handler) GetSuperAdminDevoteeBirthdaysReport(c *gin.Context) {
 			continue // Skip if there's an error fetching entities
 		}
 		
-		// Add to the collection
-		for _, entityID := range entityIDs {
-			allEntityIDs = append(allEntityIDs, fmt.Sprint(entityID))
+		if len(entityIDs) > 0 {
+			validTenantCount++
+			// Add to the collection
+			for _, entityID := range entityIDs {
+				allEntityIDs = append(allEntityIDs, fmt.Sprint(entityID))
+			}
 		}
 	}
 	
 	if len(allEntityIDs) == 0 {
-		c.JSON(http.StatusOK, gin.H{"data": []DevoteeBirthdayReportRow{}, "message": "No entities found for the specified tenants"})
+		c.JSON(http.StatusOK, gin.H{
+			"data":           []DevoteeBirthdayReportRow{},
+			"total_count":    0,
+			"message":        "No entities found for the specified tenants",
+			"tenants_checked": len(cleanTenantIDs),
+			"valid_tenants":   validTenantCount,
+			"date_range":     dateRange,
+			"start_date":     start.Format("2006-01-02"),
+			"end_date":       end.Format("2006-01-02"),
+			"generated_at":   time.Now(),
+		})
 		return
 	}
 
@@ -1009,32 +1079,62 @@ func (h *Handler) GetSuperAdminDevoteeBirthdaysReport(c *gin.Context) {
 		// If no format is specified, return JSON preview
 		data, err := h.service.GetDevoteeBirthdaysReport(req, allEntityIDs)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get devotee birthdays: %v", err)})
 			return
+		}
+		
+		// Prepare response with additional metadata
+		response := gin.H{
+			"data":           data,
+			"total_count":    len(data),
+			"date_range":     dateRange,
+			"start_date":     start.Format("2006-01-02"),
+			"end_date":       end.Format("2006-01-02"),
+			"tenant_ids":     cleanTenantIDs,
+			"entity_ids":     allEntityIDs,
+			"tenants_processed": validTenantCount,
+			"generated_at":   time.Now(),
+			"generated_by":   ctx.UserID,
+		}
+		
+		// Add message if no data found
+		if len(data) == 0 {
+			response["message"] = "No devotee birthdays found for the specified date range and tenants"
 		}
 		
 		// Log report view
 		details := map[string]interface{}{
-			"report_type": "devotee_birthdays",
-			"format":     "json_preview",
-			"tenant_ids": tenantIDs,
-			"entity_ids": allEntityIDs,
-			"date_range": dateRange,
+			"report_type":      "devotee_birthdays",
+			"format":          "json_preview",
+			"tenant_ids":      cleanTenantIDs,
+			"entity_ids":      allEntityIDs,
+			"date_range":      dateRange,
+			"start_date":      start.Format("2006-01-02"),
+			"end_date":        end.Format("2006-01-02"),
+			"record_count":    len(data),
+			"tenants_processed": validTenantCount,
 		}
 		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "SUPERADMIN_DEVOTEE_BIRTHDAYS_REPORT_VIEWED", details, ip, "success")
 		
-		c.JSON(http.StatusOK, data)
+		c.JSON(http.StatusOK, response)
 		return
 	}
 
 	// Export file (format is present)
 	bytes, fname, mime, err := h.service.ExportDevoteeBirthdaysReport(c.Request.Context(), req, allEntityIDs, reportType, &ctx.UserID, ip)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to export report: %v", err)})
+		return
+	}
+
+	// Validate that we have content to return
+	if len(bytes) == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "generated report is empty"})
 		return
 	}
 
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Header("Content-Length", fmt.Sprint(len(bytes)))
 	c.Data(http.StatusOK, mime, bytes)
 }
 
@@ -1094,7 +1194,16 @@ func (h *Handler) GetSuperAdminTenantDevoteeBirthdaysReport(c *gin.Context) {
 	}
 	
 	if len(entityIDs) == 0 {
-		c.JSON(http.StatusOK, gin.H{"data": []DevoteeBirthdayReportRow{}, "message": "No entities found for the specified tenant"})
+		c.JSON(http.StatusOK, gin.H{
+			"data":         []DevoteeBirthdayReportRow{},
+			"total_count":  0,
+			"message":      "No entities found for the specified tenant",
+			"tenant_id":    tenantID,
+			"date_range":   dateRange,
+			"start_date":   start.Format("2006-01-02"),
+			"end_date":     end.Format("2006-01-02"),
+			"generated_at": time.Now(),
+		})
 		return
 	}
 
@@ -1126,8 +1235,26 @@ func (h *Handler) GetSuperAdminTenantDevoteeBirthdaysReport(c *gin.Context) {
 		// If no format is specified, return JSON preview
 		data, err := h.service.GetDevoteeBirthdaysReport(req, entityIDStrs)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get devotee birthdays: %v", err)})
 			return
+		}
+		
+		// Prepare response with additional metadata
+		response := gin.H{
+			"data":        data,
+			"total_count": len(data),
+			"date_range":  dateRange,
+			"start_date":  start.Format("2006-01-02"),
+			"end_date":    end.Format("2006-01-02"),
+			"tenant_id":   tenantID,
+			"entity_ids":  entityIDStrs,
+			"generated_at": time.Now(),
+			"generated_by": ctx.UserID,
+		}
+		
+		// Add message if no data found
+		if len(data) == 0 {
+			response["message"] = "No devotee birthdays found for the specified date range and tenant"
 		}
 		
 		// Log report view
@@ -1137,24 +1264,33 @@ func (h *Handler) GetSuperAdminTenantDevoteeBirthdaysReport(c *gin.Context) {
 			"tenant_id":  tenantID,
 			"entity_ids": entityIDStrs,
 			"date_range": dateRange,
+			"start_date": start.Format("2006-01-02"),
+			"end_date":   end.Format("2006-01-02"),
+			"record_count": len(data),
 		}
 		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "SUPERADMIN_TENANT_DEVOTEE_BIRTHDAYS_REPORT_VIEWED", details, ip, "success")
 		
-		c.JSON(http.StatusOK, data)
+		c.JSON(http.StatusOK, response)
 		return
 	}
 
 	// Export file (format is present)
 	bytes, fname, mime, err := h.service.ExportDevoteeBirthdaysReport(c.Request.Context(), req, entityIDStrs, reportType, &ctx.UserID, ip)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to export report: %v", err)})
+		return
+	}
+
+	// Validate that we have content to return
+	if len(bytes) == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "generated report is empty"})
 		return
 	}
 
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
+	c.Header("Content-Length", fmt.Sprint(len(bytes)))
 	c.Data(http.StatusOK, mime, bytes)
 }
-
 // GetDevoteeListReport handles requests for devotee list report
 func (h *Handler) GetDevoteeListReport(c *gin.Context) {
 	// Get access context from middleware

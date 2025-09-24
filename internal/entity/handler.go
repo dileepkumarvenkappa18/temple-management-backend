@@ -1091,65 +1091,102 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 	c.JSON(http.StatusOK, entity)
 }
 
-// UpdateEntity handles entity updates with permission checks
 func (h *Handler) UpdateEntity(c *gin.Context) {
+	// Parse entity ID
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entity ID"})
 		return
 	}
+	entityIDUint := uint(id)
 
-	accessContextVal, exists := c.Get("access_context")
+	// Get user info
+	userVal, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	userInfo := userVal.(auth.User)
+	userID := userInfo.ID
+
+	// Access context
+	acVal, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
 		return
 	}
-	accessContext, ok := accessContextVal.(middleware.AccessContext)
+	ac, ok := acVal.(middleware.AccessContext)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid access context"})
 		return
 	}
 
-	if !accessContext.CanWrite() {
+	log.Printf("🔍 UpdateEntity - UserID:%d TargetEntity:%d UserEntityID:%v RoleID:%d",
+		userID, id, userInfo.EntityID, userInfo.RoleID)
+
+	// Must have write access
+	if !ac.CanWrite() {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient write permissions"})
 		return
 	}
 
-	var input Entity
-	if err := c.ShouldBindJSON(&input); err != nil {
-		log.Printf("Update Bind Error: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
-		return
+	// ---- Permission Logic ----
+	hasAccess := false
+
+	// 1️⃣ Superadmin check (if your DB defines it by RoleID == 1 or similar)
+	//    Replace with your actual superadmin logic.
+	if userInfo.RoleID == 1 {
+		hasAccess = true
 	}
 
-	user, exists := c.Get("user")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
+	// 2️⃣ Entity checks for other roles (e.g., temple admins, staff, etc.)
+	if !hasAccess {
+		// Direct entity from JWT
+		if ac.DirectEntityID != nil && *ac.DirectEntityID == entityIDUint {
+			hasAccess = true
+		}
+		// Assigned entity from middleware context
+		if !hasAccess && ac.AssignedEntityID != nil && *ac.AssignedEntityID == entityIDUint {
+			hasAccess = true
+		}
+		// User's own EntityID
+		if !hasAccess && userInfo.EntityID != nil && *userInfo.EntityID == entityIDUint {
+			hasAccess = true
+		}
+		// Creator ownership
+		if !hasAccess {
+			entity, err := h.Service.GetEntityByID(id) // returns (Entity, error)
+			if err == nil && entity.CreatedBy == userID {
+				hasAccess = true
+			}
+		}
 	}
-	userID := user.(auth.User).ID
-
-	entityIDUint := uint(id)
-	hasAccess := (accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityIDUint) ||
-		(accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityIDUint)
 
 	if !hasAccess {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied to update this entity"})
 		return
 	}
 
-	input.ID = uint(id)
+	// ---- Update Operation ----
+	var input Entity
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
+		return
+	}
+	input.ID = entityIDUint
 	input.UpdatedAt = time.Now()
 
 	ip := middleware.GetIPFromContext(c)
 
 	if err := h.Service.UpdateEntity(input, userID, ip); err != nil {
-		log.Printf("Update Error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update temple", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to update entity",
+			"details": err.Error(),
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Temple updated successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Entity updated successfully"})
 }
 
 // DeleteEntity handles entity deletion (superadmin only)

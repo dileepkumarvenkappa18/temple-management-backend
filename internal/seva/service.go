@@ -26,6 +26,9 @@ type Service interface {
 	GetBookingsForEntity(ctx context.Context, entityID uint) ([]SevaBooking, error)
 	UpdateBookingStatus(ctx context.Context, bookingID uint, newStatus string, userID uint, ip string) error
 
+	// Enhanced user bookings with filters (NEW)
+	GetBookingsForUserWithFilters(ctx context.Context, userID uint, entityID uint, status, sevaType, search string, limit, offset int) ([]DetailedBooking, int64, error)
+
 	// Composite Booking Details
 	GetDetailedBookingsForEntity(ctx context.Context, entityID uint) ([]DetailedBooking, error)
 
@@ -341,6 +344,23 @@ func (s *service) BookSeva(ctx context.Context, booking *SevaBooking, userRole s
 
 func (s *service) GetBookingsForUser(ctx context.Context, userID uint) ([]SevaBooking, error) {
 	return s.repo.ListBookingsByUserID(ctx, userID)
+}
+
+// NEW: Enhanced user bookings with filters and pagination
+func (s *service) GetBookingsForUserWithFilters(ctx context.Context, userID uint, entityID uint, status, sevaType, search string, limit, offset int) ([]DetailedBooking, int64, error) {
+	filter := BookingFilter{
+		EntityID:  entityID,
+		UserID:    userID,    // Filter by specific user
+		Status:    status,
+		SevaType:  sevaType,
+		Search:    search,
+		Limit:     limit,
+		Offset:    offset,
+		SortBy:    "b.booking_time",
+		SortOrder: "DESC",
+	}
+	
+	return s.repo.SearchBookingsWithFilters(ctx, filter)
 }
 
 func (s *service) GetBookingsForEntity(ctx context.Context, entityID uint) ([]SevaBooking, error) {

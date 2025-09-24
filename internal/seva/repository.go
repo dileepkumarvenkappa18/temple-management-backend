@@ -1,4 +1,3 @@
-
 package seva
 
 import (
@@ -37,6 +36,8 @@ type Repository interface {
 
 	ListPaginatedSevas(ctx context.Context, entityID uint, sevaType string, search string, limit int, offset int) ([]Seva, error)
 }
+
+// BookingFilter and DetailedBooking structs are now defined in model.go
 
 type repository struct {
 	db *gorm.DB
@@ -176,13 +177,7 @@ func (r *repository) CountBookingsForSlot(ctx context.Context, sevaID uint, date
 // -----------------------------------------
 // Detailed Booking Listing
 // -----------------------------------------
-type DetailedBooking struct {
-	SevaBooking
-	SevaName     string `json:"seva_name"`
-	SevaType     string `json:"seva_type"`
-	DevoteeName  string `json:"devotee_name"`
-	DevoteePhone string `json:"devotee_phone"`
-}
+// DetailedBooking struct is now defined in model.go
 
 func (r *repository) ListBookingsWithDetails(ctx context.Context, entityID uint) ([]DetailedBooking, error) {
 	var results []DetailedBooking
@@ -212,7 +207,7 @@ func (r *repository) GetBookingByID(ctx context.Context, bookingID uint) (*SevaB
 	return &booking, err
 }
 
-// Search + Filter + Paginate Seva Bookings
+// UPDATED: Search + Filter + Paginate Seva Bookings with UserID support
 func (r *repository) SearchBookingsWithFilters(ctx context.Context, filter BookingFilter) ([]DetailedBooking, int64, error) {
 	var results []DetailedBooking
 	var total int64
@@ -225,6 +220,9 @@ func (r *repository) SearchBookingsWithFilters(ctx context.Context, filter Booki
 		Where("b.entity_id = ?", filter.EntityID)
 
 	// Apply filters
+	if filter.UserID != 0 {  // NEW: Filter by user ID for GetMyBookings
+		query = query.Where("b.user_id = ?", filter.UserID)
+	}
 	if filter.Status != "" {
 		query = query.Where("b.status = ?", filter.Status)
 	}
