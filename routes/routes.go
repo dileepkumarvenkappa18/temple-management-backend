@@ -1,11 +1,18 @@
 package routes
 
 import (
+	"fmt"
+	"io/fs"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/database"
-	"github.com/sharath018/temple-management-backend/internal/auditlog" 
-	"github.com/sharath018/temple-management-backend/internal/tenant"
+	"github.com/sharath018/temple-management-backend/internal/auditlog"
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/donation"
 	"github.com/sharath018/temple-management-backend/internal/entity"
@@ -15,15 +22,9 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/reports"
 	"github.com/sharath018/temple-management-backend/internal/seva"
 	"github.com/sharath018/temple-management-backend/internal/superadmin"
+	"github.com/sharath018/temple-management-backend/internal/tenant"
 	"github.com/sharath018/temple-management-backend/internal/userprofile"
 	"github.com/sharath018/temple-management-backend/middleware"
-	"net/http"
-	"strings"
-	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"time"
 
 	_ "github.com/sharath018/temple-management-backend/docs"
 	swaggerFiles "github.com/swaggo/files"
@@ -35,7 +36,7 @@ func addUploadDebugging(r *gin.Engine) {
 	// Debug route to check upload directory structure - Updated to use persistent volume
 	r.GET("/debug/uploads", func(c *gin.Context) {
 		uploadPath := "/data/uploads" // Changed from ./uploads to /data/uploads
-		
+
 		// Check if uploads directory exists
 		if _, err := os.Stat(uploadPath); os.IsNotExist(err) {
 			c.JSON(http.StatusOK, gin.H{
@@ -47,42 +48,42 @@ func addUploadDebugging(r *gin.Engine) {
 
 		// Walk through the uploads directory
 		var files []map[string]interface{}
-		
+
 		err := filepath.WalkDir(uploadPath, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-			
+
 			// Get file info
 			info, err := d.Info()
 			if err != nil {
 				return err
 			}
-			
+
 			relativePath := strings.TrimPrefix(path, uploadPath)
 			if relativePath == "" {
 				relativePath = "/"
 			}
-			
+
 			files = append(files, map[string]interface{}{
-				"path":    relativePath,
-				"name":    d.Name(),
-				"is_dir":  d.IsDir(),
-				"size":    info.Size(),
+				"path":     relativePath,
+				"name":     d.Name(),
+				"is_dir":   d.IsDir(),
+				"size":     info.Size(),
 				"mod_time": info.ModTime().Format(time.RFC3339),
 			})
-			
+
 			return nil
 		})
-		
+
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "failed to walk directory",
+				"error":   "failed to walk directory",
 				"details": err.Error(),
 			})
 			return
 		}
-		
+
 		c.JSON(http.StatusOK, gin.H{
 			"upload_path": uploadPath,
 			"files":       files,
@@ -94,7 +95,7 @@ func addUploadDebugging(r *gin.Engine) {
 	r.GET("/debug/file/*filepath", func(c *gin.Context) {
 		filePath := c.Param("filepath")
 		fullPath := filepath.Join("/data/uploads", filePath) // Changed from ./uploads
-		
+
 		// Check if file exists
 		info, err := os.Stat(fullPath)
 		if os.IsNotExist(err) {
@@ -105,7 +106,7 @@ func addUploadDebugging(r *gin.Engine) {
 			})
 			return
 		}
-		
+
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":   "failed to stat file",
@@ -113,7 +114,7 @@ func addUploadDebugging(r *gin.Engine) {
 			})
 			return
 		}
-		
+
 		c.JSON(http.StatusOK, gin.H{
 			"file_path": filePath,
 			"full_path": fullPath,
@@ -134,7 +135,7 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 
 	// Add static file serving for the public directory
 	r.Static("/public", "./public")
-	
+
 	// The /uploads static route is now handled in main.go only
 	// File serving is now handled by the /files/*filepath route in main.go
 
@@ -161,8 +162,9 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	})
 
 	api := r.Group("/api/v1")
-	api.Use(middleware.RateLimiter()) // Global rate limit: 5 req/sec per IP
+	api.Use(middleware.RateLimiter())     // Global rate limit: 5 req/sec per IP
 	api.Use(middleware.AuditMiddleware()) // Audit middleware to capture IP
+	api.Use(middleware.WAFMiddleware())   //WAF middleware to protect server
 
 	// ========== Initialize Audit Log Module ==========
 	auditRepo := auditlog.NewRepository(database.DB)
@@ -221,13 +223,13 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 
 	superadminRoutes := protected.Group("/superadmin")
 	superadminRoutes.Use(middleware.RBACMiddleware("superadmin"))
-	
+
 	{
 		// ================ TENANT APPROVAL MANAGEMENT ================
 		// Paginated list of all tenants with optional ?status=pending&limit=10&page=1
 		superadminRoutes.GET("/tenants", superadminHandler.GetTenantsWithFilters)
 		superadminRoutes.PATCH("/tenants/:id/approval", superadminHandler.UpdateTenantApprovalStatus)
-		
+
 		// ================ ENTITY APPROVAL MANAGEMENT ================
 		// Paginated list of entities with optional ?status=pending&limit=10&page=1
 		superadminRoutes.GET("/entities", superadminHandler.GetEntitiesWithFilters)
@@ -235,7 +237,7 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 
 		superadminRoutes.GET("/tenant-details/:id", superadminHandler.GetTenantDetails)
 		superadminRoutes.GET("/tenant-details", superadminHandler.GetTenantDetails)
-    
+
 		// ================ DASHBOARD METRICS ================
 		superadminRoutes.GET("/tenant-approval-count", superadminHandler.GetTenantApprovalCounts)
 		superadminRoutes.GET("/temple-approval-count", superadminHandler.GetTempleApprovalCounts)
@@ -276,15 +278,15 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		// Assigns a list of users to a selected temple/tenant
 		superadminRoutes.POST("/users/assign", superadminHandler.AssignUsersToTenant)
 		// Bulk upload users via CSV
-        superadminRoutes.POST("/users/bulk-upload", superadminHandler.BulkUploadUsers)
-		
+		superadminRoutes.POST("/users/bulk-upload", superadminHandler.BulkUploadUsers)
+
 		// ================ SUPERADMIN REPORTS ================
 		// Add dedicated routes for reports with multiple tenants
 		reportsRepo := reports.NewRepository(database.DB)
 		reportsExporter := reports.NewReportExporter()
 		reportsService := reports.NewReportService(reportsRepo, reportsExporter, auditSvc)
 		reportsHandler := reports.NewHandler(reportsService, reportsRepo, auditSvc)
-		
+
 		// Reports endpoints for superadmin with multiple tenants support
 		superadminRoutes.GET("/reports/activities", reportsHandler.GetSuperAdminActivities)
 		superadminRoutes.GET("/reports/temple-registered", reportsHandler.GetSuperAdminTempleRegisteredReport)
@@ -304,52 +306,52 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		superadminRoutes.GET("/tenants/:id/reports/audit-logs", reportsHandler.GetSuperAdminTenantAuditLogsReport)
 	}
 
-	protected.GET("/tenants/selection", 
-		middleware.RBACMiddleware("superadmin", "standarduser", "monitoringuser"), 
+	protected.GET("/tenants/selection",
+		middleware.RBACMiddleware("superadmin", "standarduser", "monitoringuser"),
 		superadminHandler.GetTenantsForSelection)
-	
-// ========== Seva Routes ==========
-sevaRepo := seva.NewRepository(database.DB)
-sevaService := seva.NewService(sevaRepo, auditSvc)
-sevaHandler := seva.NewHandler(sevaService, auditSvc)
 
-sevaRoutes := protected.Group("/sevas")
+	// ========== Seva Routes ==========
+	sevaRepo := seva.NewRepository(database.DB)
+	sevaService := seva.NewService(sevaRepo, auditSvc)
+	sevaHandler := seva.NewHandler(sevaService, auditSvc)
 
-// Common route accessible to both temple admin and devotees
-sevaRoutes.GET("/booking-counts", sevaHandler.GetBookingCounts)
+	sevaRoutes := protected.Group("/sevas")
 
-// Temple Admin Routes (templeadmin, standarduser, monitoringuser)
-templeSevaRoutes := sevaRoutes.Group("")
-templeSevaRoutes.Use(middleware.RequireTempleAccess())
-{
-    // Write operations - only templeadmin and standarduser can access
-    writeRoutes := templeSevaRoutes.Group("")
-    writeRoutes.Use(middleware.RequireWriteAccess())
-    {
-        // Seva CRUD operations
-        writeRoutes.POST("/", sevaHandler.CreateSeva)
-        writeRoutes.PUT("/:id", sevaHandler.UpdateSeva)
-        writeRoutes.DELETE("/:id", sevaHandler.DeleteSeva)
-        
-        // Booking status management
-        writeRoutes.PATCH("/bookings/:id/status", sevaHandler.UpdateBookingStatus)
-    }
-   
-    // Read operations - all three roles (templeadmin, standarduser, monitoringuser) can access
-    templeSevaRoutes.GET("/entity-sevas", sevaHandler.ListEntitySevas)
-    templeSevaRoutes.GET("/:id", sevaHandler.GetSevaByID)
-    templeSevaRoutes.GET("/entity-bookings", sevaHandler.GetEntityBookings)
-    templeSevaRoutes.GET("/bookings/:id", sevaHandler.GetBookingByID)
-}
+	// Common route accessible to both temple admin and devotees
+	sevaRoutes.GET("/booking-counts", sevaHandler.GetBookingCounts)
 
-// Devotee Only Routes (keep existing middleware)
-devoteeSevaRoutes := sevaRoutes.Group("")
-devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
-{
-    devoteeSevaRoutes.POST("/bookings", sevaHandler.BookSeva)
-    devoteeSevaRoutes.GET("/my-bookings", sevaHandler.GetMyBookings)
-    devoteeSevaRoutes.GET("/", sevaHandler.GetSevas)
-}
+	// Temple Admin Routes (templeadmin, standarduser, monitoringuser)
+	templeSevaRoutes := sevaRoutes.Group("")
+	templeSevaRoutes.Use(middleware.RequireTempleAccess())
+	{
+		// Write operations - only templeadmin and standarduser can access
+		writeRoutes := templeSevaRoutes.Group("")
+		writeRoutes.Use(middleware.RequireWriteAccess())
+		{
+			// Seva CRUD operations
+			writeRoutes.POST("/", sevaHandler.CreateSeva)
+			writeRoutes.PUT("/:id", sevaHandler.UpdateSeva)
+			writeRoutes.DELETE("/:id", sevaHandler.DeleteSeva)
+
+			// Booking status management
+			writeRoutes.PATCH("/bookings/:id/status", sevaHandler.UpdateBookingStatus)
+		}
+
+		// Read operations - all three roles (templeadmin, standarduser, monitoringuser) can access
+		templeSevaRoutes.GET("/entity-sevas", sevaHandler.ListEntitySevas)
+		templeSevaRoutes.GET("/:id", sevaHandler.GetSevaByID)
+		templeSevaRoutes.GET("/entity-bookings", sevaHandler.GetEntityBookings)
+		templeSevaRoutes.GET("/bookings/:id", sevaHandler.GetBookingByID)
+	}
+
+	// Devotee Only Routes (keep existing middleware)
+	devoteeSevaRoutes := sevaRoutes.Group("")
+	devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
+	{
+		devoteeSevaRoutes.POST("/bookings", sevaHandler.BookSeva)
+		devoteeSevaRoutes.GET("/my-bookings", sevaHandler.GetMyBookings)
+		devoteeSevaRoutes.GET("/", sevaHandler.GetSevas)
+	}
 
 	// ========== Entity ==========
 	{
@@ -369,20 +371,20 @@ devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 				return
 			}
-			
+
 			user, ok := userVal.(auth.User)
 			if !ok {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user object"})
 				return
 			}
-			
+
 			// Call repository to get entities created by this user
 			entities, err := entityRepo.GetEntitiesByCreator(user.ID)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch temples", "details": err.Error()})
 				return
 			}
-			
+
 			c.JSON(http.StatusOK, entities)
 		})
 
@@ -399,7 +401,7 @@ devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
 				writeRoutes.DELETE("/:id", entityHandler.DeleteEntity)
 				writeRoutes.PATCH("/:entityID/devotees/:userID/status", entityHandler.UpdateDevoteeMembershipStatus)
 			}
-			
+
 			// Read operations - all three roles can access
 			entityRoutes.GET("/:id", entityHandler.GetEntityByID)
 			entityRoutes.GET("/:id/devotees", entityHandler.GetDevoteesByEntity)
@@ -424,43 +426,44 @@ devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
 		)
 	}
 
-// ========== Event & RSVP ==========
-eventRepo := event.NewRepository(database.DB)
-eventService := event.NewService(eventRepo, auditSvc)
-eventHandler := event.NewHandler(eventService)
+	// ========== Event & RSVP ==========
+	eventRepo := event.NewRepository(database.DB)
+	eventService := event.NewService(eventRepo, auditSvc)
+	var notifSvc notification.Service
+	eventHandler := event.NewHandler(eventService)
 
-// Event routes - all require temple access
-eventRoutes := protected.Group("/events")
-eventRoutes.Use(middleware.RequireTempleAccess())
-{
-    // Write operations - only templeadmin and standarduser can access
-    writeRoutes := eventRoutes.Group("")
-    writeRoutes.Use(middleware.RequireWriteAccess())
-    {
-        writeRoutes.POST("/", eventHandler.CreateEvent)
-        writeRoutes.POST("", eventHandler.CreateEvent)
-        writeRoutes.PUT("/:id", eventHandler.UpdateEvent)
-        writeRoutes.DELETE("/:id", eventHandler.DeleteEvent)
-    }
-    
-    // Read operations - all three roles can access
-    eventRoutes.GET("/", eventHandler.ListEvents)
-    eventRoutes.GET("/:id", eventHandler.GetEventByID)
-    eventRoutes.GET("/upcoming", eventHandler.GetUpcomingEvents)
-    eventRoutes.GET("/stats", eventHandler.GetEventStats)
-}
+	// Event routes - all require temple access
+	eventRoutes := protected.Group("/events")
+	eventRoutes.Use(middleware.RequireTempleAccess())
+	{
+		// Write operations - only templeadmin and standarduser can access
+		writeRoutes := eventRoutes.Group("")
+		writeRoutes.Use(middleware.RequireWriteAccess())
+		{
+			writeRoutes.POST("/", eventHandler.CreateEvent)
+			writeRoutes.POST("", eventHandler.CreateEvent)
+			writeRoutes.PUT("/:id", eventHandler.UpdateEvent)
+			writeRoutes.DELETE("/:id", eventHandler.DeleteEvent)
+		}
 
-// Event RSVP routes (keeping existing logic for devotee/volunteer access)
-{
-    rsvpRepo := eventrsvp.NewRepository(database.DB)
-    rsvpService := eventrsvp.NewService(rsvpRepo, eventService)
-    rsvpHandler := eventrsvp.NewHandler(rsvpService, eventService)
+		// Read operations - all three roles can access
+		eventRoutes.GET("/", eventHandler.ListEvents)
+		eventRoutes.GET("/:id", eventHandler.GetEventByID)
+		eventRoutes.GET("/upcoming", eventHandler.GetUpcomingEvents)
+		eventRoutes.GET("/stats", eventHandler.GetEventStats)
+	}
 
-    rsvpRoutes := protected.Group("/event-rsvps")
-    rsvpRoutes.POST("/:eventID", middleware.RBACMiddleware("devotee", "volunteer"), rsvpHandler.CreateRSVP)
-    rsvpRoutes.GET("/:eventID", middleware.RBACMiddleware("devotee"), rsvpHandler.GetRSVPsByEvent)
-    rsvpRoutes.GET("/my", middleware.RBACMiddleware("devotee", "volunteer"), rsvpHandler.GetMyRSVPs)
-}
+	// Event RSVP routes (keeping existing logic for devotee/volunteer access)
+	{
+		rsvpRepo := eventrsvp.NewRepository(database.DB)
+		rsvpService := eventrsvp.NewService(rsvpRepo, eventService)
+		rsvpHandler := eventrsvp.NewHandler(rsvpService, eventService)
+
+		rsvpRoutes := protected.Group("/event-rsvps")
+		rsvpRoutes.POST("/:eventID", middleware.RBACMiddleware("devotee", "volunteer"), rsvpHandler.CreateRSVP)
+		rsvpRoutes.GET("/:eventID", middleware.RBACMiddleware("devotee"), rsvpHandler.GetRSVPsByEvent)
+		rsvpRoutes.GET("/my", middleware.RBACMiddleware("devotee", "volunteer"), rsvpHandler.GetMyRSVPs)
+	}
 
 	// ========== User Profile & Membership ==========
 	profileRepo := userprofile.NewRepository(database.DB)
@@ -488,7 +491,7 @@ eventRoutes.Use(middleware.RequireTempleAccess())
 		templeSearchRoutes.GET("/recent", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.GetRecentTemples)
 	}
 
-// ========== Donations with New Permission System ==========
+	// ========== Donations with New Permission System ==========
 	{
 		donationRepo := donation.NewRepository(database.DB)
 		donationService := donation.NewService(donationRepo, cfg, auditSvc)
@@ -519,28 +522,26 @@ eventRoutes.Use(middleware.RequireTempleAccess())
 				writeRoutes := templeRoutes.Group("")
 				writeRoutes.Use(middleware.RequireWriteAccess())
 				{
-					writeRoutes.GET("/export", donationHandler.ExportDonations)
+					//writeRoutes.GET("/export", donationHandler.ExportDonations)
 				}
 			}
 
 			// ========== SHARED ROUTES (BOTH DEVOTEE AND TEMPLE ADMIN) ==========
 			// Receipt generation - both devotees and temple admins can access
-			donationRoutes.GET("/:id/receipt", 
-				middleware.RBACMiddleware("devotee", "templeadmin", "standarduser", "monitoringuser"), 
-				donationHandler.GenerateReceipt)
 			
+
 			// Recent donations - both devotees and temple admins can access
-			donationRoutes.GET("/recent", 
-				middleware.RBACMiddleware("devotee", "templeadmin", "standarduser", "monitoringuser"), 
+			donationRoutes.GET("/recent",
+				middleware.RBACMiddleware("devotee", "templeadmin", "standarduser", "monitoringuser"),
 				donationHandler.GetRecentDonations)
 		}
 	}
 
-// ========== Notifications ==========
+	// ========== Notifications ==========
 	{
 		notificationRepo := notification.NewRepository(database.DB)
-		notificationService := notification.NewService(notificationRepo, authRepo, cfg, auditSvc)
-		notificationHandler := notification.NewHandler(notificationService, auditSvc)
+		notifSvc = notification.NewService(notificationRepo, authRepo, cfg, auditSvc)
+		notificationHandler := notification.NewHandler(notifSvc, auditSvc)
 
 		// Updated to use new middleware system
 		notificationRoutes := protected.Group("/notifications")
@@ -565,66 +566,83 @@ eventRoutes.Use(middleware.RequireTempleAccess())
 
 			// View Logs
 			notificationRoutes.GET("/logs", notificationHandler.GetMyNotifications)
+
+			// In-app
+			notificationRoutes.GET("/inapp", notificationHandler.GetMyInApp)
+			notificationRoutes.PUT("/inapp/:id/read", notificationHandler.MarkInAppRead)
+			notificationRoutes.GET("/stream", notificationHandler.StreamInApp)
 		}
 	}
 
-// ========== Tenant User Management ==========
-tenantRepo := tenant.NewRepository(database.DB)
-tenantService := tenant.NewService(tenantRepo)
-tenantHandler := tenant.NewHandler(tenantService)
+	// Public token-based SSE stream (no auth middleware required)
+	api.GET("/notifications/stream-token", func(c *gin.Context) {
+		notificationRepo := notification.NewRepository(database.DB)
+		notifSvc := notification.NewService(notificationRepo, authRepo, cfg, auditSvc)
+		handler := notification.NewHandler(notifSvc, auditSvc)
+		handler.StreamInAppWithToken(c)
+	})
 
-// Tenant user routes (templeadmin + standarduser manage, monitoringuser read-only)
-tenantRoutes := protected.Group("/tenants/:id/user")
-tenantRoutes.Use(middleware.RequireTempleAccess()) // restrict to members of this temple
-{
-    // Read operations - all 3 roles can access
-    tenantRoutes.GET("/management", tenantHandler.GetUsers)
-	// Add this inside the tenant routes group
-	tenantRoutes.PATCH("/:id/user/:userId/status", tenantHandler.UpdateUserStatus)
+	// Now inject notifSvc into eventService
+	eventService.NotifSvc = notifSvc
+	sevaService.SetNotificationService(notifSvc)
 
-    // Write operations - only templeadmin + standarduser
-    writeRoutes := tenantRoutes.Group("")
-    writeRoutes.Use(middleware.RequireWriteAccess())
-    {
-        writeRoutes.POST("/", tenantHandler.CreateOrUpdateUser)
-		writeRoutes.PUT("/:userId", tenantHandler.UpdateUser)
-    }
-}
+	// ========== Tenant User Management ==========
+	tenantRepo := tenant.NewRepository(database.DB)
+	tenantService := tenant.NewService(tenantRepo)
+	tenantHandler := tenant.NewHandler(tenantService)
 
-// ========== Reports ==========
-{
-	reportsRepo := reports.NewRepository(database.DB)
-	reportsExporter := reports.NewReportExporter()
-	reportsService := reports.NewReportService(reportsRepo, reportsExporter, auditSvc)
-	reportsHandler := reports.NewHandler(reportsService, reportsRepo, auditSvc)
-
-	reportsRoutes := protected.Group("/entities/:id/reports")
-	reportsRoutes.Use(middleware.RequireTempleAccess()) // Allow templeadmin, standarduser, monitoringuser
+	// Tenant user routes (templeadmin + standarduser manage, monitoringuser read-only)
+	tenantRoutes := protected.Group("/tenants/:id/user")
+	tenantRoutes.Use(middleware.RequireTempleAccess()) // restrict to members of this temple
 	{
-		// All report endpoints are read-only by default, but may generate downloadable files
-		// Since report generation can be considered a "sensitive" operation, we can optionally require write access
-		// However, for now, let's allow all three roles to view and export reports
-		
-		reportsRoutes.GET("/activities", reportsHandler.GetActivities)
-		reportsRoutes.GET("/temple-registered", reportsHandler.GetTempleRegisteredReport)
-		reportsRoutes.GET("/devotee-birthdays", reportsHandler.GetDevoteeBirthdaysReport)
-		reportsRoutes.GET("/devotee-list", reportsHandler.GetDevoteeListReport)
-		reportsRoutes.GET("/devotee-profile", reportsHandler.GetDevoteeProfileReport)
-		reportsRoutes.GET("/audit-logs", reportsHandler.GetAuditLogsReport)
-		
-		// If you want to restrict export functionality to only users with write access, 
-		// you can create a separate group with write access requirement:
-		/*
-		exportRoutes := reportsRoutes.Group("")
-		exportRoutes.Use(middleware.RequireWriteAccess())
+		// Read operations - all 3 roles can access
+		tenantRoutes.GET("/management", tenantHandler.GetUsers)
+		// Add this inside the tenant routes group
+		tenantRoutes.PATCH("/:id/user/:userId/status", tenantHandler.UpdateUserStatus)
+
+		// Write operations - only templeadmin + standarduser
+		writeRoutes := tenantRoutes.Group("")
+		writeRoutes.Use(middleware.RequireWriteAccess())
 		{
-			exportRoutes.GET("/activities", reportsHandler.GetActivities) // when ?format= is provided
-			exportRoutes.GET("/temple-registered", reportsHandler.GetTempleRegisteredReport) // when ?format= is provided
-			// ... other export endpoints
+			writeRoutes.POST("/", tenantHandler.CreateOrUpdateUser)
+			writeRoutes.PUT("/:userId", tenantHandler.UpdateUser)
 		}
-		*/
 	}
-}
+
+	// ========== Reports ==========
+	{
+		reportsRepo := reports.NewRepository(database.DB)
+		reportsExporter := reports.NewReportExporter()
+		reportsService := reports.NewReportService(reportsRepo, reportsExporter, auditSvc)
+		reportsHandler := reports.NewHandler(reportsService, reportsRepo, auditSvc)
+
+		reportsRoutes := protected.Group("/entities/:id/reports")
+		reportsRoutes.Use(middleware.RequireTempleAccess()) // Allow templeadmin, standarduser, monitoringuser
+		{
+			// All report endpoints are read-only by default, but may generate downloadable files
+			// Since report generation can be considered a "sensitive" operation, we can optionally require write access
+			// However, for now, let's allow all three roles to view and export reports
+
+			reportsRoutes.GET("/activities", reportsHandler.GetActivities)
+			reportsRoutes.GET("/temple-registered", reportsHandler.GetTempleRegisteredReport)
+			reportsRoutes.GET("/devotee-birthdays", reportsHandler.GetDevoteeBirthdaysReport)
+			reportsRoutes.GET("/devotee-list", reportsHandler.GetDevoteeListReport)
+			reportsRoutes.GET("/devotee-profile", reportsHandler.GetDevoteeProfileReport)
+			reportsRoutes.GET("/audit-logs", reportsHandler.GetAuditLogsReport)
+
+			// If you want to restrict export functionality to only users with write access,
+			// you can create a separate group with write access requirement:
+			/*
+				exportRoutes := reportsRoutes.Group("")
+				exportRoutes.Use(middleware.RequireWriteAccess())
+				{
+					exportRoutes.GET("/activities", reportsHandler.GetActivities) // when ?format= is provided
+					exportRoutes.GET("/temple-registered", reportsHandler.GetTempleRegisteredReport) // when ?format= is provided
+					// ... other export endpoints
+				}
+			*/
+		}
+	}
 
 	// Serve the SPA (Single Page Application) for any other route
 	r.NoRoute(func(c *gin.Context) {
@@ -638,10 +656,10 @@ tenantRoutes.Use(middleware.RequireTempleAccess()) // restrict to members of thi
 		// For upload files that don't exist, provide helpful error - Updated path
 		if strings.HasPrefix(c.Request.URL.Path, "/uploads") {
 			c.JSON(http.StatusNotFound, gin.H{
-				"error": "File not found",
+				"error":   "File not found",
 				"message": "The requested file does not exist or has been moved",
-				"path": c.Request.URL.Path,
-				"note": "Files are now served from /data/uploads directory",
+				"path":    c.Request.URL.Path,
+				"note":    "Files are now served from /data/uploads directory",
 			})
 			return
 		}

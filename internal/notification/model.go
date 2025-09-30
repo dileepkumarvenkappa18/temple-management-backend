@@ -37,3 +37,16 @@ type NotificationLog struct {
 	CreatedAt  time.Time      `json:"created_at"`
 	UpdatedAt  time.Time      `json:"updated_at"`
 }
+
+// 3. InAppNotification - per-user, in-app bell notifications
+type InAppNotification struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	UserID    uint      `gorm:"not null;index" json:"user_id"`
+	EntityID  uint      `gorm:"not null;index" json:"entity_id"`
+	Title     string    `gorm:"size:150;not null" json:"title"`
+	Message   string    `gorm:"type:text;not null" json:"message"`
+	Category  string    `gorm:"size:30;not null" json:"category"` // event, seva, donation, system
+	IsRead    bool      `gorm:"default:false" json:"is_read"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}

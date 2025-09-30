@@ -2577,9 +2577,10 @@ func (h *Handler) GetUserDetailsReport(c *gin.Context) {
 
 	// Accessible entities
 	var entityIDs []string
-	if ctx.RoleName == "superadmin" {
+	switch ctx.RoleName {
+case "superadmin":
 		entityIDs = nil // all entities
-	} else if ctx.RoleName == "templeadmin" {
+	case "templeadmin":
 		ids, err := h.repo.GetEntitiesByTenant(ctx.UserID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
@@ -2588,7 +2589,7 @@ func (h *Handler) GetUserDetailsReport(c *gin.Context) {
 		for _, id := range ids {
 			entityIDs = append(entityIDs, fmt.Sprint(id))
 		}
-	} else {
+	default:
 		accessibleEntityID := ctx.GetAccessibleEntityID()
 		if accessibleEntityID == nil {
 			c.JSON(http.StatusForbidden, gin.H{"error": "no accessible entity"})

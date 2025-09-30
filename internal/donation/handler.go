@@ -50,14 +50,14 @@ func getEntityIDFromRequest(c *gin.Context, accessContext middleware.AccessConte
 	}
 	
 	// Try header next
-	entityIDHeader := c.GetHeader("X-Entity-ID")
+	/*entityIDHeader := c.GetHeader("X-Entity-ID")
 	if entityIDHeader != "" {
 		id, err := strconv.ParseUint(entityIDHeader, 10, 32)
 		if err == nil {
 			return uint(id), nil
 		}
 	}
-	
+	*/
 	// Try query parameter
 	entityIDQuery := c.Query("entity_id")
 	if entityIDQuery != "" {
@@ -311,7 +311,7 @@ func (h *Handler) GetTopDonors(c *gin.Context) {
 		"success": true,
 	})
 }
-
+/*
 // ==============================
 // 📄 7. Generate Receipt - UPDATED: Enhanced entity and user handling
 // ==============================
@@ -359,7 +359,7 @@ func (h *Handler) GenerateReceipt(c *gin.Context) {
 		"success": true,
 	})
 }
-
+*/
 // ==============================
 // 📈 8. Get Donation Analytics - UPDATED: Enhanced entity handling
 // ==============================
@@ -388,7 +388,7 @@ func (h *Handler) GetAnalytics(c *gin.Context) {
 		"success": true,
 	})
 }
-
+/*
 // ==============================
 // 📊 9. Export Donations - UPDATED: Enhanced entity handling
 // ==============================
@@ -436,10 +436,10 @@ func (h *Handler) ExportDonations(c *gin.Context) {
 		return
 	}
 
-	c.Header("Content-Disposition", "attachment; filename="+filename)
-	c.Header("Content-Type", "application/octet-stream")
+	//c.Header("Content-Disposition", "attachment; filename="+filename)
+	//c.Header("Content-Type", "application/octet-stream")
 	c.Data(http.StatusOK, "application/octet-stream", fileContent)
-}
+}*/
 
 // ==============================
 // 🕐 10. Get Recent Donations - UPDATED: Enhanced entity handling

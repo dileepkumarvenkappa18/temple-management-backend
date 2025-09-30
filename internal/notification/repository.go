@@ -20,6 +20,11 @@ type Repository interface {
 	UpdateNotificationLog(ctx context.Context, log *NotificationLog) error
 	GetNotificationsByUser(ctx context.Context, userID uint) ([]NotificationLog, error)
 	MarkNotificationAsRead(ctx context.Context, notificationID uint, userID uint) error
+
+	// In-app notifications
+	CreateInApp(ctx context.Context, n *InAppNotification) error
+	ListInAppByUser(ctx context.Context, userID uint, entityID *uint, limit int) ([]InAppNotification, error)
+	MarkInAppAsRead(ctx context.Context, id uint, userID uint) error
 }
 
 type repository struct {
@@ -106,5 +111,33 @@ func (r *repository) MarkNotificationAsRead(ctx context.Context, notificationID 
 	return r.db.WithContext(ctx).
 		Model(&NotificationLog{}).
 		Where("id = ? AND user_id = ?", notificationID, userID).
+		Update("is_read", true).Error
+}
+
+// ------------------------------
+// In-App Notifications
+// ------------------------------
+
+func (r *repository) CreateInApp(ctx context.Context, n *InAppNotification) error {
+	return r.db.WithContext(ctx).Create(n).Error
+}
+
+func (r *repository) ListInAppByUser(ctx context.Context, userID uint, entityID *uint, limit int) ([]InAppNotification, error) {
+	var items []InAppNotification
+	q := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	if entityID != nil {
+		q = q.Where("entity_id = ?", *entityID)
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	err := q.Order("created_at DESC").Limit(limit).Find(&items).Error
+	return items, err
+}
+
+func (r *repository) MarkInAppAsRead(ctx context.Context, id uint, userID uint) error {
+	return r.db.WithContext(ctx).
+		Model(&InAppNotification{}).
+		Where("id = ? AND user_id = ?", id, userID).
 		Update("is_read", true).Error
 }

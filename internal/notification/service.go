@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"github.com/sharath018/temple-management-backend/config"
-	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
+	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/utils"
 	"gorm.io/datatypes"
 )
 
-// Service interface - updated with IP parameters for audit logging
+// Service interface - updated with IP parameters for audit logging and in-app notifications
 type Service interface {
 	CreateTemplate(ctx context.Context, template *NotificationTemplate, ip string) error
 	UpdateTemplate(ctx context.Context, template *NotificationTemplate, ip string) error
@@ -23,74 +24,82 @@ type Service interface {
 	SendNotification(ctx context.Context, senderID, entityID uint, templateID *uint, channel, subject, body string, recipients []string, ip string) error
 	GetNotificationsByUser(ctx context.Context, userID uint) ([]NotificationLog, error)
 	GetEmailsByAudience(entityID uint, audience string) ([]string, error)
+
+	// In-app notifications
+	CreateInAppNotification(ctx context.Context, userID, entityID uint, title, message, category string) error
+	ListInAppByUser(ctx context.Context, userID uint, entityID *uint, limit int) ([]InAppNotification, error)
+	MarkInAppAsRead(ctx context.Context, id uint, userID uint) error
+
+	// Fan-out helpers
+	CreateInAppForEntityRoles(ctx context.Context, entityID uint, roleNames []string, title, message, category string) error
 }
 
 type service struct {
-	repo       Repository
-	authRepo   auth.Repository
-	auditSvc   auditlog.Service // ✅ NEW: Audit service
-	email      Channel
-	sms        Channel
-	whatsapp   Channel
+	repo     Repository
+	authRepo auth.Repository
+	auditSvc auditlog.Service // ✅ NEW: Audit service
+	email    Channel
+	sms      Channel
+	whatsapp Channel
 }
 
 // ✅ Updated constructor to accept audit service
 func NewService(repo Repository, authRepo auth.Repository, cfg *config.Config, auditSvc auditlog.Service) Service {
 	return &service{
-		repo:       repo,
-		authRepo:   authRepo,
-		auditSvc:   auditSvc, // ✅ injected audit service
-		email:      NewEmailSender(cfg),
-		sms:        NewSMSChannel(),
-		whatsapp:   NewWhatsAppChannel(),
+		repo:     repo,
+		authRepo: authRepo,
+		auditSvc: auditSvc, // ✅ injected audit service
+		email:    NewEmailSender(cfg),
+		sms:      NewSMSChannel(),
+		whatsapp: NewWhatsAppChannel(),
 	}
 }
 
 // ✅ Updated with audit logging
 func (s *service) CreateTemplate(ctx context.Context, t *NotificationTemplate, ip string) error {
 	err := s.repo.CreateTemplate(ctx, t)
-	
+
 	// ✅ Audit log the template creation
 	status := "success"
 	if err != nil {
 		status = "failure"
 	}
-	
+
 	details := map[string]interface{}{
 		"template_name": t.Name,
 		"category":      t.Category,
 	}
-	
+
 	auditErr := s.auditSvc.LogAction(ctx, &t.UserID, &t.EntityID, "TEMPLATE_CREATED", details, ip, status)
 	if auditErr != nil {
 		// Log audit error but don't fail the main operation
 		fmt.Printf("❌ Audit log error: %v\n", auditErr)
 	}
-	
+
 	return err
 }
 
 // ✅ Updated with audit logging
 func (s *service) UpdateTemplate(ctx context.Context, t *NotificationTemplate, ip string) error {
 	err := s.repo.UpdateTemplate(ctx, t)
-	
+
 	// ✅ Audit log the template update
 	status := "success"
 	if err != nil {
 		status = "failure"
 	}
-	
+
 	details := map[string]interface{}{
 		"template_id":   t.ID,
 		"template_name": t.Name,
 		"category":      t.Category,
 	}
-	
+
 	auditErr := s.auditSvc.LogAction(ctx, &t.UserID, &t.EntityID, "TEMPLATE_UPDATED", details, ip, status)
 	if auditErr != nil {
 		fmt.Printf("❌ Audit log error: %v\n", auditErr)
 	}
-	
+
 	return err
 }
 
@@ -110,25 +119,25 @@ func (s *service) DeleteTemplate(ctx context.Context, id uint, entityID uint, us
 	if getErr == nil && template != nil {
 		templateName = template.Name
 	}
-	
+
 	err := s.repo.DeleteTemplate(ctx, id, entityID)
-	
+
 	// ✅ Audit log the template deletion
 	status := "success"
 	if err != nil {
 		status = "failure"
 	}
-	
+
 	details := map[string]interface{}{
 		"template_id":   id,
 		"template_name": templateName,
 	}
-	
+
 	auditErr := s.auditSvc.LogAction(ctx, &userID, &entityID, "TEMPLATE_DELETED", details, ip, status)
 	if auditErr != nil {
 		fmt.Printf("❌ Audit log error: %v\n", auditErr)
 	}
-	
+
 	return err
 }
 
@@ -222,6 +231,68 @@ func (s *service) SendNotification(
 		return sendErr
 	}
 	return updateErr
+}
+
+// CreateInAppNotification stores a bell notification for a specific user
+func (s *service) CreateInAppNotification(ctx context.Context, userID, entityID uint, title, message, category string) error {
+	item := &InAppNotification{
+		UserID:    userID,
+		EntityID:  entityID,
+		Title:     title,
+		Message:   message,
+		Category:  category,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if err := s.repo.CreateInApp(ctx, item); err != nil {
+		return err
+	}
+
+	// Publish to Redis channel for realtime SSE subscribers
+	payload, _ := json.Marshal(map[string]interface{}{
+		"id":         item.ID,
+		"user_id":    item.UserID,
+		"entity_id":  item.EntityID,
+		"title":      item.Title,
+		"message":    item.Message,
+		"category":   item.Category,
+		"is_read":    item.IsRead,
+		"created_at": item.CreatedAt,
+	})
+	channel := fmt.Sprintf("notifications:user:%d", userID)
+	_ = utils.RedisClient.Publish(utils.Ctx, channel, string(payload)).Err()
+	return nil
+}
+
+func (s *service) ListInAppByUser(ctx context.Context, userID uint, entityID *uint, limit int) ([]InAppNotification, error) {
+	return s.repo.ListInAppByUser(ctx, userID, entityID, limit)
+}
+
+func (s *service) MarkInAppAsRead(ctx context.Context, id uint, userID uint) error {
+	return s.repo.MarkInAppAsRead(ctx, id, userID)
+}
+
+// CreateInAppForEntityRoles sends an in-app notification to all users of given roles within an entity
+func (s *service) CreateInAppForEntityRoles(ctx context.Context, entityID uint, roleNames []string, title, message, category string) error {
+	// Collect unique user IDs
+	unique := make(map[uint]struct{})
+	for _, role := range roleNames {
+		ids, err := s.authRepo.GetUserIDsByRole(role, entityID)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			unique[id] = struct{}{}
+		}
+	}
+	// Create notifications for each
+	for uid := range unique {
+		if err := s.CreateInAppNotification(ctx, uid, entityID, title, message, category); err != nil {
+			// continue on error to avoid blocking others
+			fmt.Printf("in-app fanout error for user %d: %v\n", uid, err)
+		}
+	}
+	return nil
 }
 
 func (s *service) GetNotificationsByUser(ctx context.Context, userID uint) ([]NotificationLog, error) {

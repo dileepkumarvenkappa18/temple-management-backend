@@ -427,7 +427,7 @@ func (s *reportService) ExportApprovalStatusReport(ctx context.Context, req Appr
 
 func (s *reportService) GetUserDetailsReport(req UserDetailReportRequest, entityIDs []string) ([]UserDetailsReportRow, error) {
 	var ids []uint
-	if entityIDs != nil && len(entityIDs) > 0 {
+	if  len(entityIDs) > 0 {
 		ids = convertUintSlice(entityIDs)
 	} else {
 		// nil or empty → superadmin: fetch all users

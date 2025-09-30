@@ -16,6 +16,7 @@ type Repository interface {
 	CreateApprovalRequest(userID uint, requestType string) error
 	UpdateEntityID(userID uint, entityID uint) error
 	GetUserEmailsByRole(roleName string, entityID uint) ([]string, error)
+	GetUserIDsByRole(roleName string, entityID uint) ([]uint, error)
 
 	// Password reset methods
 	SetForgotPasswordToken(userID uint, token string, expiry time.Time) error
@@ -23,11 +24,11 @@ type Repository interface {
 	ClearResetToken(userID uint) error
 	Update(user *User) error
 	CreateTenantDetails(t *TenantDetails) error
-	
+
 	// NEW: Public roles method
 	GetPublicRoles() ([]UserRole, error)
 
-		// New methods for tenant assignment
+	// New methods for tenant assignment
 	GetAssignedTenantID(userID uint) (*uint, error)
 	GetUserPermissionType(userID uint) (string, error)
 }
@@ -142,6 +143,28 @@ func (r *repository) GetUserEmailsByRole(roleName string, entityID uint) ([]stri
 	return emails, err
 }
 
+// GetUserIDsByRole fetches all user IDs by role and entity
+func (r *repository) GetUserIDsByRole(roleName string, entityID uint) ([]uint, error) {
+	var ids []uint
+	type row struct{ ID uint }
+	var rows []row
+	err := r.db.
+		Table("users").
+		Select("users.id as id").
+		Joins("JOIN user_roles ON users.role_id = user_roles.id").
+		Joins("JOIN user_entity_memberships ON users.id = user_entity_memberships.user_id").
+		Where("user_roles.role_name = ? AND user_entity_memberships.entity_id = ? AND users.status = ? AND user_entity_memberships.status = ?",
+			roleName, entityID, "active", "active").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		ids = append(ids, r.ID)
+	}
+	return ids, nil
+}
+
 // ✅ Set Forgot Password Token and expiry
 func (r *repository) SetForgotPasswordToken(userID uint, token string, expiry time.Time) error {
 	return r.db.Model(&User{}).Where("id = ?", userID).Updates(map[string]interface{}{
@@ -187,16 +210,16 @@ func (r *repository) GetAssignedTenantID(userID uint) (*uint, error) {
 	var assignment struct {
 		TenantID uint
 	}
-	
+
 	err := r.db.Table("tenant_user_assignments").
 		Select("tenant_id").
 		Where("user_id = ? AND status = ?", userID, "active").
 		First(&assignment).Error
-		
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &assignment.TenantID, nil
 }
 
@@ -205,17 +228,17 @@ func (r *repository) GetUserPermissionType(userID uint) (string, error) {
 	var user struct {
 		RoleName string
 	}
-	
+
 	err := r.db.Table("users").
 		Select("user_roles.role_name").
 		Joins("JOIN user_roles ON users.role_id = user_roles.id").
 		Where("users.id = ?", userID).
 		First(&user).Error
-		
+
 	if err != nil {
 		return "", err
 	}
-	
+
 	// Set permission type based on role
 	switch user.RoleName {
 	case "standarduser":

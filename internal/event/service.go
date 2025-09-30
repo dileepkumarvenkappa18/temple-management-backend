@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
+	"github.com/sharath018/temple-management-backend/internal/notification"
 	"github.com/sharath018/temple-management-backend/middleware"
 )
 
@@ -13,6 +14,7 @@ import (
 type Service struct {
 	Repo     *Repository
 	AuditSvc auditlog.Service // Audit service for logging
+	NotifSvc notification.Service
 }
 
 // NewService initializes a new Service with audit logging
@@ -26,134 +28,144 @@ func NewService(r *Repository, auditSvc auditlog.Service) *Service {
 // ===========================
 // 🎯 Create Event
 func (s *Service) CreateEvent(req *CreateEventRequest, accessContext middleware.AccessContext, entityID uint, ip string) error {
-    // Convert entityID to pointer for audit logging
-    entityIDPtr := &entityID
+	// Convert entityID to pointer for audit logging
+	entityIDPtr := &entityID
 
-    // Check write permissions
-    if !accessContext.CanWrite() {
-        s.AuditSvc.LogAction(
-            context.Background(),
-            &accessContext.UserID,
-            entityIDPtr,
-            "EVENT_CREATED",
-            map[string]interface{}{
-                "title":      req.Title,
-                "event_type": req.EventType,
-                "error":      "write access denied",
-            },
-            ip,
-            "failure",
-        )
-        return errors.New("write access denied")
-    }
+	// Check write permissions
+	if !accessContext.CanWrite() {
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&accessContext.UserID,
+			entityIDPtr,
+			"EVENT_CREATED",
+			map[string]interface{}{
+				"title":      req.Title,
+				"event_type": req.EventType,
+				"error":      "write access denied",
+			},
+			ip,
+			"failure",
+		)
+		return errors.New("write access denied")
+	}
 
-    // 🔄 Parse EventDate
-    eventDate, err := time.Parse("2006-01-02", req.EventDate)
-    if err != nil {
-        // Log failed event creation attempt
-        s.AuditSvc.LogAction(
-            context.Background(),
-            &accessContext.UserID,
-            entityIDPtr,
-            "EVENT_CREATED",
-            map[string]interface{}{
-                "title":        req.Title,
-                "event_type":   req.EventType,
-                "error":        "invalid event_date format",
-                "event_date":   req.EventDate,
-            },
-            ip,
-            "failure",
-        )
-        return errors.New("invalid event_date format. Use YYYY-MM-DD")
-    }
+	// 🔄 Parse EventDate
+	eventDate, err := time.Parse("2006-01-02", req.EventDate)
+	if err != nil {
+		// Log failed event creation attempt
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&accessContext.UserID,
+			entityIDPtr,
+			"EVENT_CREATED",
+			map[string]interface{}{
+				"title":      req.Title,
+				"event_type": req.EventType,
+				"error":      "invalid event_date format",
+				"event_date": req.EventDate,
+			},
+			ip,
+			"failure",
+		)
+		return errors.New("invalid event_date format. Use YYYY-MM-DD")
+	}
 
-    // 🔄 Parse EventTime (optional)
-    var eventTimePtr *time.Time
-    if req.EventTime != "" {
-        parsedTime, err := time.Parse("15:04", req.EventTime)
-        if err != nil {
-            // Log failed event creation attempt
-            s.AuditSvc.LogAction(
-                context.Background(),
-                &accessContext.UserID,
-                entityIDPtr,
-                "EVENT_CREATED",
-                map[string]interface{}{
-                    "title":       req.Title,
-                    "event_type":  req.EventType,
-                    "error":       "invalid event_time format",
-                    "event_time":  req.EventTime,
-                },
-                ip,
-                "failure",
-            )
-            return errors.New("invalid event_time format. Use HH:MM in 24-hour format")
-        }
-        normalizedTime := time.Date(0, 1, 1, parsedTime.Hour(), parsedTime.Minute(), 0, 0, time.UTC)
-        eventTimePtr = &normalizedTime
-    }
+	// 🔄 Parse EventTime (optional)
+	var eventTimePtr *time.Time
+	if req.EventTime != "" {
+		parsedTime, err := time.Parse("15:04", req.EventTime)
+		if err != nil {
+			// Log failed event creation attempt
+			s.AuditSvc.LogAction(
+				context.Background(),
+				&accessContext.UserID,
+				entityIDPtr,
+				"EVENT_CREATED",
+				map[string]interface{}{
+					"title":      req.Title,
+					"event_type": req.EventType,
+					"error":      "invalid event_time format",
+					"event_time": req.EventTime,
+				},
+				ip,
+				"failure",
+			)
+			return errors.New("invalid event_time format. Use HH:MM in 24-hour format")
+		}
+		normalizedTime := time.Date(0, 1, 1, parsedTime.Hour(), parsedTime.Minute(), 0, 0, time.UTC)
+		eventTimePtr = &normalizedTime
+	}
 
-    // 🛡 Handle optional IsActive safely
-    isActive := true
-    if req.IsActive != nil {
-        isActive = *req.IsActive
-    }
+	// 🛡 Handle optional IsActive safely
+	isActive := true
+	if req.IsActive != nil {
+		isActive = *req.IsActive
+	}
 
-    event := &Event{
-        Title:       req.Title,
-        Description: req.Description,
-        EventDate:   eventDate,
-        EventTime:   eventTimePtr,
-        Location:    req.Location,
-        EventType:   req.EventType,
-        IsActive:    isActive,
-        CreatedBy:   accessContext.UserID,
-        EntityID:    entityID, // Use the passed entityID directly
-    }
+	event := &Event{
+		Title:       req.Title,
+		Description: req.Description,
+		EventDate:   eventDate,
+		EventTime:   eventTimePtr,
+		Location:    req.Location,
+		EventType:   req.EventType,
+		IsActive:    isActive,
+		CreatedBy:   accessContext.UserID,
+		EntityID:    entityID, // Use the passed entityID directly
+	}
 
-    // Attempt to create event in database
-    err = s.Repo.CreateEvent(event)
-    if err != nil {
-        // Log failed event creation
-        s.AuditSvc.LogAction(
-            context.Background(),
-            &accessContext.UserID,
-            entityIDPtr,
-            "EVENT_CREATED",
-            map[string]interface{}{
-                "title":       req.Title,
-                "event_type":  req.EventType,
-                "event_date":  req.EventDate,
-                "location":    req.Location,
-                "error":       err.Error(),
-            },
-            ip,
-            "failure",
-        )
-        return err
-    }
+	// Attempt to create event in database
+	err = s.Repo.CreateEvent(event)
+	if err != nil {
+		// Log failed event creation
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&accessContext.UserID,
+			entityIDPtr,
+			"EVENT_CREATED",
+			map[string]interface{}{
+				"title":      req.Title,
+				"event_type": req.EventType,
+				"event_date": req.EventDate,
+				"location":   req.Location,
+				"error":      err.Error(),
+			},
+			ip,
+			"failure",
+		)
+		return err
+	}
 
-    // Log successful event creation
-    s.AuditSvc.LogAction(
-        context.Background(),
-        &accessContext.UserID,
-        entityIDPtr,
-        "EVENT_CREATED",
-        map[string]interface{}{
-            "event_id":    event.ID,
-            "title":       event.Title,
-            "event_type":  event.EventType,
-            "event_date":  event.EventDate.Format("2006-01-02"),
-            "location":    event.Location,
-            "is_active":   event.IsActive,
-            "entity_id":   entityID, // Add entity_id to audit log for verification
-        },
-        ip,
-        "success",
-    )
+	// Log successful event creation
+	s.AuditSvc.LogAction(
+		context.Background(),
+		&accessContext.UserID,
+		entityIDPtr,
+		"EVENT_CREATED",
+		map[string]interface{}{
+			"event_id":   event.ID,
+			"title":      event.Title,
+			"event_type": event.EventType,
+			"event_date": event.EventDate.Format("2006-01-02"),
+			"location":   event.Location,
+			"is_active":  event.IsActive,
+			"entity_id":  entityID, // Add entity_id to audit log for verification
+		},
+		ip,
+		"success",
+	)
 
-    return nil
+	// In-app notifications to devotees & volunteers of the entity
+	if s.NotifSvc != nil {
+		_ = s.NotifSvc.CreateInAppForEntityRoles(context.Background(), entityID,
+			[]string{"devotee", "volunteer"},
+			"New Event",
+			req.Title+" on "+eventDate.Format("2006-01-02"),
+			"event",
+		)
+	}
+
+	return nil
 }
 
 // ===========================
@@ -247,24 +259,24 @@ func (s *Service) ListEventsByEntity(accessContext middleware.AccessContext, lim
 // ===========================
 // 📄 List Events with Pagination by Explicit Entity ID - FIXED
 func (s *Service) ListEventsByEntityID(accessContext middleware.AccessContext, entityID uint, limit, offset int, search string) ([]Event, error) {
-    // Check permissions
-    if !(accessContext.RoleName == "devotee" || accessContext.RoleName == "volunteer") && !accessContext.CanRead() {
-        return nil, errors.New("read access denied")
-    }
+	// Check permissions
+	if !(accessContext.RoleName == "devotee" || accessContext.RoleName == "volunteer") && !accessContext.CanRead() {
+		return nil, errors.New("read access denied")
+	}
 
-    // Pass the explicit entityID to the repository
-    events, err := s.Repo.ListEventsByEntity(entityID, limit, offset, search)
-    if err != nil {
-        return nil, err
-    }
+	// Pass the explicit entityID to the repository
+	events, err := s.Repo.ListEventsByEntity(entityID, limit, offset, search)
+	if err != nil {
+		return nil, err
+	}
 
-    // Ensure RSVP counts are calculated correctly for the specific entity
-    for i := range events {
-        count, _ := s.Repo.CountRSVPsByEntity(events[i].ID, entityID)
-        events[i].RSVPCount = count
-    }
+	// Ensure RSVP counts are calculated correctly for the specific entity
+	for i := range events {
+		count, _ := s.Repo.CountRSVPsByEntity(events[i].ID, entityID)
+		events[i].RSVPCount = count
+	}
 
-    return events, nil
+	return events, nil
 }
 
 // ===========================
@@ -288,24 +300,24 @@ func (s *Service) GetEventStats(accessContext middleware.AccessContext) (*EventS
 // ===========================
 // 📆 Get Upcoming Events by Explicit Entity ID - FIXED
 func (s *Service) GetUpcomingEventsByEntityID(accessContext middleware.AccessContext, entityID uint) ([]Event, error) {
-    // Check permissions
-    if !(accessContext.RoleName == "devotee" || accessContext.RoleName == "volunteer") && !accessContext.CanRead() {
-        return nil, errors.New("read access denied")
-    }
+	// Check permissions
+	if !(accessContext.RoleName == "devotee" || accessContext.RoleName == "volunteer") && !accessContext.CanRead() {
+		return nil, errors.New("read access denied")
+	}
 
-    // Pass the explicit entityID to the repository
-    events, err := s.Repo.GetUpcomingEvents(entityID)
-    if err != nil {
-        return nil, err
-    }
+	// Pass the explicit entityID to the repository
+	events, err := s.Repo.GetUpcomingEvents(entityID)
+	if err != nil {
+		return nil, err
+	}
 
-    // Ensure RSVP counts are calculated correctly for the specific entity
-    for i := range events {
-        count, _ := s.Repo.CountRSVPsByEntity(events[i].ID, entityID)
-        events[i].RSVPCount = count
-    }
+	// Ensure RSVP counts are calculated correctly for the specific entity
+	for i := range events {
+		count, _ := s.Repo.CountRSVPsByEntity(events[i].ID, entityID)
+		events[i].RSVPCount = count
+	}
 
-    return events, nil
+	return events, nil
 }
 
 // ===========================
@@ -389,10 +401,10 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, accessContext mi
 			entityID,
 			"EVENT_UPDATED",
 			map[string]interface{}{
-				"event_id":         id,
-				"event_title":      event.Title,
-				"error":            "invalid event_date format",
-				"invalid_date":     req.EventDate,
+				"event_id":     id,
+				"event_title":  event.Title,
+				"error":        "invalid event_date format",
+				"invalid_date": req.EventDate,
 			},
 			ip,
 			"failure",
@@ -412,10 +424,10 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, accessContext mi
 				entityID,
 				"EVENT_UPDATED",
 				map[string]interface{}{
-					"event_id":         id,
-					"event_title":      event.Title,
-					"error":            "invalid event_time format",
-					"invalid_time":     req.EventTime,
+					"event_id":     id,
+					"event_title":  event.Title,
+					"error":        "invalid event_time format",
+					"invalid_time": req.EventTime,
 				},
 				ip,
 				"failure",
@@ -488,6 +500,15 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, accessContext mi
 		ip,
 		"success",
 	)
+
+	if s.NotifSvc != nil {
+		_ = s.NotifSvc.CreateInAppForEntityRoles(context.Background(), *entityID,
+			[]string{"devotee", "volunteer"},
+			"Event Updated",
+			event.Title+" updated for "+event.EventDate.Format("2006-01-02"),
+			"event",
+		)
+	}
 
 	return nil
 }
@@ -598,6 +619,15 @@ func (s *Service) DeleteEvent(id uint, accessContext middleware.AccessContext, i
 		ip,
 		"success",
 	)
+
+	if s.NotifSvc != nil {
+		_ = s.NotifSvc.CreateInAppForEntityRoles(context.Background(), *entityID,
+			[]string{"devotee", "volunteer"},
+			"Event Deleted",
+			eventTitle+" has been removed",
+			"event",
+		)
+	}
 
 	return nil
 }

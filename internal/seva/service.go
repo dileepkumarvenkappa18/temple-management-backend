@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
+	"github.com/sharath018/temple-management-backend/internal/notification"
 	"github.com/sharath018/temple-management-backend/middleware"
 )
 
@@ -43,11 +44,15 @@ type Service interface {
 	GetBookingStatusCounts(ctx context.Context, entityID uint) (BookingStatusCounts, error)
 
 	GetPaginatedSevas(ctx context.Context, entityID uint, sevaType string, search string, limit int, offset int) ([]Seva, error)
+
+	// Notification service setter
+	SetNotificationService(notifSvc notification.Service)
 }
 
 type service struct {
 	repo     Repository
 	auditSvc auditlog.Service
+	notifSvc notification.Service
 }
 
 func NewService(repo Repository, auditSvc auditlog.Service) Service {
@@ -55,6 +60,11 @@ func NewService(repo Repository, auditSvc auditlog.Service) Service {
 		repo:     repo,
 		auditSvc: auditSvc,
 	}
+}
+
+// SetNotificationService allows injection of notification service
+func (s *service) SetNotificationService(notifSvc notification.Service) {
+	s.notifSvc = notifSvc
 }
 
 // Updated to use access context
@@ -114,6 +124,16 @@ func (s *service) CreateSeva(ctx context.Context, seva *Seva, accessContext midd
 		"status":    seva.Status,
 		"role":      accessContext.RoleName,
 	}, ip, "success")
+
+	// In-app notifications to devotees & volunteers of the entity
+	if s.notifSvc != nil {
+		_ = s.notifSvc.CreateInAppForEntityRoles(ctx, *entityID,
+			[]string{"devotee", "volunteer"},
+			"New Seva Available",
+			seva.Name+" seva is now available for booking",
+			"seva",
+		)
+	}
 
 	return nil
 }
@@ -176,6 +196,16 @@ func (s *service) UpdateSeva(ctx context.Context, seva *Seva, accessContext midd
 		"status":    seva.Status,
 		"role":      accessContext.RoleName,
 	}, ip, "success")
+
+	// In-app notifications to devotees & volunteers about seva update
+	if s.notifSvc != nil {
+		_ = s.notifSvc.CreateInAppForEntityRoles(ctx, *entityID,
+			[]string{"devotee", "volunteer"},
+			"Seva Updated",
+			seva.Name+" seva details have been updated",
+			"seva",
+		)
+	}
 
 	return nil
 }
@@ -262,6 +292,16 @@ func (s *service) DeleteSeva(ctx context.Context, sevaID uint, accessContext mid
 		"role":      accessContext.RoleName,
 	}, ip, "success")
 
+	// In-app notifications about seva deletion
+	if s.notifSvc != nil {
+		_ = s.notifSvc.CreateInAppForEntityRoles(ctx, *entityID,
+			[]string{"devotee", "volunteer"},
+			"Seva Removed",
+			seva.Name+" seva has been removed",
+			"seva",
+		)
+	}
+
 	return nil
 }
 
@@ -339,6 +379,16 @@ func (s *service) BookSeva(ctx context.Context, booking *SevaBooking, userRole s
 		"booking_status": booking.Status,
 	}, ip, "success")
 
+	// In-app notification to temple admins about new seva booking
+	if s.notifSvc != nil {
+		_ = s.notifSvc.CreateInAppForEntityRoles(ctx, entityID,
+			[]string{"templeadmin", "standarduser"},
+			"New Seva Booking",
+			seva.Name+" seva has been booked and is pending approval",
+			"seva",
+		)
+	}
+
 	return nil
 }
 
@@ -400,9 +450,10 @@ func (s *service) UpdateBookingStatus(ctx context.Context, bookingID uint, newSt
 
 	// Audit successful status update with specific action
 	action := "SEVA_BOOKING_STATUS_UPDATED"
-	if newStatus == "approved" {
+	switch newStatus {
+case "approved":
 		action = "SEVA_BOOKING_APPROVED"
-	} else if newStatus == "rejected" {
+	case "rejected":
 		action = "SEVA_BOOKING_REJECTED"
 	}
 
@@ -421,6 +472,28 @@ func (s *service) UpdateBookingStatus(ctx context.Context, bookingID uint, newSt
 	}
 
 	s.auditSvc.LogAction(ctx, &userID, &booking.EntityID, action, auditDetails, ip, "success")
+
+	// In-app notification to the devotee about booking status change
+	if s.notifSvc != nil {
+		var notifTitle, notifMessage string
+		switch newStatus {
+		case "approved":
+			notifTitle = "Seva Booking Approved"
+			notifMessage = seva.Name + " seva booking has been approved"
+		case "rejected":
+			notifTitle = "Seva Booking Rejected"
+			notifMessage = seva.Name + " seva booking has been rejected"
+		default:
+			notifTitle = "Seva Booking Updated"
+			notifMessage = seva.Name + " seva booking status updated to " + newStatus
+		}
+		
+		_ = s.notifSvc.CreateInAppNotification(ctx, booking.UserID, booking.EntityID,
+			notifTitle,
+			notifMessage,
+			"seva",
+		)
+	}
 
 	return nil
 }
