@@ -2,9 +2,15 @@ package middleware
 
 import (
 	"strconv"
+<<<<<<< HEAD
 	"fmt"
 	
 	"github.com/gin-gonic/gin"
+=======
+	
+	"github.com/gin-gonic/gin"
+	"github.com/sharath018/temple-management-backend/internal/auth"
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 )
 
 // Role constants to avoid string typos
@@ -34,6 +40,7 @@ func (ac *AccessContext) GetAccessibleEntityID() *uint {
 	return ac.DirectEntityID
 }
 
+<<<<<<< HEAD
 // GetEntityIDForOperation returns the entity ID to use for operations like create/update
 func (ac *AccessContext) GetEntityIDForOperation() *uint {
 	// For operations, prefer the most specific entity ID available
@@ -46,6 +53,8 @@ func (ac *AccessContext) GetEntityIDForOperation() *uint {
 	return entityID
 }
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 // CanWrite returns true if the user has write permissions
 func (ac *AccessContext) CanWrite() bool {
 	return ac.PermissionType == "full"
@@ -56,6 +65,7 @@ func (ac *AccessContext) CanRead() bool {
 	return ac.PermissionType == "full" || ac.PermissionType == "readonly"
 }
 
+<<<<<<< HEAD
 // CanAccessEntity checks if the user can access a specific entity
 func (ac *AccessContext) CanAccessEntity(entityID uint) bool {
 	// SuperAdmin can access any entity
@@ -115,6 +125,27 @@ func ResolveAccessContext(user interface{}, assignedTenantID *uint) AccessContex
 		}
 	}
 
+=======
+// ResolveAccessContext helper to create access context from user and assignment
+func ResolveAccessContext(user auth.User, assignedTenantID *uint) AccessContext {
+	accessContext := AccessContext{
+		UserID:         user.ID,
+		RoleName:       user.Role.RoleName,
+		DirectEntityID: user.EntityID,
+		PermissionType: "full", // default
+	}
+	
+	// If user is standarduser or monitoringuser with assigned tenant
+	if assignedTenantID != nil {
+		accessContext.AssignedEntityID = assignedTenantID
+		
+		// Set permission type based on role
+		if user.Role.RoleName == RoleMonitoringUser {
+			accessContext.PermissionType = "readonly"
+		}
+	}
+	
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	return accessContext
 }
 
@@ -124,16 +155,25 @@ func ExtractTenantIDFromContext(c *gin.Context) *uint {
 	if tenantIDStr == "" {
 		return nil
 	}
+<<<<<<< HEAD
 
+=======
+	
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
 	if err != nil {
 		return nil
 	}
+<<<<<<< HEAD
 
+=======
+	
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	id := uint(tenantID)
 	return &id
 }
 
+<<<<<<< HEAD
 // GetEntityIDFromContext is a utility function to get the current entity ID from context
 func GetEntityIDFromContext(c *gin.Context) *uint {
 	// First try to get from context (set by middleware)
@@ -173,3 +213,5 @@ func LogEntityResolution(c *gin.Context, operation string) {
 		}
 	}
 }
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6

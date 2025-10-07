@@ -9,16 +9,23 @@ services:
       - "8080:8080"            # Exposes your Go server on localhost:8080
     env_file:
       - .env                   # Picks up DB_HOST, DB_USER, JWT_SECRET, etc.
+<<<<<<< HEAD
     volumes:
       - ./uploads:/app/uploads # Mount uploads folder to host machine
       - ./logs:/app/logs       # Optional: mount logs folder too
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
     depends_on:
       - postgres
       - redis
       - kafka
     networks:
       - temple_network
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
   # ─── Postgres Database ───────────────────────────────────────────────────────
   postgres:
     image: postgres:15
@@ -33,7 +40,11 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - temple_network
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
   # ─── Redis Cache ─────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
@@ -44,13 +55,21 @@ services:
       - redis_data:/data
     networks:
       - temple_network
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
   # ─── Kafka Broker ───────────────────────────────────────────────────────────
   kafka:
     image: apache/kafka:3.9.1
     container_name: temple_kafka
     environment:
+<<<<<<< HEAD
       # Broker settings—refer to the service name "kafka" for intra‑network comms
+=======
+      # Broker settings—refer to the service name “kafka” for intra‑network comms
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
@@ -80,4 +99,8 @@ volumes:
 
 networks:
   temple_network:
+<<<<<<< HEAD
     driver: bridge
+=======
+    driver: bridge
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6

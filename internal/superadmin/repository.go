@@ -273,7 +273,11 @@ func (r *Repository) MarkApprovalApproved(ctx context.Context, userID uint, admi
 			"status":      "approved",
 			"approved_by": adminID,
 			"approved_at": time.Now(),
+<<<<<<< HEAD
 			//"entity_id":   entityID,
+=======
+			"entity_id":   entityID,
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 			"updated_at":  time.Now(),
 		}).Error
 }
@@ -449,6 +453,7 @@ func (r *Repository) GetUsers(ctx context.Context, limit, page int, search, role
 			}
 		}
 
+<<<<<<< HEAD
 // Conditionally populate TenantAssignmentDetails and TenantAssigned string
 		if tenantName != nil {
 			user.TenantAssignmentDetails = &TenantAssignmentDetails{
@@ -571,6 +576,16 @@ func (r *Repository) GetUsersWithDetails(ctx context.Context) ([]UserResponse, i
 			user.TenantAssigned = ""
 		}
 
+=======
+		// Conditionally populate TenantAssignmentDetails
+if tenantName != nil {
+    user.TenantAssignmentDetails = &TenantAssignmentDetails{
+        TenantName: *tenantName,
+        AssignedOn: *assignmentCreatedAt, // This matches the struct field
+        UpdatedOn:  *assignmentUpdatedAt,  // This also matches the struct field
+    }
+}
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 		users = append(users, user)
 	}
 
@@ -639,10 +654,15 @@ func (r *Repository) GetUserWithDetails(ctx context.Context, userID uint) (*User
 		&assignmentCreatedAt,
 		&assignmentUpdatedAt,
 	)
+<<<<<<< HEAD
+=======
+
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	if err != nil {
 		return nil, err
 	}
 
+<<<<<<< HEAD
 	// Temple details
 	if templeID != nil {
 		user.TempleDetails = &TenantTempleDetails{
@@ -688,6 +708,32 @@ func safeTime(t *time.Time) time.Time {
 	}
 	return *t
 }
+=======
+	if templeID != nil {
+		user.TempleDetails = &TenantTempleDetails{
+			ID:                *templeID,
+			TempleName:        *templeName,
+			TemplePlace:       *templePlace,
+			TempleAddress:     *templeAddress,
+			TemplePhoneNo:     *templePhoneNo,
+			TempleDescription: *templeDescription,
+			CreatedAt:         *templeCreatedAt,
+			UpdatedAt:         *templeUpdatedAt,
+		}
+	}
+
+	// Conditionally populate TenantAssignmentDetails
+if tenantName != nil {
+    user.TenantAssignmentDetails = &TenantAssignmentDetails{
+        TenantName: *tenantName,
+        AssignedOn: *assignmentCreatedAt,
+        UpdatedOn:  *assignmentUpdatedAt,
+    }
+}
+	return &user, nil
+}
+
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 
 // Update user
 func (r *Repository) UpdateUser(ctx context.Context, userID uint, user *auth.User) error {
@@ -858,6 +904,7 @@ func (r *Repository) GetAssignableTenants(ctx context.Context, limit, page int) 
 }
 
 func (r *Repository) GetTenantsForSelection(ctx context.Context) ([]TenantSelectionResponse, error) {
+<<<<<<< HEAD
     var tenants []TenantSelectionResponse
 
     // Modified query to explicitly join with tenant_details table and select fields directly
@@ -916,6 +963,55 @@ func (r *Repository) GetTenantsForSelection(ctx context.Context) ([]TenantSelect
     }
 
     return tenants, nil
+=======
+	var tenants []TenantSelectionResponse
+
+	query := `
+		SELECT 
+			users.id,
+			users.full_name as name,
+			users.email,
+			COALESCE(td.temple_name, td.temple_place, '') as location,
+			users.status,
+			COALESCE(entity_count.count, 0) as temples_count
+		FROM users
+		JOIN user_roles ON users.role_id = user_roles.id
+		LEFT JOIN tenant_details td ON users.id = td.user_id
+		LEFT JOIN (
+			SELECT created_by, COUNT(*) as count 
+			FROM entities 
+			WHERE status = 'approved' 
+			GROUP BY created_by
+		) entity_count ON users.id = entity_count.created_by
+		WHERE user_roles.role_name = 'templeadmin' 
+		AND users.status = 'active'
+		ORDER BY users.full_name ASC
+	`
+
+	rows, err := r.db.WithContext(ctx).Raw(query).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tenant TenantSelectionResponse
+		err := rows.Scan(
+			&tenant.ID,
+			&tenant.Name,
+			&tenant.Email,
+			&tenant.Location,
+			&tenant.Status,
+			&tenant.TemplesCount,
+		)
+		if err != nil {
+			return nil, err
+		}
+		tenants = append(tenants, tenant)
+	}
+
+	return tenants, nil
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 }
 
 // Get assigned tenants for StandardUser / MonitoringUser
@@ -974,6 +1070,7 @@ func (r *Repository) GetAssignedTenantsForUser(ctx context.Context, userID uint)
 
 
 
+<<<<<<< HEAD
 // Get tenants with temple details
 func (r *Repository) GetTenantsWithTempleDetails(ctx context.Context, role, status string) ([]TenantResponse, error) {
     var responses []TenantResponse
@@ -1163,6 +1260,75 @@ func (r *Repository) GetMultipleTenantDetails(ctx context.Context, tenantIDs []u
 	
 	err := r.db.WithContext(ctx).Raw(query, tenantIDs).Scan(&tenants).Error
 	return tenants, err
+=======
+// New method to get tenants with temple details
+func (r *Repository) GetTenantsWithTempleDetails(ctx context.Context, role, status string) ([]TenantResponse, error) {
+	var responses []TenantResponse
+	
+	query := `
+		SELECT 
+			u.id, 
+			u.full_name as "fullName",
+			u.email,
+			ur.role_name as "role",
+			u.status,
+			e.id as temple_id, 
+			COALESCE(e.name, td.temple_name) as temple_name, 
+			COALESCE(e.city, td.temple_place) as temple_city, 
+			COALESCE(e.state, '') as temple_state
+		FROM 
+			users u
+		JOIN 
+			user_roles ur ON u.role_id = ur.id
+		LEFT JOIN 
+			tenant_details td ON u.id = td.user_id
+		LEFT JOIN 
+			entities e ON u.id = e.created_by
+		WHERE 
+			ur.role_name = ? AND u.status = ?
+	`
+	
+	rows, err := r.db.WithContext(ctx).Raw(query, role, status).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	for rows.Next() {
+		var tr TenantResponse
+		var templeID sql.NullInt64
+		var templeName, templeCity, templeState sql.NullString
+		
+		err := rows.Scan(
+			&tr.ID,
+			&tr.FullName,
+			&tr.Email,
+			&tr.Role,
+			&tr.Status,
+			&templeID,
+			&templeName,
+			&templeCity,
+			&templeState,
+		)
+		
+		if err != nil {
+			return nil, err
+		}
+		
+		if templeID.Valid && templeName.Valid {
+			tr.Temple = &TempleDetails{
+				ID:    uint(templeID.Int64),
+				Name:  templeName.String,
+				City:  templeCity.String,
+				State: templeState.String,
+			}
+		}
+		
+		responses = append(responses, tr)
+	}
+	
+	return responses, nil
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 }
 // BulkCreateUsers inserts multiple users safely with better error handling
 func (r *Repository) BulkCreateUsers(ctx context.Context, users []auth.User) error {

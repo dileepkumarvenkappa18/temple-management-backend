@@ -8,9 +8,14 @@ import (
 	"time"
 
 	"github.com/sharath018/temple-management-backend/config"
+<<<<<<< HEAD
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/utils"
+=======
+	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/internal/auditlog"
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	"gorm.io/datatypes"
 )
 
@@ -24,6 +29,7 @@ type Service interface {
 	SendNotification(ctx context.Context, senderID, entityID uint, templateID *uint, channel, subject, body string, recipients []string, ip string) error
 	GetNotificationsByUser(ctx context.Context, userID uint) ([]NotificationLog, error)
 	GetEmailsByAudience(entityID uint, audience string) ([]string, error)
+<<<<<<< HEAD
 
 	// In-app notifications
 	CreateInAppNotification(ctx context.Context, userID, entityID uint, title, message, category string) error
@@ -32,6 +38,8 @@ type Service interface {
 
 	// Fan-out helpers
 	CreateInAppForEntityRoles(ctx context.Context, entityID uint, roleNames []string, title, message, category string) error
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 }
 
 type service struct {
@@ -233,6 +241,7 @@ func (s *service) SendNotification(
 	return updateErr
 }
 
+<<<<<<< HEAD
 // CreateInAppNotification stores a bell notification for a specific user
 func (s *service) CreateInAppNotification(ctx context.Context, userID, entityID uint, title, message, category string) error {
 	item := &InAppNotification{
@@ -295,6 +304,8 @@ func (s *service) CreateInAppForEntityRoles(ctx context.Context, entityID uint, 
 	return nil
 }
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (s *service) GetNotificationsByUser(ctx context.Context, userID uint) ([]NotificationLog, error) {
 	return s.repo.GetNotificationsByUser(ctx, userID)
 }
@@ -324,4 +335,8 @@ func (s *service) GetEmailsByAudience(entityID uint, audience string) ([]string,
 	default:
 		return nil, fmt.Errorf("invalid audience: %s", audience)
 	}
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6

@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 package middleware
 
 import (
@@ -70,4 +74,39 @@ func GetIPFromContext(c *gin.Context) string {
 		}
 	}
 	return getClientIP(c)
+<<<<<<< HEAD
 }
+=======
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6

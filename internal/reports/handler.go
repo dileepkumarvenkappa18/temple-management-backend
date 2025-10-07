@@ -61,6 +61,7 @@ func (h *Handler) GetActivities(c *gin.Context) {
 		return
 	}
 
+<<<<<<< HEAD
 	// resolve entity IDs based on access context
 	var entityIDs []string
 	var actualEntityParam string // This will hold the actual entity identifier for the request
@@ -71,12 +72,34 @@ func (h *Handler) GetActivities(c *gin.Context) {
 		if ctx.RoleName == "templeadmin" {
 			// Templeadmin can access their own entities - use their tenant ID
 			ids, err := h.repo.GetEntitiesByTenant(ctx.UserID) // Assuming UserID is the tenant ID for templeadmin
+=======
+	req := ActivitiesReportRequest{
+		EntityID:  entityParam,
+		Type:      reportType,
+		DateRange: dateRange,
+		StartDate: start,
+		EndDate:   end,
+		Format:    format,
+	}
+
+	// resolve entity IDs based on access context
+	var entityIDs []string
+	if strings.ToLower(entityParam) == "all" {
+		// For "all", get accessible entities based on user role
+		if ctx.RoleName == "templeadmin" {
+			// Templeadmin can access their own entities
+			ids, err := h.repo.GetEntitiesByTenant(ctx.UserID)
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
 				return
 			}
 			if len(ids) == 0 {
+<<<<<<< HEAD
 				c.JSON(http.StatusOK, gin.H{"data": ReportData{}, "message": "No entities found for tenant"})
+=======
+				c.JSON(http.StatusOK, gin.H{"data": ReportData{}})
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 				return
 			}
 			for _, id := range ids {
@@ -99,8 +122,11 @@ func (h *Handler) GetActivities(c *gin.Context) {
 			return
 		}
 		
+<<<<<<< HEAD
 		actualEntityParam = fmt.Sprint(eid)
 		
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 		// verify user can access this specific entity
 		if !h.canAccessEntity(ctx, uint(eid)) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized for this entity"})
@@ -109,6 +135,7 @@ func (h *Handler) GetActivities(c *gin.Context) {
 		entityIDs = append(entityIDs, fmt.Sprint(eid))
 	}
 
+<<<<<<< HEAD
 	req := ActivitiesReportRequest{
 		EntityID:  actualEntityParam, // Use the properly resolved entity parameter
 		Type:      reportType,
@@ -118,6 +145,9 @@ func (h *Handler) GetActivities(c *gin.Context) {
 		Format:    format,
 		EntityIDs: entityIDs, // Pass the resolved entity IDs
 	}
+=======
+	req.EntityIDs = entityIDs
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 
 	// If no format -> return JSON preview
 	if req.Format == "" {
@@ -131,10 +161,15 @@ func (h *Handler) GetActivities(c *gin.Context) {
 		details := map[string]interface{}{
 			"report_type": req.Type,
 			"format":     "json_preview",
+<<<<<<< HEAD
 			"entity_id":  req.EntityID,
 			"entity_ids": req.EntityIDs,
 			"date_range": req.DateRange,
 			"user_role":  ctx.RoleName,
+=======
+			"entity_ids": req.EntityIDs,
+			"date_range": req.DateRange,
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 		}
 		h.auditSvc.LogAction(c.Request.Context(), &ctx.UserID, nil, "TEMPLE_ACTIVITIES_REPORT_VIEWED", details, ip, "success")
 		
@@ -153,6 +188,7 @@ func (h *Handler) GetActivities(c *gin.Context) {
 	c.Data(http.StatusOK, mime, bytes)
 }
 
+<<<<<<< HEAD
 // GetSuperAdminActivities handles activities reports with multiple tenant IDs
 func (h *Handler) GetSuperAdminActivities(c *gin.Context) {
 	// Get access context from middleware
@@ -427,6 +463,8 @@ func (h *Handler) GetSuperAdminTenantActivities(c *gin.Context) {
 	c.Data(http.StatusOK, mime, bytes)
 }
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (h *Handler) GetTempleRegisteredReport(c *gin.Context) {
 	// Get access context from middleware
 	accessContext, exists := c.Get("access_context")
@@ -458,12 +496,17 @@ func (h *Handler) GetTempleRegisteredReport(c *gin.Context) {
 
 	// Resolve entity IDs based on access context
 	var entityIDs []string
+<<<<<<< HEAD
 	var actualEntityID string // Track the actual entity ID for the request
 	
 	if strings.ToLower(entityParam) == "all" {
 		actualEntityID = "all" // Keep "all" for request tracking
 		if ctx.RoleName == "templeadmin" {
 			// For templeadmin, get entities by their user ID (which represents their tenant)
+=======
+	if strings.ToLower(entityParam) == "all" {
+		if ctx.RoleName == "templeadmin" {
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 			ids, err := h.repo.GetEntitiesByTenant(ctx.UserID)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
@@ -496,7 +539,10 @@ func (h *Handler) GetTempleRegisteredReport(c *gin.Context) {
 			return
 		}
 		entityIDs = append(entityIDs, fmt.Sprint(eid))
+<<<<<<< HEAD
 		actualEntityID = entityParam
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	}
 
 	req := TempleRegisteredReportRequest{
@@ -505,7 +551,11 @@ func (h *Handler) GetTempleRegisteredReport(c *gin.Context) {
 		EndDate:   end,
 		Status:    status,
 		Format:    format,
+<<<<<<< HEAD
 		EntityID:  actualEntityID, // Use the actual entity ID parameter
+=======
+		EntityID:  entityParam,
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	}
 	
 	// The 'format' query parameter determines the report type for the exporter.
@@ -530,7 +580,10 @@ func (h *Handler) GetTempleRegisteredReport(c *gin.Context) {
 			"report_type": "temple_registered",
 			"format":     "json_preview",
 			"entity_ids": entityIDs,
+<<<<<<< HEAD
 			"entity_param": entityParam,
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 			"status":     status,
 			"date_range": dateRange,
 		}
@@ -551,6 +604,7 @@ func (h *Handler) GetTempleRegisteredReport(c *gin.Context) {
 	c.Data(http.StatusOK, mime, bytes)
 }
 
+<<<<<<< HEAD
 // GetSuperAdminTempleRegisteredReport handles temple registered report for superadmin with multiple tenants
 func (h *Handler) GetSuperAdminTempleRegisteredReport(c *gin.Context) {
 	// Get access context from middleware
@@ -804,6 +858,8 @@ func (h *Handler) GetSuperAdminTenantTempleRegisteredReport(c *gin.Context) {
 	c.Data(http.StatusOK, mime, bytes)
 }
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 	// Get access context from middleware
 	accessContext, exists := c.Get("access_context")
@@ -919,6 +975,7 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 	c.Data(http.StatusOK, mime, bytes)
 }
 
+<<<<<<< HEAD
 // GetSuperAdminDevoteeBirthdaysReport handles devotee birthdays report for superadmin with multiple tenants
 func (h *Handler) GetSuperAdminDevoteeBirthdaysReport(c *gin.Context) {
 	// Get access context from middleware
@@ -1155,6 +1212,8 @@ func (h *Handler) GetSuperAdminTenantDevoteeBirthdaysReport(c *gin.Context) {
 	c.Data(http.StatusOK, mime, bytes)
 }
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 // GetDevoteeListReport handles requests for devotee list report
 func (h *Handler) GetDevoteeListReport(c *gin.Context) {
 	// Get access context from middleware
@@ -1267,6 +1326,7 @@ func (h *Handler) GetDevoteeListReport(c *gin.Context) {
 	c.Data(http.StatusOK, mime, bytes)
 }
 
+<<<<<<< HEAD
 // GetSuperAdminDevoteeListReport handles devotee list report for superadmin with multiple tenants
 func (h *Handler) GetSuperAdminDevoteeListReport(c *gin.Context) {
 	// Get access context from middleware
@@ -1499,6 +1559,8 @@ func (h *Handler) GetSuperAdminTenantDevoteeListReport(c *gin.Context) {
 	c.Data(http.StatusOK, mime, bytes)
 }
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 // GetDevoteeProfileReport handles requests for devotee profile report
 func (h *Handler) GetDevoteeProfileReport(c *gin.Context) {
 	// Get access context from middleware
@@ -1611,6 +1673,7 @@ func (h *Handler) GetDevoteeProfileReport(c *gin.Context) {
 	c.Data(http.StatusOK, mime, bytes)
 }
 
+<<<<<<< HEAD
 // GetSuperAdminDevoteeProfileReport handles devotee profile report for superadmin with multiple tenants
 func (h *Handler) GetSuperAdminDevoteeProfileReport(c *gin.Context) {
 	// Get access context from middleware
@@ -1843,6 +1906,8 @@ func (h *Handler) GetSuperAdminTenantDevoteeProfileReport(c *gin.Context) {
 	c.Data(http.StatusOK, mime, bytes)
 }
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 // canAccessEntity checks if the user can access a specific entity
 func (h *Handler) canAccessEntity(ctx middleware.AccessContext, entityID uint) bool {
 	if ctx.RoleName == "templeadmin" {
@@ -2006,6 +2071,7 @@ func (h *Handler) GetAuditLogsReport(c *gin.Context) {
     c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
     c.Data(http.StatusOK, mime, bytes)
 }
+<<<<<<< HEAD
 
 // GetSuperAdminAuditLogsReport handles audit logs report for superadmin with multiple tenants
 func (h *Handler) GetSuperAdminAuditLogsReport(c *gin.Context) {
@@ -2506,3 +2572,5 @@ case "superadmin":
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
 	c.Data(http.StatusOK, mime, bytes)
 }
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6

@@ -4,7 +4,11 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+<<<<<<< HEAD
 	"fmt"
+=======
+
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/middleware"
 )
@@ -38,6 +42,7 @@ func getAccessContextFromContext(c *gin.Context) (middleware.AccessContext, bool
 // ===========================
 // 🎯 Create Event - POST /events
 func (h *Handler) CreateEvent(c *gin.Context) {
+<<<<<<< HEAD
     accessContext, ok := getAccessContextFromContext(c)
     if !ok {
         return
@@ -103,6 +108,52 @@ func (h *Handler) CreateEvent(c *gin.Context) {
     }
 
     c.JSON(http.StatusCreated, gin.H{"message": "event created successfully"})
+=======
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
+		return
+	}
+
+	// Check if user has access to an entity
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple"})
+		return
+	}
+
+	// Check write permissions (handled by middleware, but double-check)
+	if !accessContext.CanWrite() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
+		return
+	}
+
+	var req CreateEventRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input: " + err.Error()})
+		return
+	}
+
+	// Basic validation for date being too far in the past
+	if req.EventDate != "" {
+		if eventDate, err := time.Parse("2006-01-02", req.EventDate); err == nil {
+			if eventDate.Before(time.Now().AddDate(-10, 0, 0)) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "event date is too far in the past"})
+				return
+			}
+		}
+	}
+
+	// Get IP address for audit logging
+	ip := middleware.GetIPFromContext(c)
+
+	// Use the service method with access context
+	if err := h.Service.CreateEvent(&req, accessContext, ip); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create event: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "event created successfully"})
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 }
 
 // ===========================
@@ -138,6 +189,7 @@ func (h *Handler) GetEventByID(c *gin.Context) {
 // ===========================
 // 📆 Upcoming Events - GET /events/upcoming
 func (h *Handler) GetUpcomingEvents(c *gin.Context) {
+<<<<<<< HEAD
     accessContext, ok := getAccessContextFromContext(c)
     if !ok {
         return
@@ -247,6 +299,55 @@ func (h *Handler) ListEvents(c *gin.Context) {
     }
 
     c.JSON(http.StatusForbidden, gin.H{"error": "read access denied"})
+=======
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
+		return
+	}
+
+	// Check if user has access to an entity
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple"})
+		return
+	}
+
+	events, err := h.Service.GetUpcomingEvents(accessContext)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch events"})
+		return
+	}
+
+	c.JSON(http.StatusOK, events)
+}
+
+// ===========================
+// 📄 List Events - GET /events?limit=&offset=&search=
+func (h *Handler) ListEvents(c *gin.Context) {
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
+		return
+	}
+
+	// Check if user has access to an entity
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple"})
+		return
+	}
+
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	search := c.Query("search")
+
+	events, err := h.Service.ListEventsByEntity(accessContext, limit, offset, search)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list events"})
+		return
+	}
+
+	c.JSON(http.StatusOK, events)
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 }
 
 // ===========================
@@ -263,12 +364,18 @@ func (h *Handler) GetEventStats(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple"})
 		return
 	}
+<<<<<<< HEAD
 	fmt.Println("entityID :=",*entityID)
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 
 	stats, err := h.Service.GetEventStats(accessContext)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch stats"})
+<<<<<<< HEAD
 		
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 		return
 	}
 

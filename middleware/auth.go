@@ -1,10 +1,16 @@
+<<<<<<< HEAD
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 package middleware
 
 import (
 	"net/http"
+<<<<<<< HEAD
 	"strconv"
 	"fmt"
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -13,7 +19,10 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/auth"
 )
 
+<<<<<<< HEAD
 // AuthMiddleware handles JWT authentication and sets up access context
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -58,6 +67,7 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 
 		// Set user in context
 		c.Set("user", user)
+<<<<<<< HEAD
 		c.Set("user_id", user.ID)
 		c.Set("claims", claims)
 
@@ -237,3 +247,23 @@ func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, e
 }
 
 
+=======
+		c.Set("claims", claims)
+		
+		// NEW: Handle assigned tenant access
+		var assignedTenantID *uint
+		if assignedTenantIDFloat, exists := claims["assigned_tenant_id"]; exists {
+			if tenantID, ok := assignedTenantIDFloat.(float64); ok {
+				id := uint(tenantID)
+				assignedTenantID = &id
+			}
+		}
+		
+		// Create and set access context
+		accessContext := ResolveAccessContext(user, assignedTenantID)
+		c.Set("access_context", accessContext)
+
+		c.Next()
+	}
+}
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6

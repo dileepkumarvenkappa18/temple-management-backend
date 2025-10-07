@@ -58,6 +58,7 @@ ReportTypeAuditLogsCSV   = "audit-logs-csv"
 ReportTypeAuditLogsExcel = "audit-logs-excel"
 ReportTypeAuditLogsPDF   = "audit-logs-pdf"
 
+<<<<<<< HEAD
 	// Approval Status report types
 	ReportTypeApprovalStatus      = "approval-status"
 	ReportTypeApprovalStatusCSV   = "approval-status-csv"
@@ -69,6 +70,8 @@ ReportTypeAuditLogsPDF   = "audit-logs-pdf"
 	ReportTypeUserDetailsCSV   = "user-details-csv"
 	ReportTypeUserDetailsExcel = "user-details-excel"
 	ReportTypeUserDetailsPDF   = "user-details-pdf"
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 )
 
 // ActivitiesReportRequest represents request parameters for temple activities report
@@ -86,7 +89,10 @@ type ActivitiesReportRequest struct {
 // Make sure your ReportData struct includes AuditLogs field
 // Add this to your structs (likely in types.go or service.go)
 
+<<<<<<< HEAD
 // Fix 2: Update the ReportData struct in models.go to fix the missing JSON tags
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 type ReportData struct {
     Events            []EventReportRow            `json:"events,omitempty"`
     Sevas             []SevaReportRow             `json:"sevas,omitempty"`
@@ -96,9 +102,13 @@ type ReportData struct {
     DevoteeBirthdays  []DevoteeBirthdayReportRow  `json:"devotee_birthdays,omitempty"`
     DevoteeList       []DevoteeListReportRow      `json:"devotee_list,omitempty"`
     DevoteeProfiles   []DevoteeProfileReportRow   `json:"devotee_profiles,omitempty"`
+<<<<<<< HEAD
     AuditLogs         []AuditLogReportRow         `json:"audit_logs,omitempty"`
     UserDetails       []UserDetailsReportRow      `json:"user_details,omitempty"`    // Fixed missing backticks
     ApprovalStatus    []ApprovalStatusReportRow   `json:"approval_status,omitempty"` // Fixed missing backticks
+=======
+    AuditLogs         []AuditLogReportRow         `json:"audit_logs,omitempty"` // ADD THIS LINE
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 }
 
 // EventReportRow represents a single row in the events report
@@ -266,6 +276,7 @@ type AuditLogReportRow struct {
     Details    string    `json:"details"`
     CreatedAt  time.Time `json:"created_at"`
 }
+<<<<<<< HEAD
 
 // ApprovalStatusReportRequest represents request parameters for approval status report
 type ApprovalStatusReportRequest struct {
@@ -312,3 +323,5 @@ type UserDetailReportRow struct {
     Status     string    `json:"status"`      // Active, Inactive, Locked, or Approved/Rejected
     CreatedAt  time.Time `json:"created_at"`
 }
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6

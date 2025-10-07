@@ -1,6 +1,7 @@
 package main
 
 import (
+<<<<<<< HEAD
 	"archive/zip"
 	"fmt"
 	"io"
@@ -9,15 +10,27 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+=======
+	"fmt"
+	"log"
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+<<<<<<< HEAD
 	"gorm.io/gorm"
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/database"
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
 	"github.com/sharath018/temple-management-backend/internal/auth"
+=======
+
+	"github.com/sharath018/temple-management-backend/config"
+	"github.com/sharath018/temple-management-backend/database"
+	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/internal/auditlog" // ✅ ADD IMPORT
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	"github.com/sharath018/temple-management-backend/internal/entity"
 	"github.com/sharath018/temple-management-backend/internal/event"
 	"github.com/sharath018/temple-management-backend/internal/eventrsvp"
@@ -30,11 +43,16 @@ func main() {
 	cfg := config.Load()
 	db := database.Connect(cfg)
 
+<<<<<<< HEAD
 	// Init Redis
+=======
+	// ✅ Init Redis
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	if err := utils.InitRedis(); err != nil {
 		log.Fatalf("❌ Redis init failed: %v", err)
 	}
 
+<<<<<<< HEAD
 	// Init Kafka
 	utils.InitializeKafka()
 
@@ -48,6 +66,24 @@ func main() {
 	notification.StartKafkaConsumer(notificationService)
 
 	// Seed roles & super admin
+=======
+	// ✅ Init Kafka
+	utils.InitializeKafka()
+
+	// ✅ Initialize repositories and services
+	authRepo := auth.NewRepository(db)
+	
+	// ✅ Initialize audit log service
+	auditRepo := auditlog.NewRepository(db)
+	auditSvc := auditlog.NewService(auditRepo)
+	
+	// ✅ Inject authRepo and auditSvc into notification service
+	notificationRepo := notification.NewRepository(db)
+	notificationService := notification.NewService(notificationRepo, authRepo, cfg, auditSvc) // ✅ FIXED: Added auditSvc
+	notification.StartKafkaConsumer(notificationService)
+
+	// ✅ Seed roles and super admin
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	if err := auth.SeedUserRoles(db); err != nil {
 		panic(fmt.Sprintf("❌ Failed to seed roles: %v", err))
 	}
@@ -55,6 +91,7 @@ func main() {
 		panic(fmt.Sprintf("❌ Failed to seed Super Admin: %v", err))
 	}
 
+<<<<<<< HEAD
 	// Auto-migrate models
 	log.Println("🔄 Running database migrations...")
 	if err := db.AutoMigrate(
@@ -94,10 +131,49 @@ func main() {
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Tenant-ID", "Content-Length", "X-Requested-With", "Cache-Control", "Pragma", "X-Entity-ID", "X-Tenant-ID"},
 		ExposeHeaders:    []string{"Content-Length", "Content-Type", "Content-Disposition", "Cache-Control", "Pragma", "Expires"},
+=======
+	// ✅ Auto-migrate models - ADD AUDIT LOG MODEL
+	if err := db.AutoMigrate(
+		&auditlog.AuditLog{}, // ✅ ADD THIS LINE
+		&entity.Entity{},
+		&event.Event{},
+		&eventrsvp.RSVP{},
+	); err != nil {
+		panic(fmt.Sprintf("❌ DB AutoMigrate failed: %v", err))
+	}
+
+	// 🌐 Setup router manually to control middleware order
+	router := gin.New()
+	router.Use(gin.Logger())
+	router.Use(gin.Recovery())
+	// NEW: Load HTML templates for the reset password page
+	router.LoadHTMLGlob("templates/*")
+
+	// ✅ Optional request logger for CORS debugging
+	router.Use(func(c *gin.Context) {
+		log.Printf("👉 %s %s from origin %s", c.Request.Method, c.Request.URL.Path, c.Request.Header.Get("Origin"))
+		c.Next()
+	})
+
+	// ✅ Global CORS middleware
+	router.Use(cors.New(cors.Config{
+		AllowOrigins: []string{
+			"http://localhost:5173",
+			"http://127.0.0.1:5173",
+		},
+		AllowMethods: []string{
+			"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS",
+		},
+		AllowHeaders: []string{
+			"Origin", "Content-Type", "Accept", "Authorization", "X-Tenant-ID", "Content-Length", "X-Requested-With",
+		},
+		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
 
+<<<<<<< HEAD
 	// Handle preflight requests for all routes
 	router.OPTIONS("/*path", func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "http://localhost:5173, http://127.0.0.1:5173, http://localhost:4173, http://127.0.0.1:4173")
@@ -530,4 +606,19 @@ func migrateIsActiveColumn(db *gorm.DB) error {
 
 	log.Println("✅ IsActive column added successfully")
 	return nil
+=======
+	// ✅ Handle preflight CORS requests for all routes
+	router.OPTIONS("/*path", func(c *gin.Context) {
+		c.Status(204)
+	})
+
+	// ✅ Register routes
+	routes.Setup(router, cfg)
+
+	// 🚀 Run server
+	fmt.Printf("🚀 Server starting on port %s\n", cfg.Port)
+	if err := router.Run(":" + cfg.Port); err != nil {
+		panic(fmt.Sprintf("Failed to start server: %v", err))
+	}
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 }

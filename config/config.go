@@ -8,10 +8,13 @@ import (
 	"github.com/joho/godotenv"
 )
 
+<<<<<<< HEAD
 // ✅ Global constants (accessible from other packages)
 var UploadPath = "./uploads"
 var BaseURL   = "http://localhost:8080"
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 type Config struct {
 	Port string
 
@@ -44,7 +47,10 @@ type Config struct {
 	SMTPFromEmail string
 }
 
+<<<<<<< HEAD
 // Load reads environment variables and returns a Config object
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func Load() *Config {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file, using environment variables")
@@ -75,6 +81,10 @@ func Load() *Config {
 		RazorpayKey:    os.Getenv("RAZORPAY_KEY_ID"),
 		RazorpaySecret: os.Getenv("RAZORPAY_KEY_SECRET"),
 
+<<<<<<< HEAD
+=======
+		// ✅ SMTP fields
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 		SMTPHost:      os.Getenv("SMTP_HOST"),
 		SMTPPort:      os.Getenv("SMTP_PORT"),
 		SMTPUsername:  os.Getenv("SMTP_USERNAME"),
@@ -82,4 +92,8 @@ func Load() *Config {
 		SMTPFromName:  os.Getenv("SMTP_FROM_NAME"),
 		SMTPFromEmail: os.Getenv("SMTP_FROM_EMAIL"),
 	}
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6

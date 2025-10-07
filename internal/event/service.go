@@ -25,6 +25,7 @@ func NewService(r *Repository, auditSvc auditlog.Service) *Service {
 
 // ===========================
 // 🎯 Create Event
+<<<<<<< HEAD
 func (s *Service) CreateEvent(req *CreateEventRequest, accessContext middleware.AccessContext, entityID uint, ip string) error {
     // Convert entityID to pointer for audit logging
     entityIDPtr := &entityID
@@ -158,6 +159,143 @@ func (s *Service) CreateEvent(req *CreateEventRequest, accessContext middleware.
 
 // ===========================
 // 🔍 Get Event by ID - FIXED with proper entity validation
+=======
+func (s *Service) CreateEvent(req *CreateEventRequest, accessContext middleware.AccessContext, ip string) error {
+	// Get accessible entity ID
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		return errors.New("no accessible entity")
+	}
+
+	// Check write permissions
+	if !accessContext.CanWrite() {
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&accessContext.UserID,
+			entityID,
+			"EVENT_CREATED",
+			map[string]interface{}{
+				"title":      req.Title,
+				"event_type": req.EventType,
+				"error":      "write access denied",
+			},
+			ip,
+			"failure",
+		)
+		return errors.New("write access denied")
+	}
+
+	// 🔄 Parse EventDate
+	eventDate, err := time.Parse("2006-01-02", req.EventDate)
+	if err != nil {
+		// Log failed event creation attempt
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&accessContext.UserID,
+			entityID,
+			"EVENT_CREATED",
+			map[string]interface{}{
+				"title":        req.Title,
+				"event_type":   req.EventType,
+				"error":        "invalid event_date format",
+				"event_date":   req.EventDate,
+			},
+			ip,
+			"failure",
+		)
+		return errors.New("invalid event_date format. Use YYYY-MM-DD")
+	}
+
+	// 🔄 Parse EventTime (optional)
+	var eventTimePtr *time.Time
+	if req.EventTime != "" {
+		parsedTime, err := time.Parse("15:04", req.EventTime)
+		if err != nil {
+			// Log failed event creation attempt
+			s.AuditSvc.LogAction(
+				context.Background(),
+				&accessContext.UserID,
+				entityID,
+				"EVENT_CREATED",
+				map[string]interface{}{
+					"title":       req.Title,
+					"event_type":  req.EventType,
+					"error":       "invalid event_time format",
+					"event_time":  req.EventTime,
+				},
+				ip,
+				"failure",
+			)
+			return errors.New("invalid event_time format. Use HH:MM in 24-hour format")
+		}
+		normalizedTime := time.Date(0, 1, 1, parsedTime.Hour(), parsedTime.Minute(), 0, 0, time.UTC)
+		eventTimePtr = &normalizedTime
+	}
+
+	// 🛡 Handle optional IsActive safely
+	isActive := true
+	if req.IsActive != nil {
+		isActive = *req.IsActive
+	}
+
+	event := &Event{
+		Title:       req.Title,
+		Description: req.Description,
+		EventDate:   eventDate,
+		EventTime:   eventTimePtr,
+		Location:    req.Location,
+		EventType:   req.EventType,
+		IsActive:    isActive,
+		CreatedBy:   accessContext.UserID,
+		EntityID:    *entityID,
+	}
+
+	// Attempt to create event in database
+	err = s.Repo.CreateEvent(event)
+	if err != nil {
+		// Log failed event creation
+		s.AuditSvc.LogAction(
+			context.Background(),
+			&accessContext.UserID,
+			entityID,
+			"EVENT_CREATED",
+			map[string]interface{}{
+				"title":       req.Title,
+				"event_type":  req.EventType,
+				"event_date":  req.EventDate,
+				"location":    req.Location,
+				"error":       err.Error(),
+			},
+			ip,
+			"failure",
+		)
+		return err
+	}
+
+	// Log successful event creation
+	s.AuditSvc.LogAction(
+		context.Background(),
+		&accessContext.UserID,
+		entityID,
+		"EVENT_CREATED",
+		map[string]interface{}{
+			"event_id":    event.ID,
+			"title":       event.Title,
+			"event_type":  event.EventType,
+			"event_date":  event.EventDate.Format("2006-01-02"),
+			"location":    event.Location,
+			"is_active":   event.IsActive,
+		},
+		ip,
+		"success",
+	)
+
+	return nil
+}
+
+// ===========================
+// 🔍 Get Event by ID
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (s *Service) GetEventByID(id uint, accessContext middleware.AccessContext) (*Event, error) {
 	// Get accessible entity ID
 	entityID := accessContext.GetAccessibleEntityID()
@@ -180,15 +318,23 @@ func (s *Service) GetEventByID(id uint, accessContext middleware.AccessContext) 
 		return nil, errors.New("event not found")
 	}
 
+<<<<<<< HEAD
 	// Get RSVP count using the entity-specific method
 	count, _ := s.Repo.CountRSVPsByEntity(event.ID, *entityID)
+=======
+	count, _ := s.Repo.CountRSVPs(event.ID)
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	event.RSVPCount = count
 
 	return event, nil
 }
 
 // ===========================
+<<<<<<< HEAD
 // 📆 Get Upcoming Events - FIXED with proper entity filtering
+=======
+// 📆 Get Upcoming Events
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (s *Service) GetUpcomingEvents(accessContext middleware.AccessContext) ([]Event, error) {
 	// Get accessible entity ID
 	entityID := accessContext.GetAccessibleEntityID()
@@ -196,6 +342,7 @@ func (s *Service) GetUpcomingEvents(accessContext middleware.AccessContext) ([]E
 		return nil, errors.New("no accessible entity")
 	}
 
+<<<<<<< HEAD
 	// Check read permissions - We need to ensure devotees have access
 	if !accessContext.CanRead() && accessContext.RoleName != "devotee" && accessContext.RoleName != "volunteer" {
 		return nil, errors.New("read access denied")
@@ -276,16 +423,66 @@ func (s *Service) GetEventStats(accessContext middleware.AccessContext) (*EventS
 		return nil, errors.New("no accessible entity")
 	}
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	// Check read permissions
 	if !accessContext.CanRead() {
 		return nil, errors.New("read access denied")
 	}
 
+<<<<<<< HEAD
 	// This will now use the corrected repository method with proper entity filtering
+=======
+	return s.Repo.GetUpcomingEvents(*entityID)
+}
+
+// ===========================
+// 📄 List Events with Pagination
+func (s *Service) ListEventsByEntity(accessContext middleware.AccessContext, limit, offset int, search string) ([]Event, error) {
+	// Get accessible entity ID
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		return nil, errors.New("no accessible entity")
+	}
+
+	// Check read permissions
+	if !accessContext.CanRead() {
+		return nil, errors.New("read access denied")
+	}
+
+	events, err := s.Repo.ListEventsByEntity(*entityID, limit, offset, search)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range events {
+		count, _ := s.Repo.CountRSVPs(events[i].ID)
+		events[i].RSVPCount = count
+	}
+
+	return events, nil
+}
+
+// ===========================
+// 📊 Dashboard Stats
+func (s *Service) GetEventStats(accessContext middleware.AccessContext) (*EventStatsResponse, error) {
+	// Get accessible entity ID
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		return nil, errors.New("no accessible entity")
+	}
+
+	// Check read permissions
+	if !accessContext.CanRead() {
+		return nil, errors.New("read access denied")
+	}
+
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	return s.Repo.GetEventStats(*entityID)
 }
 
 // ===========================
+<<<<<<< HEAD
 // 📆 Get Upcoming Events by Explicit Entity ID - FIXED
 func (s *Service) GetUpcomingEventsByEntityID(accessContext middleware.AccessContext, entityID uint) ([]Event, error) {
     // Check permissions
@@ -310,6 +507,9 @@ func (s *Service) GetUpcomingEventsByEntityID(accessContext middleware.AccessCon
 
 // ===========================
 // 🛠 Update Event (with ownership check and audit logging) - FIXED
+=======
+// 🛠 Update Event (with ownership check and audit logging)
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, accessContext middleware.AccessContext, ip string) error {
 	// Get accessible entity ID
 	entityID := accessContext.GetAccessibleEntityID()
@@ -493,7 +693,11 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, accessContext mi
 }
 
 // ===========================
+<<<<<<< HEAD
 // ❌ Delete Event (with ownership check and audit logging) - FIXED
+=======
+// ❌ Delete Event (with ownership check and audit logging)
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (s *Service) DeleteEvent(id uint, accessContext middleware.AccessContext, ip string) error {
 	// Get accessible entity ID
 	entityID := accessContext.GetAccessibleEntityID()

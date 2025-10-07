@@ -26,6 +26,7 @@ type ReportService interface {
 
     GetAuditLogsReport(req AuditLogReportRequest, entityIDs []string) ([]AuditLogReportRow, error)
     ExportAuditLogsReport(ctx context.Context, req AuditLogReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error)
+<<<<<<< HEAD
     
     // New methods for UserDetails and ApprovalStatus
     GetApprovalStatusReport(req ApprovalStatusReportRequest, entityIDs []string) ([]ApprovalStatusReportRow, error)
@@ -33,6 +34,8 @@ type ReportService interface {
     
     GetUserDetailsReport(req UserDetailReportRequest, entityIDs []string) ([]UserDetailsReportRow, error)
     ExportUserDetailsReport(ctx context.Context, req UserDetailReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error)
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 }
 
 type reportService struct {
@@ -368,6 +371,7 @@ func (s *reportService) ExportAuditLogsReport(ctx context.Context, req AuditLogR
 
     return bytes, filename, mimeType, nil
 }
+<<<<<<< HEAD
 
 // ===============================
 // Approval Status Reports
@@ -477,3 +481,5 @@ func (s *reportService) ExportUserDetailsReport(ctx context.Context, req UserDet
 
 	return bytes, filename, mimeType, nil
 }
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6

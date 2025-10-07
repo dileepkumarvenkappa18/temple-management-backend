@@ -1,10 +1,15 @@
 package entity
 
 import (
+<<<<<<< HEAD
 	"database/sql"
 	"time"
 	"math"
 	"fmt"
+=======
+	"time"
+	"math"
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"gorm.io/gorm"
@@ -25,6 +30,7 @@ func (r *Repository) CreateEntity(e *Entity) error {
 	return r.DB.Create(e).Error
 }
 
+<<<<<<< HEAD
 // Get tenant ID for a user from tenant_user_assignments table
 func (r *Repository) GetTenantIDForUser(userID uint) (uint, error) {
 	var tenantID uint
@@ -65,6 +71,9 @@ func (r *Repository) GetUserRoleID(userID uint) (uint, error) {
 }
 
 // Create an approval request for the temple
+=======
+// Create an approval request for the temple (linked to auth module)
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (r *Repository) CreateApprovalRequest(req *auth.ApprovalRequest) error {
 	return r.DB.Create(req).Error
 }
@@ -76,6 +85,7 @@ func (r *Repository) GetAllEntities() ([]Entity, error) {
 	return entities, err
 }
 
+<<<<<<< HEAD
 // Get entities with creator role information
 func (r *Repository) GetEntitiesWithRoleInfo() ([]map[string]interface{}, error) {
 	var results []map[string]interface{}
@@ -92,12 +102,16 @@ func (r *Repository) GetEntitiesWithRoleInfo() ([]map[string]interface{}, error)
 }
 
 // Fetch entities created by a specific user
+=======
+// Fetch entities created by a specific user (ordered by most recent)
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (r *Repository) GetEntitiesByCreator(creatorID uint) ([]Entity, error) {
 	var entities []Entity
 	err := r.DB.Where("created_by = ?", creatorID).Order("created_at DESC").Find(&entities).Error
 	return entities, err
 }
 
+<<<<<<< HEAD
 // Get approval statistics by role
 func (r *Repository) GetApprovalStatsByRole() (map[string]interface{}, error) {
 	type RoleStats struct {
@@ -133,6 +147,8 @@ func (r *Repository) GetApprovalStatsByRole() (map[string]interface{}, error) {
 	}, nil
 }
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 // Fetch a single temple entity by ID
 func (r *Repository) GetEntityByID(id int) (Entity, error) {
 	var entity Entity
@@ -144,6 +160,7 @@ func (r *Repository) GetEntityByID(id int) (Entity, error) {
 func (r *Repository) UpdateEntity(e Entity) error {
 	e.UpdatedAt = time.Now()
 	
+<<<<<<< HEAD
 	updates := map[string]interface{}{
 		"name":                    e.Name,
 		"main_deity":              e.MainDeity,
@@ -168,10 +185,34 @@ func (r *Repository) UpdateEntity(e Entity) error {
 		"additional_docs_urls":    e.AdditionalDocsURLs,
 		"additional_docs_info":    e.AdditionalDocsInfo,
 		"updated_at":              e.UpdatedAt,
+=======
+	// Create a map of all fields to update, even if they're zero values
+	updates := map[string]interface{}{
+		"name":                 e.Name,
+		"main_deity":           e.MainDeity,
+		"temple_type":          e.TempleType,
+		"established_year":     e.EstablishedYear,
+		"email":                e.Email,
+		"phone":                e.Phone,
+		"description":          e.Description,
+		"street_address":       e.StreetAddress,
+		"landmark":             e.Landmark,
+		"city":                 e.City,
+		"district":             e.District,
+		"state":                e.State,
+		"pincode":              e.Pincode,
+		"map_link":             e.MapLink,
+		"registration_cert_url": e.RegistrationCertURL,
+		"trust_deed_url":       e.TrustDeedURL,
+		"property_docs_url":    e.PropertyDocsURL,
+		"additional_docs_urls": e.AdditionalDocsURLs,
+		"updated_at":           e.UpdatedAt,
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	}
 	
 	return r.DB.Model(&Entity{}).Where("id = ?", e.ID).Updates(updates).Error
 }
+<<<<<<< HEAD
 // UpdateEntityStatus updates only the IsActive field of an entity
 func (r *Repository) UpdateEntityStatus(id int, isActive bool) error {
     updates := map[string]interface{}{
@@ -207,6 +248,9 @@ func (r *Repository) GetActiveEntitiesByCreator(creatorID uint) ([]Entity, error
         Find(&entities).Error
     return entities, err
 }
+=======
+
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 // Delete a temple entity by ID
 func (r *Repository) DeleteEntity(id int) error {
 	return r.DB.Delete(&Entity{}, id).Error
@@ -214,6 +258,10 @@ func (r *Repository) DeleteEntity(id int) error {
 
 // ========== DEVOTEE MANAGEMENT ==========
 
+<<<<<<< HEAD
+=======
+// DevoteeDTO represents the devotee information returned by queries
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 type DevoteeDTO struct {
 	UserID   uint   `json:"user_id"`
 	FullName string `json:"full_name"`
@@ -222,6 +270,10 @@ type DevoteeDTO struct {
 	Status   string `json:"status"`
 }
 
+<<<<<<< HEAD
+=======
+// Get all devotees for a specific entity
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (r *Repository) GetDevoteesByEntityID(entityID uint) ([]DevoteeDTO, error) {
 	var devotees []DevoteeDTO
 
@@ -236,15 +288,30 @@ func (r *Repository) GetDevoteesByEntityID(entityID uint) ([]DevoteeDTO, error) 
 	return devotees, err
 }
 
+<<<<<<< HEAD
+=======
+// DevoteeStats represents statistics about devotees for an entity
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 type DevoteeStats struct {
 	TotalDevotees  int64 `json:"total_devotees"`
 	ActiveDevotees int64 `json:"active_devotees"`
 	NewThisMonth   int64 `json:"new_this_month"`
+<<<<<<< HEAD
 }
 
 func (r *Repository) GetDevoteeStats(entityID uint) (DevoteeStats, error) {
 	var stats DevoteeStats
 
+=======
+	// ProfileCompletionRate float64 `json:"profile_completion_rate"` // Optional
+}
+
+// Get devotee statistics for a specific entity
+func (r *Repository) GetDevoteeStats(entityID uint) (DevoteeStats, error) {
+	var stats DevoteeStats
+
+	// Total Devotees
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	err := r.DB.Table("user_entity_memberships").
 		Joins("JOIN users ON users.id = user_entity_memberships.user_id").
 		Joins("JOIN user_roles ON user_roles.id = users.role_id").
@@ -254,6 +321,10 @@ func (r *Repository) GetDevoteeStats(entityID uint) (DevoteeStats, error) {
 		return stats, err
 	}
 
+<<<<<<< HEAD
+=======
+	// Active Devotees
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	err = r.DB.Table("user_entity_memberships").
 		Joins("JOIN users ON users.id = user_entity_memberships.user_id").
 		Joins("JOIN user_roles ON user_roles.id = users.role_id").
@@ -263,6 +334,10 @@ func (r *Repository) GetDevoteeStats(entityID uint) (DevoteeStats, error) {
 		return stats, err
 	}
 
+<<<<<<< HEAD
+=======
+	// New Devotees This Month
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	err = r.DB.Table("user_entity_memberships").
 		Joins("JOIN users ON users.id = user_entity_memberships.user_id").
 		Joins("JOIN user_roles ON user_roles.id = users.role_id").
@@ -275,6 +350,11 @@ func (r *Repository) GetDevoteeStats(entityID uint) (DevoteeStats, error) {
 	return stats, nil
 }
 
+<<<<<<< HEAD
+=======
+
+// Count total devotees for an entity
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (r *Repository) CountDevotees(entityID uint) (int64, error) {
 	var count int64
 	err := r.DB.
@@ -285,6 +365,10 @@ func (r *Repository) CountDevotees(entityID uint) (int64, error) {
 	return count, err
 }
 
+<<<<<<< HEAD
+=======
+// Count devotees added this month
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (r *Repository) CountDevoteesThisMonth(entityID uint) (int64, error) {
 	var count int64
 	err := r.DB.
@@ -295,6 +379,10 @@ func (r *Repository) CountDevoteesThisMonth(entityID uint) (int64, error) {
 	return count, err
 }
 
+<<<<<<< HEAD
+=======
+// Count today's seva bookings
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (r *Repository) CountSevaBookingsToday(entityID uint) (int64, error) {
 	var count int64
 	err := r.DB.
@@ -304,6 +392,10 @@ func (r *Repository) CountSevaBookingsToday(entityID uint) (int64, error) {
 	return count, err
 }
 
+<<<<<<< HEAD
+=======
+// Count seva bookings in current month
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (r *Repository) CountSevaBookingsThisMonth(entityID uint) (int64, error) {
 	var count int64
 	err := r.DB.
@@ -313,9 +405,17 @@ func (r *Repository) CountSevaBookingsThisMonth(entityID uint) (int64, error) {
 	return count, err
 }
 
+<<<<<<< HEAD
 func (r *Repository) GetMonthDonationsWithChange(entityID uint) (float64, float64, error) {
 	var currentMonth, previousMonth float64
 
+=======
+// Get total donation ₹ this month and % change vs last month
+func (r *Repository) GetMonthDonationsWithChange(entityID uint) (float64, float64, error) {
+	var currentMonth, previousMonth float64
+
+	// This month
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	err := r.DB.
 		Table("donations").
 		Select("COALESCE(SUM(amount), 0)").
@@ -325,6 +425,10 @@ func (r *Repository) GetMonthDonationsWithChange(entityID uint) (float64, float6
 		return 0, 0, err
 	}
 
+<<<<<<< HEAD
+=======
+	// Last month
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	err = r.DB.
 		Table("donations").
 		Select("COALESCE(SUM(amount), 0)").
@@ -334,6 +438,10 @@ func (r *Repository) GetMonthDonationsWithChange(entityID uint) (float64, float6
 		return 0, 0, err
 	}
 
+<<<<<<< HEAD
+=======
+	// % change (guard against divide by zero)
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	var percentChange float64
 	if previousMonth > 0 {
 		percentChange = ((currentMonth - previousMonth) / previousMonth) * 100
@@ -346,6 +454,10 @@ func (r *Repository) GetMonthDonationsWithChange(entityID uint) (float64, float6
 	return currentMonth, math.Round(percentChange*100) / 100, nil
 }
 
+<<<<<<< HEAD
+=======
+// Count total upcoming events (future start_date)
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (r *Repository) CountUpcomingEvents(entityID uint) (int64, error) {
 	var count int64
 	err := r.DB.
@@ -355,11 +467,23 @@ func (r *Repository) CountUpcomingEvents(entityID uint) (int64, error) {
 	return count, err
 }
 
+<<<<<<< HEAD
+=======
+// Count events in this week (Sun–Sat)
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (r *Repository) CountUpcomingEventsThisWeek(entityID uint) (int64, error) {
 	var count int64
 	err := r.DB.
 		Table("events").
+<<<<<<< HEAD
 		Where(`entity_id = ? AND event_date >= DATE_TRUNC('week', CURRENT_DATE) AND event_date < DATE_TRUNC('week', CURRENT_DATE) + INTERVAL '7 days'`, entityID).
+=======
+		Where(`
+	entity_id = ?
+	AND event_date >= DATE_TRUNC('week', CURRENT_DATE)
+	AND event_date < DATE_TRUNC('week', CURRENT_DATE) + INTERVAL '7 days'
+`, entityID).
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 		Count(&count).Error
 	return count, err
 }

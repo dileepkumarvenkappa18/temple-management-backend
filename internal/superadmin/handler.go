@@ -180,6 +180,7 @@ func (h *Handler) UpdateEntityApprovalStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Entity status updated successfully"})
 }
 
+<<<<<<< HEAD
 // Replace the duplicate GetTenantDetails functions with this single comprehensive one
 
 // GET /superadmin/tenant-details (get all tenants)
@@ -272,6 +273,8 @@ func (h *Handler) GetMultipleTenantDetailsByBody(c *gin.Context) {
 	})
 }
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 // GET /superadmin/tenant-approval-counts
 func (h *Handler) GetTenantApprovalCounts(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -735,11 +738,15 @@ func (h *Handler) GetTenantsForSelection(c *gin.Context) {
 }
 
 // GET /superadmin/tenants
+<<<<<<< HEAD
 // GET /superadmin/tenants
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (h *Handler) GetTenants(c *gin.Context) {
     role := c.Query("role")
     status := c.Query("status")
     
+<<<<<<< HEAD
     // Always use the enhanced method to include temple details
     tenants, err := h.service.GetTenantsWithTempleDetails(c.Request.Context(), role, status)
     if err != nil {
@@ -748,6 +755,35 @@ func (h *Handler) GetTenants(c *gin.Context) {
     }
     
     c.JSON(http.StatusOK, gin.H{"data": tenants})
+=======
+    // Use the enhanced method when role is templeadmin
+    if role == "templeadmin" {
+        tenants, err := h.service.GetTenantsWithTempleDetails(c.Request.Context(), role, status)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+            return
+        }
+        
+        c.JSON(http.StatusOK, gin.H{"data": tenants})
+        return
+    }
+    
+    // Fall back to GetTenantsWithFilters for other roles with default pagination
+    limit := 10
+    page := 1
+    tenants, total, err := h.service.GetTenantsWithFilters(c.Request.Context(), status, limit, page)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tenants"})
+        return
+    }
+    
+    c.JSON(http.StatusOK, gin.H{
+        "data":  tenants,
+        "total": total,
+        "page":  page,
+        "limit": limit,
+    })
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 }
 
 

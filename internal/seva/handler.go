@@ -4,7 +4,10 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+<<<<<<< HEAD
 	"fmt"
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auth"
@@ -24,6 +27,7 @@ func NewHandler(service Service, auditSvc auditlog.Service) *Handler {
 	}
 }
 
+<<<<<<< HEAD
 // ===========================
 // 📌 Extract Access Context (Similar to Events)
 func getAccessContextFromContext(c *gin.Context) (middleware.AccessContext, bool) {
@@ -42,6 +46,8 @@ func getAccessContextFromContext(c *gin.Context) (middleware.AccessContext, bool
 	return accessContext, true
 }
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 // ========================= REQUEST STRUCTS =============================
 
 type CreateSevaRequest struct {
@@ -56,6 +62,7 @@ type CreateSevaRequest struct {
 	MaxBookingsPerDay int       `json:"max_bookings_per_day"`
 }
 
+<<<<<<< HEAD
 type UpdateSevaRequest struct {
 	Name              *string   `json:"name,omitempty"`
 	SevaType          *string   `json:"seva_type,omitempty"`
@@ -69,12 +76,15 @@ type UpdateSevaRequest struct {
 	Status            *string   `json:"status,omitempty"` // upcoming, ongoing, completed
 }
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 type BookSevaRequest struct {
 	SevaID uint `json:"seva_id" binding:"required"`
 }
 
 // ========================= SEVA HANDLERS =============================
 
+<<<<<<< HEAD
 // 🎯 Create Seva - POST /sevas (UPDATED - Similar to CreateEvent)
 func (h *Handler) CreateSeva(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
@@ -116,17 +126,36 @@ func (h *Handler) CreateSeva(c *gin.Context) {
 		return
 	}
 
+=======
+func (h *Handler) CreateSeva(c *gin.Context) {
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	var input CreateSevaRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
 		return
 	}
 
+<<<<<<< HEAD
 	// Get IP address for audit logging
 	ip := middleware.GetIPFromContext(c)
 
 	seva := Seva{
 		EntityID:          entityID, // Use the resolved entityID
+=======
+	// Use access context instead of direct user access
+	accessContext := c.MustGet("access_context").(middleware.AccessContext)
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "No accessible entity"})
+		return
+	}
+
+	// Extract IP address
+	ip := middleware.GetIPFromContext(c)
+
+	seva := Seva{
+		EntityID:          *entityID,
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 		Name:              input.Name,
 		SevaType:          input.SevaType,
 		Description:       input.Description,
@@ -136,7 +165,12 @@ func (h *Handler) CreateSeva(c *gin.Context) {
 		EndTime:           input.EndTime,
 		Duration:          input.Duration,
 		MaxBookingsPerDay: input.MaxBookingsPerDay,
+<<<<<<< HEAD
 		Status:            "upcoming", // defaulted to upcoming
+=======
+		Status:            "upcoming",        // ✅ defaulted
+		IsActive:          true,              // ✅ defaulted
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	}
 
 	if err := h.service.CreateSeva(c, &seva, accessContext, ip); err != nil {
@@ -147,6 +181,7 @@ func (h *Handler) CreateSeva(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"message": "Seva created successfully", "seva": seva})
 }
 
+<<<<<<< HEAD
 // 📄 List all sevas for temple admin with filters and pagination (UPDATED - Similar to ListEvents)
 func (h *Handler) ListEntitySevas(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
@@ -439,10 +474,17 @@ func (h *Handler) GetSevas(c *gin.Context) {
 	// Keep original devotee logic but allow entity ID flexibility
 	user := c.MustGet("user").(auth.User)
 	if user.Role.RoleName != "devotee" {
+=======
+func (h *Handler) GetSevas(c *gin.Context) {
+	// Keep devotee logic unchanged
+	user := c.MustGet("user").(auth.User)
+	if user.Role.RoleName != "devotee" || user.EntityID == nil {
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
 		return
 	}
 
+<<<<<<< HEAD
 	// If no entity ID found from parameters, fall back to user's entity
 	if entityID == 0 {
 		if user.EntityID == nil {
@@ -452,6 +494,8 @@ func (h *Handler) GetSevas(c *gin.Context) {
 		entityID = *user.EntityID
 	}
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	offset := (page - 1) * limit
@@ -459,10 +503,16 @@ func (h *Handler) GetSevas(c *gin.Context) {
 	sevaType := c.Query("seva_type")
 	search := c.Query("search")
 
+<<<<<<< HEAD
 	// Pass the resolved entityID to the service
 	sevas, err := h.service.GetPaginatedSevas(
 		c,
 		entityID, // Use resolved entityID
+=======
+	sevas, err := h.service.GetPaginatedSevas(
+		c,
+		*user.EntityID,
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 		sevaType,
 		search,
 		limit,
@@ -478,7 +528,10 @@ func (h *Handler) GetSevas(c *gin.Context) {
 
 // ========================= BOOKING HANDLERS =============================
 
+<<<<<<< HEAD
 // 🎫 Book Seva - FIXED: Now correctly uses Seva's EntityID
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 func (h *Handler) BookSeva(c *gin.Context) {
 	var input BookSevaRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -488,6 +541,7 @@ func (h *Handler) BookSeva(c *gin.Context) {
 
 	// Keep devotee logic unchanged
 	user := c.MustGet("user").(auth.User)
+<<<<<<< HEAD
 	if user.Role.RoleName != "devotee" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
 		return
@@ -497,12 +551,17 @@ func (h *Handler) BookSeva(c *gin.Context) {
 	seva, err := h.service.GetSevaByID(c, input.SevaID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Seva not found"})
+=======
+	if user.Role.RoleName != "devotee" || user.EntityID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized or invalid entity"})
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 		return
 	}
 
 	// Extract IP address
 	ip := middleware.GetIPFromContext(c)
 
+<<<<<<< HEAD
 	// 🔥 FIX: Use seva.EntityID instead of user.EntityID
 	booking := SevaBooking{
 		SevaID:      input.SevaID,
@@ -514,6 +573,17 @@ func (h *Handler) BookSeva(c *gin.Context) {
 
 	// Pass seva.EntityID to the service as well
 	if err := h.service.BookSeva(c, &booking, "devotee", user.ID, seva.EntityID, ip); err != nil {
+=======
+	booking := SevaBooking{
+		SevaID:      input.SevaID,
+		UserID:      user.ID,
+		EntityID:    *user.EntityID,
+		BookingTime: time.Now(),       // ⏱️ Auto-generated now
+		Status:      "pending",        // default state
+	}
+
+	if err := h.service.BookSeva(c, &booking, "devotee", user.ID, *user.EntityID, ip); err != nil {
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Booking failed: " + err.Error()})
 		return
 	}
@@ -535,6 +605,7 @@ func (h *Handler) GetMyBookings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"bookings": bookings})
 }
 
+<<<<<<< HEAD
 // 📊 Get Entity Bookings - UPDATED (Similar to Event pattern)
 func (h *Handler) GetEntityBookings(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
@@ -572,6 +643,17 @@ func (h *Handler) GetEntityBookings(c *gin.Context) {
 		}
 	}
 
+=======
+func (h *Handler) GetEntityBookings(c *gin.Context) {
+	// Use access context instead of direct user access
+	accessContext := c.MustGet("access_context").(middleware.AccessContext)
+	entityID := accessContext.GetAccessibleEntityID()
+	if entityID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "No accessible entity"})
+		return
+	}
+
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	status := c.Query("status")
 	sevaType := c.Query("seva_type")
 	startDate := c.Query("start_date")
@@ -580,9 +662,14 @@ func (h *Handler) GetEntityBookings(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
+<<<<<<< HEAD
 	// Pass the explicit entityID to the service
 	bookings, err := h.service.GetDetailedBookingsWithFilters(
 		c, entityID, status, sevaType, startDate, endDate, search, limit, offset,
+=======
+	bookings, err := h.service.GetDetailedBookingsWithFilters(
+		c, *entityID, status, sevaType, startDate, endDate, search, limit, offset,
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch detailed bookings: " + err.Error()})
@@ -608,6 +695,7 @@ func (h *Handler) GetBookingByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"booking": booking})
 }
 
+<<<<<<< HEAD
 // 📊 Get Booking Counts - UPDATED (Similar to Event pattern)
 func (h *Handler) GetBookingCounts(c *gin.Context) {
 	// Handle both devotee and temple admin access
@@ -645,6 +733,31 @@ func (h *Handler) GetBookingCounts(c *gin.Context) {
 	}
 
 	counts, err := h.service.GetBookingStatusCounts(c, entityID)
+=======
+func (h *Handler) GetBookingCounts(c *gin.Context) {
+	// Handle both devotee and temple admin access
+	user := c.MustGet("user").(auth.User)
+	var entityID *uint
+
+	// Check if user is devotee (original logic)
+	if user.Role.RoleName == "devotee" {
+		if user.EntityID == nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+			return
+		}
+		entityID = user.EntityID
+	} else {
+		// Use access context for temple admin users
+		accessContext := c.MustGet("access_context").(middleware.AccessContext)
+		entityID = accessContext.GetAccessibleEntityID()
+		if entityID == nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "No accessible entity"})
+			return
+		}
+	}
+
+	counts, err := h.service.GetBookingStatusCounts(c, *entityID)
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch counts: " + err.Error()})
 		return

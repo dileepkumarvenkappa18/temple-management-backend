@@ -20,8 +20,11 @@ type ReportRepository interface {
 	GetDevoteeList(entityIDs []uint, start, end time.Time, status string) ([]DevoteeListReportRow, error)
 	GetDevoteeProfiles(entityIDs []uint, start, end time.Time, status string) ([]DevoteeProfileReportRow, error)
 	GetAuditLogs(entityIDs []uint, start, end time.Time, actionTypes []string, status string) ([]AuditLogReportRow, error)
+<<<<<<< HEAD
 	GetApprovalStatus(entityIDs []uint, start, end time.Time, role, status string) ([]ApprovalStatusReportRow, error)
 	GetUserDetails(entityIDs []uint, start, end time.Time, role, status string) ([]UserDetailsReportRow, error)
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 }
 
 type repository struct {
@@ -280,7 +283,10 @@ func (r *repository) GetAuditLogs(entityIDs []uint, start, end time.Time, action
             al.status,
             al.ip_address,
             al.created_at AS timestamp,
+<<<<<<< HEAD
             al.created_at,
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
             COALESCE(al.details::text, '') AS details
         `).
 		Joins("LEFT JOIN users u ON al.user_id = u.id").
@@ -300,6 +306,7 @@ func (r *repository) GetAuditLogs(entityIDs []uint, start, end time.Time, action
 	err := query.Order("al.created_at DESC").Scan(&rows).Error
 	return rows, err
 }
+<<<<<<< HEAD
 // GetApprovalStatus fetches approval status records for reporting
 func (r *repository) GetApprovalStatus(entityIDs []uint, start, end time.Time, role, status string) ([]ApprovalStatusReportRow, error) {
 	var rows []ApprovalStatusReportRow
@@ -384,3 +391,5 @@ func (r *repository) GetUserDetails(entityIDs []uint, start, end time.Time, role
 	err := query.Order("u.created_at DESC").Scan(&rows).Error
 	return rows, err
 }
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6

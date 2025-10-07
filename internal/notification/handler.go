@@ -5,11 +5,16 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+<<<<<<< HEAD
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
 	"github.com/sharath018/temple-management-backend/middleware"
 	"github.com/sharath018/temple-management-backend/utils"
+=======
+	"github.com/sharath018/temple-management-backend/internal/auditlog"
+	"github.com/sharath018/temple-management-backend/middleware"
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 )
 
 // Handler wraps the service
@@ -324,6 +329,7 @@ func (h *Handler) GetMyNotifications(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, logs)
+<<<<<<< HEAD
 }
 
 // GET /api/v1/notifications/inapp
@@ -481,3 +487,6 @@ func (h *Handler) StreamInAppWithToken(c *gin.Context) {
 		}
 	}
 }
+=======
+}
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6

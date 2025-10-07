@@ -37,6 +37,7 @@ type NotificationLog struct {
 	CreatedAt  time.Time      `json:"created_at"`
 	UpdatedAt  time.Time      `json:"updated_at"`
 }
+<<<<<<< HEAD
 
 // 3. InAppNotification - per-user, in-app bell notifications
 type InAppNotification struct {
@@ -50,3 +51,5 @@ type InAppNotification struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6

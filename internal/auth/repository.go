@@ -16,7 +16,10 @@ type Repository interface {
 	CreateApprovalRequest(userID uint, requestType string) error
 	UpdateEntityID(userID uint, entityID uint) error
 	GetUserEmailsByRole(roleName string, entityID uint) ([]string, error)
+<<<<<<< HEAD
 	GetUserIDsByRole(roleName string, entityID uint) ([]uint, error)
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 
 	// Password reset methods
 	SetForgotPasswordToken(userID uint, token string, expiry time.Time) error
@@ -143,6 +146,7 @@ func (r *repository) GetUserEmailsByRole(roleName string, entityID uint) ([]stri
 	return emails, err
 }
 
+<<<<<<< HEAD
 // GetUserIDsByRole fetches all user IDs by role and entity
 func (r *repository) GetUserIDsByRole(roleName string, entityID uint) ([]uint, error) {
 	var ids []uint
@@ -165,6 +169,8 @@ func (r *repository) GetUserIDsByRole(roleName string, entityID uint) ([]uint, e
 	return ids, nil
 }
 
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 // ✅ Set Forgot Password Token and expiry
 func (r *repository) SetForgotPasswordToken(userID uint, token string, expiry time.Time) error {
 	return r.db.Model(&User{}).Where("id = ?", userID).Updates(map[string]interface{}{

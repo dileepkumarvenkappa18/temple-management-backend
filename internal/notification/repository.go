@@ -20,11 +20,14 @@ type Repository interface {
 	UpdateNotificationLog(ctx context.Context, log *NotificationLog) error
 	GetNotificationsByUser(ctx context.Context, userID uint) ([]NotificationLog, error)
 	MarkNotificationAsRead(ctx context.Context, notificationID uint, userID uint) error
+<<<<<<< HEAD
 
 	// In-app notifications
 	CreateInApp(ctx context.Context, n *InAppNotification) error
 	ListInAppByUser(ctx context.Context, userID uint, entityID *uint, limit int) ([]InAppNotification, error)
 	MarkInAppAsRead(ctx context.Context, id uint, userID uint) error
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
 }
 
 type repository struct {
@@ -113,6 +116,7 @@ func (r *repository) MarkNotificationAsRead(ctx context.Context, notificationID 
 		Where("id = ? AND user_id = ?", notificationID, userID).
 		Update("is_read", true).Error
 }
+<<<<<<< HEAD
 
 // ------------------------------
 // In-App Notifications
@@ -141,3 +145,5 @@ func (r *repository) MarkInAppAsRead(ctx context.Context, id uint, userID uint) 
 		Where("id = ? AND user_id = ?", id, userID).
 		Update("is_read", true).Error
 }
+=======
+>>>>>>> 94687f1f9b610a9b6c08378c7d37e9a6b831dbf6
