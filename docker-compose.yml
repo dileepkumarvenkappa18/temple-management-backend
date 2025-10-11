@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # ─── Your Go Application ─────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: temple_app
+    ports:
+      - "8080:8080"            # Exposes your Go server on localhost:8080
+    env_file:
+      - .env                   # Picks up DB_HOST, DB_USER, JWT_SECRET, etc.
+
+    volumes:
+      - uploads_data:/data/uploads
+      - logs_data:/data/logs
+      - ./wafdata:/data/wafdata      # ✅ Mount local WAF config directory
+      - ./certs:/app/certs           # ✅ Mount SSL certificates
+
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    networks:
+      - temple_network
+
+  # ─── Postgres Database ───────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15
+    container_name: temple_postgres
+    environment:
+      POSTGRES_DB: temple_db
+      POSTGRES_USER: temple_user
+      POSTGRES_PASSWORD: nature123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - temple_network
+
+  # ─── Redis Cache ─────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: temple_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - temple_network
+
+  # ─── Kafka Broker ────────────────────────────────────────────────────────────
+  kafka:
+    image: apache/kafka:3.9.1
+    container_name: temple_kafka
+    environment:
+      # Broker settings
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+      - kafka_meta:/var/lib/kafka/meta
+    networks:
+      - temple_network
+
+# ─── Volumes ──────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+  redis_data:
+  kafka_data:
+  kafka_meta:
+  uploads_data:
+  logs_data:
+
+# ─── Network ──────────────────────────────────────────────────────────────
+networks:
+  temple_network:
+    driver: bridge
