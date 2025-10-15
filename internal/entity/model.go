@@ -65,7 +65,15 @@ type FileInfo struct {
 	UploadedAt   time.Time `json:"uploaded_at"`
 	OriginalName string    `json:"original_name"`
 }
-
+/*
+type UserEntityMembership struct {
+	ID       uint      `gorm:"primaryKey"`
+	UserID   uint      `gorm:"not null;index" json:"user_id"`
+	EntityID uint      `gorm:"not null;index" json:"entity_id"`
+	JoinedAt time.Time `gorm:"autoCreateTime" json:"joined_at"`
+	Status   string    `gorm:"default:'active'" json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+}*/
 // TableName specifies the table name for the Entity model
 func (Entity) TableName() string {
 	return "entities"

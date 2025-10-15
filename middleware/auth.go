@@ -1,4 +1,3 @@
-
 package middleware
 
 import (
@@ -61,14 +60,14 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 		c.Set("user_id", user.ID)
 		c.Set("claims", claims)
 
-		// FIXED: Comprehensive entity ID resolution - TempleAdmin can access requested entities
+		// Determine correct entity ID
 		entityID := ResolveEntityIDForOperation(c, user, claims)
-		
-		// Create access context with proper entity ID
+
+		// Create access context (now includes TenantID)
 		accessContext := CreateAccessContext(c, user, claims, entityID)
 		c.Set("access_context", accessContext)
 
-		// Also set the resolved entity_id for easy access
+		// Set resolved entity ID for quick access
 		if entityID != nil {
 			c.Set("entity_id", *entityID)
 		}
@@ -79,9 +78,7 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 
 // ResolveEntityIDForOperation determines the correct entity ID for the current operation
 func ResolveEntityIDForOperation(c *gin.Context, user auth.User, claims jwt.MapClaims) *uint {
-	// Universal priority order for all roles (except specific restrictions)
-	
-	// Priority 1: X-Entity-ID header (most explicit)
+	// Priority 1: X-Entity-ID header
 	if entityHeader := c.GetHeader("X-Entity-ID"); entityHeader != "" && entityHeader != "all" {
 		if eid, err := strconv.ParseUint(entityHeader, 10, 32); err == nil {
 			id := uint(eid)
@@ -90,7 +87,7 @@ func ResolveEntityIDForOperation(c *gin.Context, user auth.User, claims jwt.MapC
 		}
 	}
 
-	// Priority 2: Entity ID from URL path (e.g., /entity/123/...)
+	// Priority 2: Entity ID from URL path (/entity/123/...)
 	if entityIDFromPath := ExtractEntityIDFromPath(c); entityIDFromPath != nil {
 		fmt.Printf("%s using entity ID from URL path: %d\n", user.Role.RoleName, *entityIDFromPath)
 		return entityIDFromPath
@@ -105,27 +102,23 @@ func ResolveEntityIDForOperation(c *gin.Context, user auth.User, claims jwt.MapC
 		}
 	}
 
-	// Priority 4: Role-specific fallbacks
+	// Priority 4: Role-specific fallback logic
 	switch user.Role.RoleName {
 	case RoleSuperAdmin:
-		// Try X-Tenant-ID header or tenant param for multi-tenant operations
 		if tenantID := ResolveTenantIDFromRequest(c, claims); tenantID != nil {
 			fmt.Printf("SuperAdmin using tenant ID as entity ID: %d\n", *tenantID)
 			return tenantID
 		}
-		// SuperAdmin without specific entity - return nil for global access
-		fmt.Printf("SuperAdmin with global access (no specific entity)\n")
+		fmt.Println("SuperAdmin with global access (no specific entity)")
 		return nil
 
 	case RoleTempleAdmin:
-		// TempleAdmin: Fallback to their assigned entity if no specific request
 		if user.EntityID != nil {
 			fmt.Printf("TempleAdmin fallback to assigned entity ID: %d\n", *user.EntityID)
 			return user.EntityID
 		}
 
 	case RoleStandardUser, RoleMonitoringUser:
-		// Use assigned tenant ID from claims
 		if assignedTenantIDFloat, exists := claims["assigned_tenant_id"]; exists {
 			if tenantID, ok := assignedTenantIDFloat.(float64); ok && tenantID > 0 {
 				id := uint(tenantID)
@@ -133,54 +126,46 @@ func ResolveEntityIDForOperation(c *gin.Context, user auth.User, claims jwt.MapC
 				return &id
 			}
 		}
-		// Fallback to their own entity ID if no assigned tenant
 		if user.EntityID != nil {
 			fmt.Printf("%s fallback to own entity ID: %d\n", user.Role.RoleName, *user.EntityID)
 			return user.EntityID
 		}
 
 	case RoleDevotee, RoleVolunteer:
-		// Fallback to user's own entity
 		if user.EntityID != nil {
 			fmt.Printf("%s using own entity ID: %d\n", user.Role.RoleName, *user.EntityID)
 			return user.EntityID
 		}
 	}
 
-	fmt.Printf("WARNING: Could not resolve entity ID for user %d (role: %s)\n", user.ID, user.Role.RoleName)
+	fmt.Printf("⚠️ Could not resolve entity ID for user %d (role: %s)\n", user.ID, user.Role.RoleName)
 	return nil
 }
 
-// ResolveTenantIDFromRequest extracts tenant ID from request for multi-tenant operations
+// ResolveTenantIDFromRequest extracts tenant ID from request
 func ResolveTenantIDFromRequest(c *gin.Context, claims jwt.MapClaims) *uint {
-	// Try URL parameter
 	if tenantIDParam := c.Param("id"); tenantIDParam != "" && tenantIDParam != "all" {
 		if tid, err := strconv.ParseUint(tenantIDParam, 10, 32); err == nil {
 			id := uint(tid)
 			return &id
 		}
 	}
-
-	// Try query parameter
 	if tenantQuery := c.Query("tenant_id"); tenantQuery != "" && tenantQuery != "all" {
 		if tid, err := strconv.ParseUint(tenantQuery, 10, 32); err == nil {
 			id := uint(tid)
 			return &id
 		}
 	}
-
-	// Try header
 	if tenantHeader := c.GetHeader("X-Tenant-ID"); tenantHeader != "" && tenantHeader != "all" {
 		if tid, err := strconv.ParseUint(tenantHeader, 10, 32); err == nil {
 			id := uint(tid)
 			return &id
 		}
 	}
-
 	return nil
 }
 
-// ExtractEntityIDFromPath attempts to extract an entity ID from URL paths like /entity/123/...
+// ExtractEntityIDFromPath extracts entity ID from URL
 func ExtractEntityIDFromPath(c *gin.Context) *uint {
 	path := c.Request.URL.Path
 	if strings.Contains(path, "/entity/") {
@@ -198,7 +183,7 @@ func ExtractEntityIDFromPath(c *gin.Context) *uint {
 	return nil
 }
 
-// CreateAccessContext creates the access context with proper entity resolution
+// CreateAccessContext creates the access context with proper entity + tenant resolution
 func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, entityID *uint) AccessContext {
 	accessContext := AccessContext{
 		UserID:   user.ID,
@@ -208,12 +193,11 @@ func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, e
 	switch user.Role.RoleName {
 	case RoleSuperAdmin:
 		accessContext.PermissionType = "full"
-		accessContext.AssignedEntityID = entityID // Could be nil for global access
+		accessContext.AssignedEntityID = entityID
 
 	case RoleTempleAdmin:
 		accessContext.PermissionType = "full"
 		accessContext.DirectEntityID = user.EntityID
-		// Use the resolved entity ID (can be requested entity or assigned entity)
 		accessContext.AssignedEntityID = entityID
 
 	case RoleStandardUser:
@@ -233,7 +217,16 @@ func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, e
 		}
 	}
 
-	return accessContext
+	// ✅ Extract TenantID (important for standard & monitoring users)
+// ✅ Extract TenantID (important for standard & monitoring users)
+if tenantIDFloat, ok := claims["tenant_id"].(float64); ok {
+	accessContext.TenantID = uint(tenantIDFloat)
+} else if assignedTenantIDFloat, ok := claims["assigned_tenant_id"].(float64); ok {
+	accessContext.TenantID = uint(assignedTenantIDFloat)
 }
 
+	fmt.Printf("✅ AccessContext initialized: Role=%s, TenantID=%d, EntityID=%v\n",
+		accessContext.RoleName, accessContext.TenantID, accessContext.AssignedEntityID)
 
+	return accessContext
+}

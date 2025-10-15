@@ -281,6 +281,7 @@ func (s *service) RequestPasswordReset(email string) error {
 	return nil
 }
 
+
 func (s *service) ResetPassword(token string, newPassword string) error {
 	key := fmt.Sprintf("reset_token:%s", token)
 	val, err := utils.GetToken(key)

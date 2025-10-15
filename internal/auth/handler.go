@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -139,28 +140,97 @@ func (h *Handler) Refresh(c *gin.Context) {
 }
 
 // ===============================
-// Forgot Password
+// Forgot Password - FIXED
 // ===============================
 
 type forgotPasswordReq struct {
 	Email string `json:"email" binding:"required,email" example:"sharath@example.com"`
 }
 
+// Custom error types for better error handling
+var (
+	ErrUserNotFound    = errors.New("user not found")
+	ErrEmailNotSent    = errors.New("failed to send email")
+	ErrInvalidEmail    = errors.New("invalid email address")
+	ErrEmailService    = errors.New("email service unavailable")
+	ErrRateLimitExceed = errors.New("too many requests")
+)
+
 func (h *Handler) ForgotPassword(c *gin.Context) {
 	var req forgotPasswordReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "invalid request",
+			"message": "Please provide a valid email address",
+		})
 		return
 	}
-	if err := h.service.RequestPasswordReset(req.Email); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+
+	// Validate email format
+	if !strings.Contains(req.Email, "@") || !strings.Contains(req.Email, ".") {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "invalid email",
+			"message": "Please provide a valid email address",
+		})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Reset link sent to email (if account exists)"})
+
+	// Call service layer
+	err := h.service.RequestPasswordReset(req.Email)
+	
+	if err != nil {
+		// 🔍 Determine the type of error and respond accordingly
+		switch {
+		case errors.Is(err, ErrUserNotFound):
+			// ⚠️ Security: Don't reveal if user exists or not
+			// Return success message but log the attempt
+			c.JSON(http.StatusOK, gin.H{
+				"message": "If an account exists with this email, a password reset link has been sent",
+			})
+			return
+
+		case errors.Is(err, ErrEmailNotSent), errors.Is(err, ErrEmailService):
+			// 🚨 Email service failure - return 500
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "failed to send email",
+				"message": "Email service is currently unavailable. Please try again later or contact support.",
+			})
+			return
+
+		case errors.Is(err, ErrRateLimitExceed):
+			// 🚫 Rate limit exceeded
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":   "too many requests",
+				"message": "You have requested too many password resets. Please wait 15 minutes and try again.",
+			})
+			return
+
+		case strings.Contains(err.Error(), "email"):
+			// Generic email-related error
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "failed to send email",
+				"message": "Unable to send password reset email. Please contact support.",
+			})
+			return
+
+		default:
+			// Unknown error
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "internal server error",
+				"message": "An unexpected error occurred. Please try again later.",
+			})
+			return
+		}
+	}
+
+	// ✅ Success response
+	c.JSON(http.StatusOK, gin.H{
+		"message": "If an account exists with this email, a password reset link has been sent",
+	})
 }
 
 // ===============================
-// Reset Password
+// Reset Password - FIXED
 // ===============================
 
 type resetPasswordReq struct {
@@ -168,17 +238,79 @@ type resetPasswordReq struct {
 	NewPassword string `json:"newPassword" binding:"required,min=6" example:"newsecret123"`
 }
 
+var (
+	ErrInvalidToken     = errors.New("invalid token")
+	ErrExpiredToken     = errors.New("token expired")
+	ErrWeakPassword     = errors.New("password too weak")
+	ErrTokenNotFound    = errors.New("token not found")
+)
+
 func (h *Handler) ResetPassword(c *gin.Context) {
 	var req resetPasswordReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "invalid request",
+			"message": "Please provide both token and new password",
+		})
 		return
 	}
-	if err := h.service.ResetPassword(req.Token, req.NewPassword); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+
+	// Validate password strength
+	if len(req.NewPassword) < 6 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "weak password",
+			"message": "Password must be at least 6 characters long",
+		})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Password has been reset successfully"})
+
+	// Call service layer
+	err := h.service.ResetPassword(req.Token, req.NewPassword)
+	
+	if err != nil {
+		// 🔍 Determine the type of error and respond accordingly
+		switch {
+		case errors.Is(err, ErrInvalidToken), errors.Is(err, ErrTokenNotFound):
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "invalid token",
+				"message": "This password reset link is invalid. Please request a new one.",
+			})
+			return
+
+		case errors.Is(err, ErrExpiredToken):
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "expired token",
+				"message": "This password reset link has expired. Please request a new one.",
+			})
+			return
+
+		case errors.Is(err, ErrWeakPassword):
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "weak password",
+				"message": "Password does not meet security requirements. Please use a stronger password.",
+			})
+			return
+
+		case strings.Contains(err.Error(), "token"):
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "invalid token",
+				"message": "This password reset link is invalid or has expired. Please request a new one.",
+			})
+			return
+
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "internal server error",
+				"message": "Unable to reset password. Please try again later.",
+			})
+			return
+		}
+	}
+
+	// ✅ Success response
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Password has been reset successfully. You can now login with your new password.",
+	})
 }
 
 // ===============================
@@ -190,7 +322,10 @@ func (h *Handler) Logout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
 }
 
-// GET /auth/public-roles - Get roles available for public registration
+// ===============================
+// Public Roles
+// ===============================
+
 func (h *Handler) GetPublicRoles(c *gin.Context) {
 	roles, err := h.service.GetPublicRoles()
 	if err != nil {

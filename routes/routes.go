@@ -409,6 +409,8 @@ writeRoutes.PUT("/:id/status", entityHandler.ToggleEntityStatus)
 			// Read operations - all three roles can access
 			entityRoutes.GET("/:id", entityHandler.GetEntityByID)
 			entityRoutes.GET("/:id/devotees", entityHandler.GetDevoteesByEntity)
+			entityRoutes.GET("/:id/volunteers", entityHandler.GetDevoteesByEntity)
+
 			entityRoutes.GET("/:id/devotee-stats", entityHandler.GetDevoteeStats)
 			entityRoutes.GET("/dashboard-summary", entityHandler.GetDashboardSummary)
 			// FIXED: Add file routes for entity documents

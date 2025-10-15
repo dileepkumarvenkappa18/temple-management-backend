@@ -982,6 +982,28 @@ func (h *Handler) ToggleEntityStatus(c *gin.Context) {
         "status":    statusText,
     })
 }
+/*func (h *Handler) GetVolunteersByEntity(c *gin.Context) {
+	entityIDParam := c.Param("id")
+	entityIDUint, err := strconv.ParseUint(entityIDParam, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entity ID"})
+		return
+	}
+
+	entityID := uint(entityIDUint)
+
+	volunteers, err := h.Service.GetVolunteersByEntityID(entityID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to fetch volunteers",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, volunteers)
+}
+*/
 // GetDevoteesByEntity retrieves devotees for a specific entity
 func (h *Handler) GetDevoteesByEntity(c *gin.Context) {
 	entityIDParam := c.Param("id")

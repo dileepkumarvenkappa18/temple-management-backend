@@ -24,6 +24,7 @@ type AccessContext struct {
 	DirectEntityID   *uint  // User's own entity (for templeadmin)
 	AssignedEntityID *uint  // Assigned tenant entity (for standarduser/monitoringuser)
 	PermissionType   string // "full" or "readonly"
+	TenantID        uint 
 }
 
 // GetAccessibleEntityID returns the entity ID the user can access
@@ -71,7 +72,7 @@ func (ac *AccessContext) CanAccessEntity(entityID uint) bool {
 	
 	return false
 }
-
+/*
 // ResolveAccessContext helper to create access context from user and assignment
 func ResolveAccessContext(user interface{}, assignedTenantID *uint) AccessContext {
 	// Type assertion to get the auth.User fields we need
@@ -103,6 +104,7 @@ func ResolveAccessContext(user interface{}, assignedTenantID *uint) AccessContex
 		RoleName:       roleName,
 		DirectEntityID: entityID,
 		PermissionType: "full", // default
+		
 	}
 
 	// If user is standarduser or monitoringuser with assigned tenant
@@ -116,7 +118,7 @@ func ResolveAccessContext(user interface{}, assignedTenantID *uint) AccessContex
 	}
 
 	return accessContext
-}
+}*/
 
 // ExtractTenantIDFromContext extracts tenant ID from request headers
 func ExtractTenantIDFromContext(c *gin.Context) *uint {

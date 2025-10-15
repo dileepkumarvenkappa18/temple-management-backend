@@ -363,3 +363,11 @@ func (r *Repository) CountUpcomingEventsThisWeek(entityID uint) (int64, error) {
 		Count(&count).Error
 	return count, err
 }
+/*func (r *Repository) GetVolunteersByEntityID(entityID uint) ([]UserEntityMembership, error) {
+	var memberships []UserEntityMembership
+	err := r.DB.
+		Where("entity_id = ? AND status = ?", entityID, "active").
+		Find(&memberships).Error
+	return memberships, err
+}
+*/

@@ -1,6 +1,7 @@
 package reports
 
 import (
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -10,6 +11,10 @@ import (
 type ReportRepository interface {
 	// GetEntitiesByTenant returns entity IDs created by the given tenant (temple admin user)
 	GetEntitiesByTenant(userID uint) ([]uint, error)
+
+	// 🔹 Added for superadmin and tenant-based access
+	GetAllEntityIDs() ([]uint, error)
+	GetEntitiesByTenantID(tenantID uint) ([]uint, error)
 
 	GetEvents(entityIDs []uint, start, end time.Time) ([]EventReportRow, error)
 	GetSevas(entityIDs []uint, start, end time.Time) ([]SevaReportRow, error)
@@ -32,15 +37,44 @@ func NewRepository(db *gorm.DB) ReportRepository {
 	return &repository{db: db}
 }
 
+// ======================
+// 🔹 Entity Fetch Methods
+// ======================
+
 func (r *repository) GetEntitiesByTenant(userID uint) ([]uint, error) {
 	var ids []uint
-	// Table "entities" has created_by which stores templeadmin user ID
 	err := r.db.Table("entities").
 		Select("id").
 		Where("created_by = ?", userID).
 		Scan(&ids).Error
+		fmt.Println("GetEntitiesByTenant ids :",ids , userID)
+		
 	return ids, err
 }
+
+// 🔹 Added: Get all entities (for superadmin)
+func (r *repository) GetAllEntityIDs() ([]uint, error) {
+	var ids []uint
+	err := r.db.Table("entities").
+		Select("id").
+		Scan(&ids).Error
+	return ids, err
+}
+
+// 🔹 Added: Get entities by tenant ID (for tenant-level users)
+func (r *repository) GetEntitiesByTenantID(tenantID uint) ([]uint, error) {
+	var ids []uint
+	err := r.db.Table("entities").
+		Select("id").
+		Where("tenant_id = ?", tenantID).
+		Scan(&ids).Error
+		fmt.Println("GetEntitiesByTenantID:",ids)
+	return ids, err
+}
+
+// ======================
+// 🔹 Reports
+// ======================
 
 func (r *repository) GetEvents(entityIDs []uint, start, end time.Time) ([]EventReportRow, error) {
 	var out []EventReportRow
@@ -89,7 +123,6 @@ func (r *repository) GetSevaBookings(entityIDs []uint, start, end time.Time) ([]
 	return out, err
 }
 
-// GetDonations fetches donation records for reporting
 func (r *repository) GetDonations(entityIDs []uint, start, end time.Time) ([]DonationReportRow, error) {
 	var out []DonationReportRow
 	if len(entityIDs) == 0 {
@@ -138,14 +171,25 @@ func (r *repository) GetTemplesRegistered(entityIDs []uint, start, end time.Time
 	return rows, err
 }
 
+// GetDevoteeBirthdays - Fixed version with proper date handling
 func (r *repository) GetDevoteeBirthdays(entityIDs []uint, start, end time.Time) ([]DevoteeBirthdayReportRow, error) {
 	var rows []DevoteeBirthdayReportRow
 	if len(entityIDs) == 0 {
 		return rows, nil
 	}
 
+	// Format start and end dates to MM-DD format for birthday matching
+	startMMDD := start.Format("01-02")
+	endMMDD := end.Format("01-02")
+
+	fmt.Printf("🔍 Fetching birthdays for entities: %v\n", entityIDs)
+	fmt.Printf("📅 Date range: %s to %s (MM-DD format: %s to %s)\n", 
+		start.Format("2006-01-02"), end.Format("2006-01-02"), startMMDD, endMMDD)
+
+	// Base query - join users with devotee profiles and entity memberships
 	query := r.db.Table("users u").
 		Select(`
+			u.id as user_id,
 			u.full_name,
 			dp.dob as date_of_birth,
 			dp.gender,
@@ -157,40 +201,46 @@ func (r *repository) GetDevoteeBirthdays(entityIDs []uint, start, end time.Time)
 		Joins("INNER JOIN user_entity_memberships uem ON u.id = uem.user_id").
 		Joins("INNER JOIN entities e ON uem.entity_id = e.id").
 		Joins("INNER JOIN devotee_profiles dp ON u.id = dp.user_id").
-		Where("u.role_id = ?", 3).
+		Where("u.role_id = ?", 3). // Role ID 3 is devotee
 		Where("uem.status = ?", "active").
-		Where("uem.entity_id IN ?", entityIDs)
+		Where("uem.entity_id IN ?", entityIDs).
+		Where("dp.dob IS NOT NULL")
 
-	// Birthday range filtering logic
-	startMonth := int(start.Month())
-	startDay := start.Day()
-	endMonth := int(end.Month())
-	endDay := end.Day()
-
-	if startMonth == endMonth {
+	// Handle year wrap-around (e.g., Dec 25 to Jan 5)
+	if startMMDD > endMMDD {
+		// Birthday range crosses year boundary
 		query = query.Where(
-			"EXTRACT(MONTH FROM dp.dob) = ? AND EXTRACT(DAY FROM dp.dob) BETWEEN ? AND ?",
-			startMonth, startDay, endDay,
+			"(TO_CHAR(dp.dob, 'MM-DD') >= ? OR TO_CHAR(dp.dob, 'MM-DD') <= ?)",
+			startMMDD, endMMDD,
 		)
-	} else if startMonth < endMonth {
-		query = query.Where(`
-			(EXTRACT(MONTH FROM dp.dob) = ? AND EXTRACT(DAY FROM dp.dob) >= ?) OR
-			(EXTRACT(MONTH FROM dp.dob) > ? AND EXTRACT(MONTH FROM dp.dob) < ?) OR
-			(EXTRACT(MONTH FROM dp.dob) = ? AND EXTRACT(DAY FROM dp.dob) <= ?)
-		`, startMonth, startDay, startMonth, endMonth, endMonth, endDay)
 	} else {
-		query = query.Where(`
-			(EXTRACT(MONTH FROM dp.dob) = ? AND EXTRACT(DAY FROM dp.dob) >= ?) OR
-			(EXTRACT(MONTH FROM dp.dob) > ?) OR
-			(EXTRACT(MONTH FROM dp.dob) < ?) OR
-			(EXTRACT(MONTH FROM dp.dob) = ? AND EXTRACT(DAY FROM dp.dob) <= ?)
-		`, startMonth, startDay, startMonth, endMonth, endMonth, endDay)
+		// Normal date range within same year
+		query = query.Where(
+			"TO_CHAR(dp.dob, 'MM-DD') BETWEEN ? AND ?",
+			startMMDD, endMMDD,
+		)
 	}
 
-	err := query.Order("EXTRACT(MONTH FROM dp.dob), EXTRACT(DAY FROM dp.dob)").
-		Scan(&rows).Error
+	query = query.Order("TO_CHAR(dp.dob, 'MM-DD') ASC")
 
-	return rows, err
+	// Execute query with debug output
+	err := query.Debug().Scan(&rows).Error
+	if err != nil {
+		fmt.Printf("❌ Error fetching birthdays: %v\n", err)
+		return nil, err
+	}
+
+	fmt.Printf("✅ Found %d birthdays\n", len(rows))
+	
+	// Debug: Print first few results
+	for i, row := range rows {
+		if i < 3 { // Print first 3 for debugging
+			fmt.Printf("  - %s (DOB: %v, Temple: %s)\n", 
+				row.FullName, row.DateOfBirth, row.TempleName)
+		}
+	}
+
+	return rows, nil
 }
 
 func (r *repository) GetDevoteeList(entityIDs []uint, start, end time.Time, status string) ([]DevoteeListReportRow, error) {
@@ -214,9 +264,7 @@ func (r *repository) GetDevoteeList(entityIDs []uint, start, end time.Time, stat
 		query = query.Where("uem.status = ?", status)
 	}
 
-	query = query.Where("uem.joined_at BETWEEN ? AND ?", start, end).
-		Order("uem.joined_at DESC")
-
+	query = query.Where("uem.joined_at BETWEEN ? AND ?", start, end).Order("uem.joined_at DESC")
 	err := query.Scan(&rows).Error
 	return rows, err
 }
@@ -254,14 +302,11 @@ func (r *repository) GetDevoteeProfiles(entityIDs []uint, start, end time.Time, 
 		query = query.Where("uem.status = ?", status)
 	}
 
-	query = query.Where("uem.joined_at BETWEEN ? AND ?", start, end).
-		Order("u.full_name ASC")
-
+	query = query.Where("uem.joined_at BETWEEN ? AND ?", start, end).Order("u.full_name ASC")
 	err := query.Scan(&rows).Error
 	return rows, err
 }
 
-// GetAuditLogs fetches audit log entries for given entity IDs, date range, action types, and status
 func (r *repository) GetAuditLogs(entityIDs []uint, start, end time.Time, actionTypes []string, status string) ([]AuditLogReportRow, error) {
 	var rows []AuditLogReportRow
 	if len(entityIDs) == 0 {
@@ -300,23 +345,22 @@ func (r *repository) GetAuditLogs(entityIDs []uint, start, end time.Time, action
 	err := query.Order("al.created_at DESC").Scan(&rows).Error
 	return rows, err
 }
-// GetApprovalStatus fetches approval status records for reporting
+
 func (r *repository) GetApprovalStatus(entityIDs []uint, start, end time.Time, role, status string) ([]ApprovalStatusReportRow, error) {
 	var rows []ApprovalStatusReportRow
 
 	query := r.db.Table("users u").
 		Select(`
             u.full_name as name,
-            COALESCE(CAST(uem.entity_id AS CHAR), 'N/A') as id,  -- tenant_id replaced as id
+            COALESCE(CAST(uem.entity_id AS CHAR), 'N/A') as id,
             ur.role_name as role,
-            uem.status,          -- real status from DB
+            uem.status,
             u.created_at,
             u.email
         `).
 		Joins("LEFT JOIN user_entity_memberships uem ON u.id = uem.user_id").
 		Joins("LEFT JOIN user_roles ur ON u.role_id = ur.id")
 
-	// Filter by entity only if provided
 	if len(entityIDs) > 0 {
 		query = query.Where("uem.entity_id IN ?", entityIDs)
 	}
@@ -334,19 +378,14 @@ func (r *repository) GetApprovalStatus(entityIDs []uint, start, end time.Time, r
 	}
 
 	err := query.Order("u.created_at DESC").Scan(&rows).Error
-
-	// Replace null/empty status with "N/A" for users without membership
 	for i := range rows {
 		if rows[i].Status == "" {
 			rows[i].Status = "N/A"
 		}
 	}
-
 	return rows, err
 }
 
-
-// GetUserDetails fetches user detail records for reporting
 func (r *repository) GetUserDetails(entityIDs []uint, start, end time.Time, role, status string) ([]UserDetailsReportRow, error) {
 	var rows []UserDetailsReportRow
 
@@ -358,7 +397,7 @@ func (r *repository) GetUserDetails(entityIDs []uint, start, end time.Time, role
             COALESCE(CAST(uem.entity_id AS CHAR), 'N/A') as tenant_id,
             u.email,
             ur.role_name as role,
-            COALESCE(uem.status, 'Active') as status, -- show all statuses: Active/Inactive/Locked
+            COALESCE(uem.status, 'Active') as status,
             u.created_at
         `).
 		Joins("LEFT JOIN user_entity_memberships uem ON u.id = uem.user_id").

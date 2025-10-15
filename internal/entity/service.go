@@ -390,7 +390,10 @@ func (s *Service) GetDashboardSummary(entityID uint) (DashboardSummary, error) {
 
 	return summary, nil
 }
-
+/*func (s *Service) GetVolunteersByEntityID(entityID uint) ([]UserEntityMembership, error) {
+	return s.Repo.GetVolunteersByEntityID(entityID)
+}
+*/
 // Helper function to track what fields were updated
 func getUpdatedFields(old, new Entity) []string {
 	var updatedFields []string

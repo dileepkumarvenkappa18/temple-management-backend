@@ -31,6 +31,7 @@ type User struct {
 	Phone                string         `gorm:"size:20;not null" json:"phone"`
 	RoleID               uint           `gorm:"not null" json:"role_id"`
 	Role                 UserRole       `gorm:"foreignKey:RoleID;references:ID" json:"role"`
+	
 	EntityID             *uint          `gorm:"index" json:"entity_id,omitempty"`
 	Status               string         `gorm:"size:20;default:active" json:"status"` // active, pending, rejected, inactive
 	EmailVerified        bool           `gorm:"default:false" json:"email_verified"`
