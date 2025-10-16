@@ -13,6 +13,7 @@ import (
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/utils"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 type TokenPair struct {
@@ -150,6 +151,10 @@ type LoginInput struct {
 func (s *service) Login(in LoginInput) (*TokenPair, *User, error) {
 	user, err := s.repo.FindByEmail(in.Email)
 	if err != nil {
+		// Check if it's a "record not found" error and return user-friendly message
+		if err == gorm.ErrRecordNotFound || strings.Contains(err.Error(), "record not found") || strings.Contains(err.Error(), "not found") {
+			return nil, nil, errors.New ("Couldn't find your Account")
+		}
 		return nil, nil, err
 	}
 
@@ -188,7 +193,6 @@ func (s *service) Login(in LoginInput) (*TokenPair, *User, error) {
 		RefreshToken: refreshToken,
 	}, user, nil
 }
-
 func (s *service) generateAccessToken(user *User) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id": user.ID,

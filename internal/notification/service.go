@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/sharath018/temple-management-backend/config"
@@ -35,23 +36,23 @@ type Service interface {
 }
 
 type service struct {
-	repo       Repository
-	authRepo   auth.Repository
-	auditSvc   auditlog.Service // ✅ Audit service
-	email      Channel
-	sms        Channel
-	whatsapp   Channel
+	repo     Repository
+	authRepo auth.Repository
+	auditSvc auditlog.Service
+	email    Channel
+	sms      Channel
+	whatsapp Channel
 }
 
 // Constructor
 func NewService(repo Repository, authRepo auth.Repository, cfg *config.Config, auditSvc auditlog.Service) Service {
 	return &service{
-		repo:       repo,
-		authRepo:   authRepo,
-		auditSvc:   auditSvc,
-		email:      NewEmailSender(cfg),
-		sms:        NewSMSChannel(),
-		whatsapp:   NewWhatsAppChannel(),
+		repo:     repo,
+		authRepo: authRepo,
+		auditSvc: auditSvc,
+		email:    NewEmailSender(cfg),
+		sms:      NewSMSChannel(),
+		whatsapp: NewWhatsAppChannel(),
 	}
 }
 
@@ -127,12 +128,66 @@ func (s *service) SendNotification(
 	recipients []string,
 	ip string,
 ) error {
+	// ✅ CRITICAL FIX: Return user-friendly error when no recipients
 	if len(recipients) == 0 {
-		return errors.New("no recipients specified")
+		log.Printf("⚠️ WARNING: No recipients found for entity %d", entityID)
+		
+		// Create log entry to track the attempt
+		recipientsJSON, _ := json.Marshal([]string{})
+		errorMsg := "No recipients found"
+		logEntry := &NotificationLog{
+			UserID:     senderID,
+			EntityID:   entityID,
+			TemplateID: templateID,
+			Channel:    channel,
+			Subject:    subject,
+			Body:       body,
+			Recipients: datatypes.JSON(recipientsJSON),
+			Status:     "failed",
+			Error:      &errorMsg,
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
+		}
+		
+		// Save failed attempt
+		if err := s.repo.CreateNotificationLog(ctx, logEntry); err != nil {
+			log.Printf("❌ Failed to create notification log: %v", err)
+		}
+		
+		// Audit logging
+		auditAction := map[string]string{
+			"email":    "EMAIL_FAILED",
+			"sms":      "SMS_FAILED",
+			"whatsapp": "WHATSAPP_FAILED",
+		}[channel]
+		if auditAction == "" {
+			auditAction = "NOTIFICATION_FAILED"
+		}
+		
+		details := map[string]interface{}{
+			"channel":          channel,
+			"recipients_count": 0,
+			"template_id":      templateID,
+			"subject":          subject,
+			"reason":           "no recipients found",
+		}
+		
+		_ = s.auditSvc.LogAction(ctx, &senderID, &entityID, auditAction, details, ip, "failure")
+		
+		// Return specific error that frontend can display
+		return errors.New("no recipients found - please add devotees or volunteers to this temple first")
+	}
+
+	// Validate SMTP configuration for email channel
+	if channel == "email" {
+		if err := s.validateEmailConfig(); err != nil {
+			log.Printf("❌ Email configuration error: %v", err)
+			return fmt.Errorf("email service not configured: %v", err)
+		}
 	}
 
 	recipientsJSON, _ := json.Marshal(recipients)
-	log := &NotificationLog{
+	logEntry := &NotificationLog{
 		UserID:     senderID,
 		EntityID:   entityID,
 		TemplateID: templateID,
@@ -145,43 +200,90 @@ func (s *service) SendNotification(
 		UpdatedAt:  time.Now(),
 	}
 
-	if err := s.repo.CreateNotificationLog(ctx, log); err != nil {
-		return err
+	if err := s.repo.CreateNotificationLog(ctx, logEntry); err != nil {
+		return fmt.Errorf("failed to create notification log: %w", err)
 	}
 
-	// ===== Asynchronous sending =====
+	// ✅ Enhanced error handling for each channel
+	var sendErr error
 	switch channel {
 	case "email":
-		utils.SendBulkEmailsAsync(recipients, subject, body)
+		// Send emails asynchronously but capture errors
+		go func() {
+			log.Printf("📧 Starting email send to %d recipients", len(recipients))
+			if err := s.email.Send(recipients, subject, body); err != nil {
+				log.Printf("❌ Email send error: %v", err)
+				// Update log status to failed
+				errMsg := err.Error()
+				logEntry.Status = "failed"
+				logEntry.Error = &errMsg
+				logEntry.UpdatedAt = time.Now()
+				_ = s.repo.UpdateNotificationLog(context.Background(), logEntry)
+			} else {
+				log.Printf("✅ Email sent successfully to %d recipients", len(recipients))
+				// Update log status to sent
+				logEntry.Status = "sent"
+				logEntry.UpdatedAt = time.Now()
+				_ = s.repo.UpdateNotificationLog(context.Background(), logEntry)
+			}
+		}()
+
 	case "sms":
 		go func() {
+			log.Printf("📱 Starting SMS send to %d recipients", len(recipients))
 			if err := s.sms.Send(recipients, subject, body); err != nil {
-				fmt.Printf("❌ SMS send error: %v\n", err)
+				log.Printf("❌ SMS send error: %v", err)
+				errMsg := err.Error()
+				logEntry.Status = "failed"
+				logEntry.Error = &errMsg
+				logEntry.UpdatedAt = time.Now()
+				_ = s.repo.UpdateNotificationLog(context.Background(), logEntry)
+			} else {
+				log.Printf("✅ SMS sent successfully")
+				logEntry.Status = "sent"
+				logEntry.UpdatedAt = time.Now()
+				_ = s.repo.UpdateNotificationLog(context.Background(), logEntry)
 			}
 		}()
+
 	case "whatsapp":
 		go func() {
+			log.Printf("💬 Starting WhatsApp send to %d recipients", len(recipients))
 			if err := s.whatsapp.Send(recipients, subject, body); err != nil {
-				fmt.Printf("❌ WhatsApp send error: %v\n", err)
+				log.Printf("❌ WhatsApp send error: %v", err)
+				errMsg := err.Error()
+				logEntry.Status = "failed"
+				logEntry.Error = &errMsg
+				logEntry.UpdatedAt = time.Now()
+				_ = s.repo.UpdateNotificationLog(context.Background(), logEntry)
+			} else {
+				log.Printf("✅ WhatsApp sent successfully")
+				logEntry.Status = "sent"
+				logEntry.UpdatedAt = time.Now()
+				_ = s.repo.UpdateNotificationLog(context.Background(), logEntry)
 			}
 		}()
+
 	default:
 		return fmt.Errorf("unsupported channel: %s", channel)
 	}
 
-	// Mark log as sent immediately
-	log.Status = "sent"
-	log.UpdatedAt = time.Now()
-	updateErr := s.repo.UpdateNotificationLog(ctx, log)
+	// ✅ Return success immediately (async sending)
+	// Mark as "processing" initially
+	logEntry.Status = "processing"
+	logEntry.UpdatedAt = time.Now()
+	if err := s.repo.UpdateNotificationLog(ctx, logEntry); err != nil {
+		log.Printf("⚠️ Failed to update log status: %v", err)
+	}
 
 	// ===== Audit logging =====
 	auditAction := map[string]string{
-		"email":    "EMAIL_SENT",
-		"sms":      "SMS_SENT",
-		"whatsapp": "WHATSAPP_SENT",
+		"email":    "EMAIL_QUEUED",
+		"sms":      "SMS_QUEUED",
+		"whatsapp": "WHATSAPP_QUEUED",
 	}[channel]
 	if auditAction == "" {
-		auditAction = "NOTIFICATION_SENT"
+		auditAction = "NOTIFICATION_QUEUED"
 	}
 
 	details := map[string]interface{}{
@@ -192,10 +294,36 @@ func (s *service) SendNotification(
 	}
 
 	if err := s.auditSvc.LogAction(ctx, &senderID, &entityID, auditAction, details, ip, "success"); err != nil {
-		fmt.Printf("❌ Audit log error: %v\n", err)
+		log.Printf("❌ Audit log error: %v", err)
 	}
 
-	return updateErr
+	return sendErr
+}
+
+// ✅ Add email configuration validator
+func (s *service) validateEmailConfig() error {
+	emailSender, ok := s.email.(*EmailSender)
+	if !ok {
+		return errors.New("email sender not properly initialized")
+	}
+	
+	if emailSender.Host == "" {
+		return errors.New("SMTP host not configured")
+	}
+	if emailSender.Port == "" {
+		return errors.New("SMTP port not configured")
+	}
+	if emailSender.Username == "" {
+		return errors.New("SMTP username not configured")
+	}
+	if emailSender.Password == "" {
+		return errors.New("SMTP password not configured")
+	}
+	if emailSender.FromAddr == "" {
+		return errors.New("SMTP from address not configured")
+	}
+	
+	return nil
 }
 
 // ================= In-App Notifications =================
@@ -261,24 +389,41 @@ func (s *service) GetNotificationsByUser(ctx context.Context, userID uint) ([]No
 }
 
 func (s *service) GetEmailsByAudience(entityID uint, audience string) ([]string, error) {
+	log.Printf("🔍 GetEmailsByAudience called with entityID=%d, audience=%s", entityID, audience)
+
 	switch audience {
 	case "devotees":
-		return s.authRepo.GetUserEmailsByRole("devotee", entityID)
+		emails, err := s.authRepo.GetUserEmailsByRole("devotee", entityID)
+		log.Printf("📧 Devotees query result: %d emails, error: %v", len(emails), err)
+		return emails, err
 	case "volunteers":
-		return s.authRepo.GetUserEmailsByRole("volunteer", entityID)
+		emails, err := s.authRepo.GetUserEmailsByRole("volunteer", entityID)
+		log.Printf("📧 Volunteers query result: %d emails, error: %v", len(emails), err)
+		return emails, err
 	case "all":
+		log.Printf("🔍 Fetching devotees for entity %d...", entityID)
 		devotees, err1 := s.authRepo.GetUserEmailsByRole("devotee", entityID)
+		log.Printf("📧 Devotees result: %d emails, error: %v", len(devotees), err1)
+
+		log.Printf("🔍 Fetching volunteers for entity %d...", entityID)
 		volunteers, err2 := s.authRepo.GetUserEmailsByRole("volunteer", entityID)
+		log.Printf("📧 Volunteers result: %d emails, error: %v", len(volunteers), err2)
+
 		if err1 != nil && err2 != nil {
 			return nil, fmt.Errorf("failed to fetch both audiences: %v | %v", err1, err2)
 		}
 		if err1 != nil {
+			log.Printf("⚠️ Only returning volunteers (devotees failed)")
 			return volunteers, nil
 		}
 		if err2 != nil {
+			log.Printf("⚠️ Only returning devotees (volunteers failed)")
 			return devotees, nil
 		}
-		return append(devotees, volunteers...), nil
+
+		combined := append(devotees, volunteers...)
+		log.Printf("✅ Combined result: %d total emails", len(combined))
+		return combined, nil
 	default:
 		return nil, fmt.Errorf("invalid audience: %s", audience)
 	}

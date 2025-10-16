@@ -1,14 +1,14 @@
 package seva
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sharath018/temple-management-backend/internal/auditlog"
 	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/internal/auditlog"
 	"github.com/sharath018/temple-management-backend/middleware"
 )
 
@@ -32,41 +32,41 @@ func getAccessContextFromContext(c *gin.Context) (middleware.AccessContext, bool
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
 		return middleware.AccessContext{}, false
 	}
-
+	
 	accessContext, ok := accessContextRaw.(middleware.AccessContext)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid access context"})
 		return middleware.AccessContext{}, false
 	}
-
+	
 	return accessContext, true
 }
 
 // ========================= REQUEST STRUCTS =============================
 
 type CreateSevaRequest struct {
-	Name              string  `json:"name" binding:"required"`
-	SevaType          string  `json:"seva_type" binding:"required"`
-	Description       string  `json:"description"`
-	Price             float64 `json:"price"`
-	Date              string  `json:"date"`
-	StartTime         string  `json:"start_time"`
-	EndTime           string  `json:"end_time"`
-	Duration          int     `json:"duration"`
-	MaxBookingsPerDay int     `json:"max_bookings_per_day"`
+	Name              string    `json:"name" binding:"required"`
+	SevaType          string    `json:"seva_type" binding:"required"`
+	Description       string    `json:"description"`
+	Price             float64   `json:"price"`
+	Date              string    `json:"date"`
+	StartTime         string    `json:"start_time"`
+	EndTime           string    `json:"end_time"`
+	Duration          int       `json:"duration"`
+	MaxBookingsPerDay int       `json:"max_bookings_per_day"`
 }
 
 type UpdateSevaRequest struct {
-	Name              *string  `json:"name,omitempty"`
-	SevaType          *string  `json:"seva_type,omitempty"`
-	Description       *string  `json:"description,omitempty"`
-	Price             *float64 `json:"price,omitempty"`
-	Date              *string  `json:"date,omitempty"`
-	StartTime         *string  `json:"start_time,omitempty"`
-	EndTime           *string  `json:"end_time,omitempty"`
-	Duration          *int     `json:"duration,omitempty"`
-	MaxBookingsPerDay *int     `json:"max_bookings_per_day,omitempty"`
-	Status            *string  `json:"status,omitempty"` // upcoming, ongoing, completed
+	Name              *string   `json:"name,omitempty"`
+	SevaType          *string   `json:"seva_type,omitempty"`
+	Description       *string   `json:"description,omitempty"`
+	Price             *float64  `json:"price,omitempty"`
+	Date              *string   `json:"date,omitempty"`
+	StartTime         *string   `json:"start_time,omitempty"`
+	EndTime           *string   `json:"end_time,omitempty"`
+	Duration          *int      `json:"duration,omitempty"`
+	MaxBookingsPerDay *int      `json:"max_bookings_per_day,omitempty"`
+	Status            *string   `json:"status,omitempty"` // upcoming, ongoing, completed
 }
 
 type BookSevaRequest struct {
@@ -635,7 +635,7 @@ func (h *Handler) GetBookingCounts(c *gin.Context) {
 		if !ok {
 			return
 		}
-
+		
 		contextEntityID := accessContext.GetAccessibleEntityID()
 		if contextEntityID == nil {
 			c.JSON(http.StatusForbidden, gin.H{"error": "No accessible entity"})
