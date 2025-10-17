@@ -3,8 +3,6 @@ package notification
 import (
 	"net/http"
 	"strconv"
-	"strings"
-	"log"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -17,9 +15,10 @@ import (
 // Handler wraps the service
 type Handler struct {
 	Service  Service
-	AuditSvc auditlog.Service
+	AuditSvc auditlog.Service // ✅ Audit service for IP extraction
 }
 
+// ✅ Updated constructor to accept audit service
 func NewHandler(s Service, auditSvc auditlog.Service) *Handler {
 	return &Handler{
 		Service:  s,
@@ -29,6 +28,7 @@ func NewHandler(s Service, auditSvc auditlog.Service) *Handler {
 
 // POST /api/v1/notifications/templates
 func (h *Handler) CreateTemplate(c *gin.Context) {
+	// Get access context instead of direct user access
 	accessContext, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
@@ -37,18 +37,20 @@ func (h *Handler) CreateTemplate(c *gin.Context) {
 
 	ctx := accessContext.(middleware.AccessContext)
 	
+	// Check if user can write (templeadmin and standarduser only)
 	if !ctx.CanWrite() {
 		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
 		return
 	}
 
+	// Get accessible entity ID
 	entityID := ctx.GetAccessibleEntityID()
 	if entityID == nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "no accessible temple"})
 		return
 	}
 
-	ip := middleware.GetIPFromContext(c)
+	ip := middleware.GetIPFromContext(c) // ✅ Extract IP for audit
 
 	var input NotificationTemplate
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -59,6 +61,7 @@ func (h *Handler) CreateTemplate(c *gin.Context) {
 	input.UserID = ctx.UserID
 	input.EntityID = *entityID
 
+	// ✅ Pass IP to service for audit logging
 	if err := h.Service.CreateTemplate(c.Request.Context(), &input, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create template"})
 		return
@@ -69,6 +72,7 @@ func (h *Handler) CreateTemplate(c *gin.Context) {
 
 // GET /api/v1/notifications/templates
 func (h *Handler) GetTemplates(c *gin.Context) {
+	// Get access context
 	accessContext, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
@@ -77,6 +81,7 @@ func (h *Handler) GetTemplates(c *gin.Context) {
 
 	ctx := accessContext.(middleware.AccessContext)
 	
+	// Get accessible entity ID
 	entityID := ctx.GetAccessibleEntityID()
 	if entityID == nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "no accessible temple"})
@@ -94,6 +99,7 @@ func (h *Handler) GetTemplates(c *gin.Context) {
 
 // GET /api/v1/notifications/templates/:id
 func (h *Handler) GetTemplateByID(c *gin.Context) {
+	// Get access context
 	accessContext, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
@@ -102,6 +108,7 @@ func (h *Handler) GetTemplateByID(c *gin.Context) {
 
 	ctx := accessContext.(middleware.AccessContext)
 	
+	// Get accessible entity ID
 	entityID := ctx.GetAccessibleEntityID()
 	if entityID == nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "no accessible temple"})
@@ -125,6 +132,7 @@ func (h *Handler) GetTemplateByID(c *gin.Context) {
 
 // PUT /api/v1/notifications/templates/:id
 func (h *Handler) UpdateTemplate(c *gin.Context) {
+	// Get access context
 	accessContext, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
@@ -133,18 +141,20 @@ func (h *Handler) UpdateTemplate(c *gin.Context) {
 
 	ctx := accessContext.(middleware.AccessContext)
 	
+	// Check if user can write (templeadmin and standarduser only)
 	if !ctx.CanWrite() {
 		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
 		return
 	}
 
+	// Get accessible entity ID
 	entityID := ctx.GetAccessibleEntityID()
 	if entityID == nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "no accessible temple"})
 		return
 	}
 
-	ip := middleware.GetIPFromContext(c)
+	ip := middleware.GetIPFromContext(c) // ✅ Extract IP for audit
 
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -162,6 +172,7 @@ func (h *Handler) UpdateTemplate(c *gin.Context) {
 	input.UserID = ctx.UserID
 	input.EntityID = *entityID
 
+	// ✅ Pass IP to service for audit logging
 	if err := h.Service.UpdateTemplate(c.Request.Context(), &input, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update template"})
 		return
@@ -172,6 +183,7 @@ func (h *Handler) UpdateTemplate(c *gin.Context) {
 
 // DELETE /api/v1/notifications/templates/:id
 func (h *Handler) DeleteTemplate(c *gin.Context) {
+	// Get access context
 	accessContext, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
@@ -180,18 +192,20 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 
 	ctx := accessContext.(middleware.AccessContext)
 	
+	// Check if user can write (templeadmin and standarduser only)
 	if !ctx.CanWrite() {
 		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
 		return
 	}
 
+	// Get accessible entity ID
 	entityID := ctx.GetAccessibleEntityID()
 	if entityID == nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "no accessible temple"})
 		return
 	}
 
-	ip := middleware.GetIPFromContext(c)
+	ip := middleware.GetIPFromContext(c) // ✅ Extract IP for audit
 
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -199,6 +213,7 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 		return
 	}
 
+	// ✅ Pass user ID and IP to service for audit logging
 	if err := h.Service.DeleteTemplate(c.Request.Context(), uint(id), *entityID, ctx.UserID, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete template"})
 		return
@@ -209,6 +224,7 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 
 // POST /api/v1/notifications/send
 func (h *Handler) SendNotification(c *gin.Context) {
+	// Get access context
 	accessContext, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
@@ -217,91 +233,61 @@ func (h *Handler) SendNotification(c *gin.Context) {
 
 	ctx := accessContext.(middleware.AccessContext)
 	
+	// Check if user can write (templeadmin and standarduser only)
 	if !ctx.CanWrite() {
 		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
 		return
 	}
 
+	// Get accessible entity ID
 	entityID := ctx.GetAccessibleEntityID()
 	if entityID == nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "no accessible temple"})
 		return
 	}
 
-	ip := middleware.GetIPFromContext(c)
+	ip := middleware.GetIPFromContext(c) // ✅ Extract IP for audit
 
 	var req struct {
-		TemplateID *uint    `json:"template_id"`
-		Channel    string   `json:"channel" binding:"required"`
-		Subject    string   `json:"subject"`
+		TemplateID *uint    `json:"template_id"`                 // Optional
+		Channel    string   `json:"channel" binding:"required"` // email, sms, whatsapp
+		Subject    string   `json:"subject"`                     // only for email
 		Body       string   `json:"body" binding:"required"`
-		Recipients []string `json:"recipients"`
-		Audience   string   `json:"audience"`
+		Recipients []string `json:"recipients"`                  // Optional now
+		Audience   string   `json:"audience"`                    // all, devotees, volunteers
 	}
 
-	log.Printf("📦 Raw request body for SendNotification")
-	
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Printf("❌ JSON binding error: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	log.Printf("📋 Parsed request: Channel=%s, Subject=%s, Body=%s, Recipients=%v, Audience=%s",
-		req.Channel, req.Subject, req.Body, req.Recipients, req.Audience)
-
-	// ✅ ENHANCED: Resolve recipients with better error messages
+	// If recipients not provided, resolve using audience
 	if len(req.Recipients) == 0 {
-		log.Printf("🔍 No recipients provided, resolving via audience: %s", req.Audience)
-		
-		if req.Audience == "" {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "either recipients or audience must be provided",
-			})
-			return
-		}
-
 		switch req.Audience {
-		case "all", "devotees", "volunteers":
+		case "all":
+			emails, err := h.Service.GetEmailsByAudience(*entityID, "all")
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch users for audience"})
+				return
+			}
+			req.Recipients = emails
+
+		case "devotees", "volunteers":
 			emails, err := h.Service.GetEmailsByAudience(*entityID, req.Audience)
 			if err != nil {
-				log.Printf("❌ Failed to fetch emails for '%s': %v", req.Audience, err)
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error": "failed to fetch users for audience",
-					"details": err.Error(),
-				})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch users for audience"})
 				return
 			}
-			
-			// ✅ CRITICAL: Check if no recipients found
-			if len(emails) == 0 {
-				log.Printf("⚠️ No recipients found for audience '%s' in entity %d", req.Audience, *entityID)
-				c.JSON(http.StatusBadRequest, gin.H{
-					"error": "no_recipients",
-					"message": "No recipients found for the selected audience",
-					"details": "Please add devotees or volunteers to this temple before sending notifications",
-					"audience": req.Audience,
-					"entity_id": *entityID,
-				})
-				return
-			}
-			
-			log.Printf("✅ Resolved %d emails for '%s'", len(emails), req.Audience)
 			req.Recipients = emails
 
 		default:
-			log.Printf("❌ Invalid audience: %s", req.Audience)
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "invalid audience",
-				"message": "Audience must be one of: all, devotees, volunteers",
-			})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or missing audience if no recipients are provided"})
 			return
 		}
 	}
 
-	log.Printf("📤 Calling service.SendNotification with %d recipients", len(req.Recipients))
-
-	// ✅ ENHANCED: Better error handling from service
+	// ✅ Pass IP to service for audit logging
 	if err := h.Service.SendNotification(
 		c.Request.Context(),
 		ctx.UserID,
@@ -313,55 +299,16 @@ func (h *Handler) SendNotification(c *gin.Context) {
 		req.Recipients,
 		ip,
 	); err != nil {
-		log.Printf("❌ Service.SendNotification failed: %v", err)
-		
-		// ✅ Parse error message for better user feedback
-		errMsg := err.Error()
-		statusCode := http.StatusInternalServerError
-		response := gin.H{"error": "failed to send notification"}
-		
-		// Check for specific error types
-		if strings.Contains(errMsg, "no recipients") {
-			statusCode = http.StatusBadRequest
-			response = gin.H{
-				"error": "no_recipients",
-				"message": "No recipients found for notification",
-				"details": errMsg,
-			}
-		} else if strings.Contains(errMsg, "not configured") || strings.Contains(errMsg, "SMTP") {
-			statusCode = http.StatusServiceUnavailable
-			response = gin.H{
-				"error": "service_not_configured",
-				"message": "Email service is not properly configured",
-				"details": errMsg,
-			}
-		} else if strings.Contains(errMsg, "template") {
-			statusCode = http.StatusBadRequest
-			response = gin.H{
-				"error": "template_error",
-				"message": "Template error",
-				"details": errMsg,
-			}
-		} else {
-			// Generic error with details
-			response["details"] = errMsg
-		}
-		
-		c.JSON(statusCode, response)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send notification"})
 		return
 	}
 
-	log.Printf("✅ Notification queued successfully")
-	c.JSON(http.StatusOK, gin.H{
-		"message": "notification queued successfully",
-		"recipients_count": len(req.Recipients),
-		"channel": req.Channel,
-		"status": "processing",
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "notification sent"})
 }
 
 // GET /api/v1/notifications/logs
 func (h *Handler) GetMyNotifications(c *gin.Context) {
+	// Get access context
 	accessContext, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
@@ -424,7 +371,9 @@ func (h *Handler) MarkInAppRead(c *gin.Context) {
 }
 
 // GET /api/v1/notifications/stream (SSE)
+// Requires Authorization header; streams per-user notifications from Redis pubsub
 func (h *Handler) StreamInApp(c *gin.Context) {
+	// Reuse access context for auth
 	accessContext, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
@@ -443,10 +392,12 @@ func (h *Handler) StreamInApp(c *gin.Context) {
 		return
 	}
 
+	// Subscribe to Redis channel for this user
 	channel := "notifications:user:" + strconv.FormatUint(uint64(ctx.UserID), 10)
 	sub := utils.RedisClient.Subscribe(c, channel)
 	defer sub.Close()
 
+	// Initial comment to open stream
 	_, _ = c.Writer.Write([]byte(":ok\n\n"))
 	flusher.Flush()
 
@@ -457,6 +408,7 @@ func (h *Handler) StreamInApp(c *gin.Context) {
 			if !ok {
 				return
 			}
+			// Send as SSE data
 			_, _ = c.Writer.Write([]byte("event: inapp\n"))
 			_, _ = c.Writer.Write([]byte("data: " + msg.Payload + "\n\n"))
 			flusher.Flush()
@@ -474,6 +426,7 @@ func (h *Handler) StreamInAppWithToken(c *gin.Context) {
 		return
 	}
 
+	// Validate token
 	cfg := config.Load()
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 		return []byte(cfg.JWTAccessSecret), nil
