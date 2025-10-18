@@ -47,8 +47,8 @@ func (r *repository) GetEntitiesByTenant(userID uint) ([]uint, error) {
 		Select("id").
 		Where("created_by = ?", userID).
 		Scan(&ids).Error
-		fmt.Println("GetEntitiesByTenant ids :",ids , userID)
-		
+	fmt.Println("GetEntitiesByTenant ids:", ids, userID)
+
 	return ids, err
 }
 
@@ -68,7 +68,7 @@ func (r *repository) GetEntitiesByTenantID(tenantID uint) ([]uint, error) {
 		Select("id").
 		Where("tenant_id = ?", tenantID).
 		Scan(&ids).Error
-		fmt.Println("GetEntitiesByTenantID:",ids)
+	fmt.Println("GetEntitiesByTenantID:", ids)
 	return ids, err
 }
 
@@ -82,11 +82,24 @@ func (r *repository) GetEvents(entityIDs []uint, start, end time.Time) ([]EventR
 		return out, nil
 	}
 
-	err := r.db.Table("events").
-		Select("title, description, event_type, event_date, event_time, location, created_by, created_at, updated_at, is_active").
-		Where("entity_id IN ?", entityIDs).
-		Where("event_date BETWEEN ? AND ?", start, end).
-		Order("event_date DESC").
+	err := r.db.Table("events e").
+		Select(`
+			e.title,
+			ent.name as temple_name,
+			e.description,
+			e.event_type,
+			e.event_date,
+			e.event_time,
+			e.location,
+			e.created_by,
+			e.is_active,
+			e.created_at,
+			e.updated_at
+		`).
+		Joins("LEFT JOIN entities ent ON e.entity_id = ent.id").
+		Where("e.entity_id IN ?", entityIDs).
+		Where("e.event_date BETWEEN ? AND ?", start, end).
+		Order("e.event_date DESC").
 		Scan(&out).Error
 	return out, err
 }
@@ -97,11 +110,27 @@ func (r *repository) GetSevas(entityIDs []uint, start, end time.Time) ([]SevaRep
 		return out, nil
 	}
 
-	err := r.db.Table("sevas").
-		Select("name, seva_type, description, price, created_at as date, start_time, end_time, duration, max_bookings_per_day, status, is_active, created_at, updated_at").
-		Where("entity_id IN ?", entityIDs).
-		Where("created_at BETWEEN ? AND ?", start, end).
-		Order("created_at DESC").
+	err := r.db.Table("sevas s").
+		Select(`
+			s.name,
+			ent.name as temple_name,
+			s.seva_type,
+			s.description,
+			s.price,
+			s.created_at as date,
+			s.start_time,
+			s.end_time,
+			s.duration,
+			s.max_bookings_per_day,
+			s.status,
+			s.is_active,
+			s.created_at,
+			s.updated_at
+		`).
+		Joins("LEFT JOIN entities ent ON s.entity_id = ent.id").
+		Where("s.entity_id IN ?", entityIDs).
+		Where("s.created_at BETWEEN ? AND ?", start, end).
+		Order("s.created_at DESC").
 		Scan(&out).Error
 	return out, err
 }
@@ -113,8 +142,19 @@ func (r *repository) GetSevaBookings(entityIDs []uint, start, end time.Time) ([]
 	}
 
 	err := r.db.Table("seva_bookings sb").
-		Select("s.name as seva_name, s.seva_type, u.full_name as devotee_name, u.phone as devotee_phone, sb.booking_time, sb.status, sb.created_at, sb.updated_at").
+		Select(`
+			s.name as seva_name,
+			ent.name as temple_name,
+			s.seva_type,
+			u.full_name as devotee_name,
+			u.phone as devotee_phone,
+			sb.booking_time,
+			sb.status,
+			sb.created_at,
+			sb.updated_at
+		`).
 		Joins("LEFT JOIN sevas s ON sb.seva_id = s.id").
+		Joins("LEFT JOIN entities ent ON sb.entity_id = ent.id").
 		Joins("LEFT JOIN users u ON sb.user_id = u.id").
 		Where("sb.entity_id IN ?", entityIDs).
 		Where("sb.created_at BETWEEN ? AND ?", start, end).
@@ -131,20 +171,22 @@ func (r *repository) GetDonations(entityIDs []uint, start, end time.Time) ([]Don
 
 	err := r.db.Table("donations d").
 		Select(`
-            d.id, 
-            COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as donor_name, 
-            COALESCE(u.email, '') as donor_email,
-            d.amount, 
-            d.donation_type, 
-            d.method as payment_method, 
-            d.status, 
-            COALESCE(d.donated_at, d.created_at) as donation_date,
-            d.order_id,
-            d.payment_id,
-            d.created_at, 
-            d.updated_at
-        `).
+			d.id,
+			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as donor_name,
+			ent.name as temple_name,
+			COALESCE(u.email, '') as donor_email,
+			d.amount,
+			d.donation_type,
+			d.method as payment_method,
+			d.status,
+			COALESCE(d.donated_at, d.created_at) as donation_date,
+			d.order_id,
+			d.payment_id,
+			d.created_at,
+			d.updated_at
+		`).
 		Joins("LEFT JOIN users u ON d.user_id = u.id").
+		Joins("LEFT JOIN entities ent ON d.entity_id = ent.id").
 		Where("d.entity_id IN ?", entityIDs).
 		Where("d.created_at BETWEEN ? AND ?", start, end).
 		Order("d.created_at DESC").
@@ -183,7 +225,7 @@ func (r *repository) GetDevoteeBirthdays(entityIDs []uint, start, end time.Time)
 	endMMDD := end.Format("01-02")
 
 	fmt.Printf("🔍 Fetching birthdays for entities: %v\n", entityIDs)
-	fmt.Printf("📅 Date range: %s to %s (MM-DD format: %s to %s)\n", 
+	fmt.Printf("📅 Date range: %s to %s (MM-DD format: %s to %s)\n",
 		start.Format("2006-01-02"), end.Format("2006-01-02"), startMMDD, endMMDD)
 
 	// Base query - join users with devotee profiles and entity memberships
@@ -231,11 +273,11 @@ func (r *repository) GetDevoteeBirthdays(entityIDs []uint, start, end time.Time)
 	}
 
 	fmt.Printf("✅ Found %d birthdays\n", len(rows))
-	
+
 	// Debug: Print first few results
 	for i, row := range rows {
 		if i < 3 { // Print first 3 for debugging
-			fmt.Printf("  - %s (DOB: %v, Temple: %s)\n", 
+			fmt.Printf("  - %s (DOB: %v, Temple: %s)\n",
 				row.FullName, row.DateOfBirth, row.TempleName)
 		}
 	}
@@ -251,12 +293,12 @@ func (r *repository) GetDevoteeList(entityIDs []uint, start, end time.Time, stat
 
 	query := r.db.Table("users u").
 		Select(`
-            u.id as user_id,
-            u.full_name as devotee_name,
-            uem.joined_at,
-            uem.status as devotee_status,
-            u.created_at
-        `).
+			u.id as user_id,
+			u.full_name as devotee_name,
+			uem.joined_at,
+			uem.status as devotee_status,
+			u.created_at
+		`).
 		Joins("INNER JOIN user_entity_memberships uem ON u.id = uem.user_id").
 		Where("uem.entity_id IN ?", entityIDs)
 
@@ -277,22 +319,22 @@ func (r *repository) GetDevoteeProfiles(entityIDs []uint, start, end time.Time, 
 
 	query := r.db.Table("users u").
 		Select(`
-            u.id as user_id,
-            u.full_name,
-            dp.dob,
-            dp.gender,
-            CONCAT(
-                COALESCE(dp.street_address, ''), ' ',
-                COALESCE(dp.city, ''), ' ',
-                COALESCE(dp.state, ''), ' ',
-                COALESCE(dp.country, ''), ' ',
-                COALESCE(dp.pincode, '')
-            ) as full_address,
-            COALESCE(dp.gotra, '') as gotra,
-            COALESCE(dp.nakshatra, '') as nakshatra,
-            COALESCE(dp.rashi, '') as rashi,
-            COALESCE(dp.lagna, '') as lagna
-        `).
+			u.id as user_id,
+			u.full_name,
+			dp.dob,
+			dp.gender,
+			CONCAT(
+				COALESCE(dp.street_address, ''), ' ',
+				COALESCE(dp.city, ''), ' ',
+				COALESCE(dp.state, ''), ' ',
+				COALESCE(dp.country, ''), ' ',
+				COALESCE(dp.pincode, '')
+			) as full_address,
+			COALESCE(dp.gotra, '') as gotra,
+			COALESCE(dp.nakshatra, '') as nakshatra,
+			COALESCE(dp.rashi, '') as rashi,
+			COALESCE(dp.lagna, '') as lagna
+		`).
 		Joins("INNER JOIN user_entity_memberships uem ON u.id = uem.user_id").
 		Joins("INNER JOIN devotee_profiles dp ON u.id = dp.user_id").
 		Where("u.role_id = ?", 3).
@@ -315,19 +357,19 @@ func (r *repository) GetAuditLogs(entityIDs []uint, start, end time.Time, action
 
 	query := r.db.Table("audit_logs al").
 		Select(`
-            al.id,
-            al.entity_id,
-            e.name AS entity_name,
-            al.user_id,
-            u.full_name AS user_name,
-            COALESCE(ur.role_name, '') AS user_role,
-            al.action,
-            al.status,
-            al.ip_address,
-            al.created_at AS timestamp,
-            al.created_at,
-            COALESCE(al.details::text, '') AS details
-        `).
+			al.id,
+			al.entity_id,
+			e.name AS entity_name,
+			al.user_id,
+			u.full_name AS user_name,
+			COALESCE(ur.role_name, '') AS user_role,
+			al.action,
+			al.status,
+			al.ip_address,
+			al.created_at AS timestamp,
+			al.created_at,
+			COALESCE(al.details::text, '') AS details
+		`).
 		Joins("LEFT JOIN users u ON al.user_id = u.id").
 		Joins("LEFT JOIN entities e ON al.entity_id = e.id").
 		Joins("LEFT JOIN user_roles ur ON u.role_id = ur.id").
@@ -351,13 +393,17 @@ func (r *repository) GetApprovalStatus(entityIDs []uint, start, end time.Time, r
 
 	query := r.db.Table("users u").
 		Select(`
-            u.full_name as name,
-            COALESCE(CAST(uem.entity_id AS CHAR), 'N/A') as id,
-            ur.role_name as role,
-            uem.status,
-            u.created_at,
-            u.email
-        `).
+			u.full_name as name,
+			COALESCE(CAST(uem.entity_id AS CHAR), 'N/A') as tenant_id,
+			CASE 
+				WHEN ur.role_name = 'Tenant' THEN 'tenant'
+				ELSE 'temple'
+			END as approval_type,
+			ur.role_name as role,
+			uem.status,
+			u.created_at,
+			u.email
+		`).
 		Joins("LEFT JOIN user_entity_memberships uem ON u.id = uem.user_id").
 		Joins("LEFT JOIN user_roles ur ON u.role_id = ur.id")
 
@@ -391,15 +437,14 @@ func (r *repository) GetUserDetails(entityIDs []uint, start, end time.Time, role
 
 	query := r.db.Table("users u").
 		Select(`
-            u.id,
-            u.full_name as name,
-            COALESCE(e.name,'N/A') as entity_name,
-            COALESCE(CAST(uem.entity_id AS CHAR), 'N/A') as tenant_id,
-            u.email,
-            ur.role_name as role,
-            COALESCE(uem.status, 'Active') as status,
-            u.created_at
-        `).
+			u.id,
+			u.full_name as name,
+			COALESCE(e.name, 'N/A') as entity_name,
+			u.email,
+			ur.role_name as role,
+			COALESCE(uem.status, 'Active') as status,
+			u.created_at
+		`).
 		Joins("LEFT JOIN user_entity_memberships uem ON u.id = uem.user_id").
 		Joins("LEFT JOIN entities e ON uem.entity_id = e.id").
 		Joins("LEFT JOIN user_roles ur ON u.role_id = ur.id")

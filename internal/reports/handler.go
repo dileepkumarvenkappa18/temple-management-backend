@@ -148,6 +148,7 @@ func (h *Handler) GetActivities(c *gin.Context) {
 		c.JSON(http.StatusOK, data)
 		return
 	}
+	fmt.Println("Calling ExportActivities")
 
 	// Else export file (format present)
 	bytes, fname, mime, err := h.service.ExportActivities(c.Request.Context(), req, &ctx.UserID, ip)

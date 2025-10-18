@@ -88,19 +88,19 @@ func main() {
 		c.Next()
 	})
 
-	// Enhanced CORS middleware with specific file serving support
+	// Enhanced CORS middleware
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173", "http://127.0.0.1:4173"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Tenant-ID", "Content-Length", "X-Requested-With", "Cache-Control", "Pragma", "X-Entity-ID", "X-Tenant-ID"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Tenant-ID", "Content-Length", "X-Requested-With", "Cache-Control", "Pragma", "X-Entity-ID"},
 		ExposeHeaders:    []string{"Content-Length", "Content-Type", "Content-Disposition", "Cache-Control", "Pragma", "Expires"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// Handle preflight requests for all routes
+	// Handle preflight requests
 	router.OPTIONS("/*path", func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "http://localhost:5173, http://127.0.0.1:5173, http://localhost:4173, http://127.0.0.1:4173")
+		c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Entity-ID, X-Tenant-ID")
 		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition, Cache-Control, Pragma, Expires")
@@ -109,93 +109,32 @@ func main() {
 	})
 
 	// Create uploads directory
-	uploadDir := "/data/uploads"
+	uploadDir := "./uploads"
 	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
 		panic(fmt.Sprintf("❌ Failed to create upload directory: %v", err))
 	}
 
-	// ======= STATIC FILE SERVING =======
-	// Enhanced static file serving with CORS headers - Updated path
-	router.Static("/uploads", "/data/uploads")
+	// ======= FILE SERVING ROUTES =======
 
-	// ======= ENHANCED FILE ROUTES =======
-
-	// Enhanced file serving with better security, headers, and CORS support
-	router.GET("/files/*filepath", func(c *gin.Context) {
-		// Add CORS headers explicitly for file serving
-		c.Header("Access-Control-Allow-Origin", "http://localhost:5173, http://localhost:4173")
-		c.Header("Access-Control-Allow-Credentials", "true")
-		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition, Cache-Control, Pragma, Expires")
-
-		requestedPath := c.Param("filepath")
-		fullPath := filepath.Join(uploadDir, requestedPath)
-		cleanPath := filepath.Clean(fullPath)
-
-		// Security check
-		if !strings.HasPrefix(cleanPath, filepath.Clean(uploadDir)) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied", "message": "Invalid file path"})
-			return
-		}
-
-		fileInfo, err := os.Stat(cleanPath)
-		if os.IsNotExist(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
-			return
-		}
-
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "File access error"})
-			return
-		}
-
-		// Set proper headers
-		filename := filepath.Base(cleanPath)
-		ext := strings.ToLower(filepath.Ext(filename))
-
-		// Set content type
-		switch ext {
-		case ".pdf":
-			c.Header("Content-Type", "application/pdf")
-		case ".jpg", ".jpeg":
-			c.Header("Content-Type", "image/jpeg")
-		case ".png":
-			c.Header("Content-Type", "image/png")
-		case ".doc":
-			c.Header("Content-Type", "application/msword")
-		case ".docx":
-			c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-		default:
-			c.Header("Content-Type", "application/octet-stream")
-		}
-
-		// Set cache headers
-		c.Header("Cache-Control", "public, max-age=3600")
-		c.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
-
-		// Check if download is requested
-		if c.Query("download") == "true" || c.GetHeader("Accept") == "application/octet-stream" {
-			c.Header("Content-Description", "File Transfer")
-			c.Header("Content-Transfer-Encoding", "binary")
-			c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
-		} else {
-			// For viewing, use inline disposition
-			c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
-		}
-
-		c.File(cleanPath)
+	// Primary route: /uploads/{entityID}/{filename}
+	router.GET("/uploads/:entityID/:filename", func(c *gin.Context) {
+		serveEntityFile(c, uploadDir)
 	})
 
-	// Secure API endpoint for entity files with authentication and CORS
+	// Alternative route: /files/{entityID}/{filename}
+	router.GET("/files/:entityID/:filename", func(c *gin.Context) {
+		serveEntityFile(c, uploadDir)
+	})
+
+	// Secure API endpoint for entity files with authentication
 	router.GET("/api/v1/entities/:id/files/:filename", func(c *gin.Context) {
-		// Add CORS headers explicitly
-		c.Header("Access-Control-Allow-Origin", "http://localhost:5173, http://localhost:4173")
+		c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
 		c.Header("Access-Control-Allow-Credentials", "true")
-		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition, Cache-Control, Pragma, Expires")
+		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition")
 
 		entityID := c.Param("id")
 		filename := c.Param("filename")
 
-		// Basic validation - you may want to add proper authentication here
 		if entityID == "" || filename == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid parameters"})
 			return
@@ -212,7 +151,11 @@ func main() {
 
 		fileInfo, err := os.Stat(cleanPath)
 		if os.IsNotExist(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "File not found",
+				"message": "The requested file does not exist",
+				"path":    filepath.Join("/api/v1/entities", entityID, "files", filename),
+			})
 			return
 		}
 
@@ -221,22 +164,8 @@ func main() {
 			return
 		}
 
-		// Set proper headers
-		ext := strings.ToLower(filepath.Ext(filename))
-		switch ext {
-		case ".pdf":
-			c.Header("Content-Type", "application/pdf")
-		case ".jpg", ".jpeg":
-			c.Header("Content-Type", "image/jpeg")
-		case ".png":
-			c.Header("Content-Type", "image/png")
-		case ".doc":
-			c.Header("Content-Type", "application/msword")
-		case ".docx":
-			c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-		default:
-			c.Header("Content-Type", "application/octet-stream")
-		}
+		// Set content type
+		setContentType(c, filename)
 
 		c.Header("Content-Description", "File Transfer")
 		c.Header("Content-Transfer-Encoding", "binary")
@@ -247,15 +176,14 @@ func main() {
 		c.Header("Expires", "0")
 
 		c.File(cleanPath)
-		log.Printf("File downloaded: %s/%s", entityID, filename)
+		log.Printf("✅ File downloaded: %s/%s", entityID, filename)
 	})
 
-	// Enhanced bulk download with better error handling and CORS
+	// Bulk download all files for an entity
 	router.GET("/api/v1/entities/:id/files-all", func(c *gin.Context) {
-		// Add CORS headers explicitly
-		c.Header("Access-Control-Allow-Origin", "http://localhost:5173, http://localhost:4173")
+		c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
 		c.Header("Access-Control-Allow-Credentials", "true")
-		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition, Cache-Control, Pragma, Expires")
+		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition")
 
 		entityID := c.Param("id")
 		entityDir := filepath.Join(uploadDir, entityID)
@@ -274,16 +202,12 @@ func main() {
 		c.Header("Expires", "0")
 
 		zipWriter := zip.NewWriter(c.Writer)
-		defer func() {
-			if err := zipWriter.Close(); err != nil {
-				log.Printf("Error closing zip writer: %v", err)
-			}
-		}()
+		defer zipWriter.Close()
 
 		err := filepath.Walk(entityDir, func(filePath string, info os.FileInfo, err error) error {
 			if err != nil {
-				log.Printf("Error walking file %s: %v", filePath, err)
-				return nil // Continue with other files
+				log.Printf("⚠️ Error walking file %s: %v", filePath, err)
+				return nil
 			}
 
 			if info.IsDir() {
@@ -292,44 +216,40 @@ func main() {
 
 			relPath, err := filepath.Rel(entityDir, filePath)
 			if err != nil {
-				log.Printf("Error getting relative path for %s: %v", filePath, err)
-				return nil // Continue with other files
+				log.Printf("⚠️ Error getting relative path for %s: %v", filePath, err)
+				return nil
 			}
 
 			zipFile, err := zipWriter.Create(relPath)
 			if err != nil {
-				log.Printf("Error creating zip entry for %s: %v", relPath, err)
-				return nil // Continue with other files
+				log.Printf("⚠️ Error creating zip entry for %s: %v", relPath, err)
+				return nil
 			}
 
 			srcFile, err := os.Open(filePath)
 			if err != nil {
-				log.Printf("Error opening file %s: %v", filePath, err)
-				return nil // Continue with other files
+				log.Printf("⚠️ Error opening file %s: %v", filePath, err)
+				return nil
 			}
 			defer srcFile.Close()
 
-			_, err = io.Copy(zipFile, srcFile)
-			if err != nil {
-				log.Printf("Error copying file %s to zip: %v", filePath, err)
-				return nil // Continue with other files
+			if _, err = io.Copy(zipFile, srcFile); err != nil {
+				log.Printf("⚠️ Error copying file %s to zip: %v", filePath, err)
 			}
 
 			return nil
 		})
 
 		if err != nil {
-			log.Printf("Error creating ZIP for entity %s: %v", entityID, err)
-			// Don't return error here as we might have partial content
+			log.Printf("⚠️ Error creating ZIP for entity %s: %v", entityID, err)
 		}
 
-		log.Printf("ZIP file created for entity %s", entityID)
+		log.Printf("✅ ZIP file created for entity %s", entityID)
 	})
 
-	// Upload endpoint with CORS
+	// Upload endpoint
 	router.POST("/upload", func(c *gin.Context) {
-		// Add CORS headers explicitly
-		c.Header("Access-Control-Allow-Origin", "http://localhost:5173, http://localhost:4173")
+		c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
 		c.Header("Access-Control-Allow-Credentials", "true")
 
 		file, err := c.FormFile("file")
@@ -352,10 +272,9 @@ func main() {
 		})
 	})
 
-	// Debug list of entity files with CORS
+	// Debug: list all entity files
 	router.GET("/debug/entity-files", func(c *gin.Context) {
-		// Add CORS headers explicitly
-		c.Header("Access-Control-Allow-Origin", "http://localhost:5173, http://localhost:4173")
+		c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
 		c.Header("Access-Control-Allow-Credentials", "true")
 
 		type EntityFileInfo struct {
@@ -403,14 +322,14 @@ func main() {
 		})
 	})
 
-	// File info for a specific entity with CORS
+	// File info for a specific entity
 	router.GET("/api/v1/entities/:id/files/info", func(c *gin.Context) {
-		// Add CORS headers explicitly
-		c.Header("Access-Control-Allow-Origin", "http://localhost:5173, http://localhost:4173")
+		c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
 		c.Header("Access-Control-Allow-Credentials", "true")
 
 		entityID := c.Param("id")
 		entityDir := filepath.Join(uploadDir, entityID)
+		
 		if _, err := os.Stat(entityDir); os.IsNotExist(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "No files found for this entity"})
 			return
@@ -433,6 +352,7 @@ func main() {
 
 		var fileInfos []FileInfo
 		var totalSize int64
+		
 		for _, file := range files {
 			if !file.IsDir() {
 				info, err := file.Info()
@@ -442,14 +362,14 @@ func main() {
 				ext := strings.ToLower(filepath.Ext(file.Name()))
 				fileType := strings.ToUpper(strings.TrimPrefix(ext, "."))
 				if fileType == "" {
-					fileType = "unknown"
+					fileType = "UNKNOWN"
 				}
 				fileInfos = append(fileInfos, FileInfo{
 					FileName:    file.Name(),
 					Size:        info.Size(),
 					ModTime:     info.ModTime().Format("2006-01-02 15:04:05"),
 					FileType:    fileType,
-					ViewURL:     fmt.Sprintf("/files/%s/%s", entityID, file.Name()),
+					ViewURL:     fmt.Sprintf("/uploads/%s/%s", entityID, file.Name()),
 					DownloadURL: fmt.Sprintf("/api/v1/entities/%s/files/%s", entityID, file.Name()),
 				})
 				totalSize += info.Size()
@@ -465,13 +385,13 @@ func main() {
 		})
 	})
 
-	// Register existing routes (this will handle other API routes)
+	// Register existing routes
 	routes.Setup(router, cfg)
 
 	// Start server
 	fmt.Printf("🚀 Server starting on port %s\n", cfg.Port)
 	fmt.Printf("📁 Upload directory: %s\n", uploadDir)
-	fmt.Printf("🌐 Static files: http://localhost:%s/files/{path}\n", cfg.Port)
+	fmt.Printf("🌐 File access: http://localhost:%s/uploads/{entityID}/{filename}\n", cfg.Port)
 	fmt.Printf("📥 Download file: http://localhost:%s/api/v1/entities/{id}/files/{filename}\n", cfg.Port)
 	fmt.Printf("📦 Bulk download: http://localhost:%s/api/v1/entities/{id}/files-all\n", cfg.Port)
 
@@ -480,9 +400,106 @@ func main() {
 	}
 }
 
+// serveEntityFile handles serving files from entity directories
+func serveEntityFile(c *gin.Context, uploadDir string) {
+	c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
+	c.Header("Access-Control-Allow-Credentials", "true")
+	c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition")
+
+	entityID := c.Param("entityID")
+	filename := c.Param("filename")
+
+	if entityID == "" || filename == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid parameters"})
+		return
+	}
+
+	filePath := filepath.Join(uploadDir, entityID, filename)
+	cleanPath := filepath.Clean(filePath)
+
+	// Security check
+	if !strings.HasPrefix(cleanPath, filepath.Clean(uploadDir)) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":   "Access denied",
+			"message": "Invalid file path",
+		})
+		return
+	}
+
+	// Check if file exists
+	fileInfo, err := os.Stat(cleanPath)
+	if os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":   "File not found",
+			"message": "The requested file does not exist or has been moved",
+			"path":    filepath.Join("/uploads", entityID, filename),
+		})
+		return
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "File access error",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	// Set content type
+	contentType := setContentType(c, filename)
+
+	c.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
+	c.Header("Cache-Control", "public, max-age=3600")
+
+	// Inline for images/PDFs, attachment for others
+	if strings.HasPrefix(contentType, "image/") || contentType == "application/pdf" {
+		c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
+	} else {
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	}
+
+	c.File(cleanPath)
+	log.Printf("✅ File served: %s/%s", entityID, filename)
+}
+
+// setContentType determines and sets the content type based on file extension
+func setContentType(c *gin.Context, filename string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	contentType := "application/octet-stream"
+
+	switch ext {
+	case ".pdf":
+		contentType = "application/pdf"
+	case ".jpg", ".jpeg":
+		contentType = "image/jpeg"
+	case ".png":
+		contentType = "image/png"
+	case ".gif":
+		contentType = "image/gif"
+	case ".webp":
+		contentType = "image/webp"
+	case ".svg":
+		contentType = "image/svg+xml"
+	case ".doc":
+		contentType = "application/msword"
+	case ".docx":
+		contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case ".xls":
+		contentType = "application/vnd.ms-excel"
+	case ".xlsx":
+		contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	case ".txt":
+		contentType = "text/plain"
+	case ".csv":
+		contentType = "text/csv"
+	}
+
+	c.Header("Content-Type", contentType)
+	return contentType
+}
+
 // migrateIsActiveColumn adds the isactive column to the entities table if it doesn't exist
 func migrateIsActiveColumn(db *gorm.DB) error {
-	// Check if column exists
 	var count int64
 	err := db.Raw(`
 		SELECT COUNT(*) 
@@ -495,13 +512,11 @@ func migrateIsActiveColumn(db *gorm.DB) error {
 		return fmt.Errorf("failed to check for isactive column: %v", err)
 	}
 
-	// Column already exists
 	if count > 0 {
 		log.Println("✅ IsActive column already exists")
 		return nil
 	}
 
-	// Add the column
 	log.Println("🔄 Adding isactive column to entities table...")
 	sql := `ALTER TABLE entities ADD COLUMN isactive BOOLEAN DEFAULT true NOT NULL;`
 	
@@ -509,7 +524,6 @@ func migrateIsActiveColumn(db *gorm.DB) error {
 		return fmt.Errorf("failed to add isactive column: %v", err)
 	}
 
-	// Create index
 	log.Println("🔄 Creating index on isactive column...")
 	indexSQL := `CREATE INDEX IF NOT EXISTS idx_entities_isactive ON entities(isactive);`
 	
@@ -517,7 +531,6 @@ func migrateIsActiveColumn(db *gorm.DB) error {
 		log.Printf("⚠️ Warning: Could not create index: %v", err)
 	}
 
-	// Update existing records
 	log.Println("🔄 Updating existing records with isactive = true...")
 	updateSQL := `UPDATE entities SET isactive = true WHERE isactive IS NULL;`
 	
