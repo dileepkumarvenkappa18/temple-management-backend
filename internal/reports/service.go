@@ -419,55 +419,64 @@ func (s *reportService) ExportAuditLogsReport(ctx context.Context, req AuditLogR
 	return bytes, filename, mimeType, nil
 }
 
-// ===============================
-// Approval Status Reports
-// ===============================
-
 func (s *reportService) GetApprovalStatusReport(req ApprovalStatusReportRequest, entityIDs []string) ([]ApprovalStatusReportRow, error) {
-	ids := convertUintSlice(entityIDs)
-	return s.repo.GetApprovalStatus(ids, req.StartDate, req.EndDate, req.Role, req.Status)
+    // Convert entityIDs from string to uint if needed
+    ids := convertUintSlice(entityIDs)
+    // Fetch approval status data from repository
+    return s.repo.GetApprovalStatus(ids, req.StartDate, req.EndDate, req.Role, req.Status)
 }
 
-func (s *reportService) ExportApprovalStatusReport(ctx context.Context, req ApprovalStatusReportRequest, entityIDs []string, reportType string, userID *uint, ip string) ([]byte, string, string, error) {
-	rows, err := s.GetApprovalStatusReport(req, entityIDs)
-	if err != nil {
-		s.auditSvc.LogAction(ctx, userID, nil, "APPROVAL_STATUS_REPORT_DOWNLOAD_FAILED", map[string]interface{}{
-			"report_type": "approval_status",
-			"format":      req.Format,
-			"error":       err.Error(),
-			"role":        req.Role,
-			"status":      req.Status,
-		}, ip, "failure")
-		return nil, "", "", err
-	}
-
-	data := ReportData{ApprovalStatus: rows}
-	bytes, filename, mimeType, err := s.exporter.Export(reportType, req.Format, data)
-	if err != nil {
-		s.auditSvc.LogAction(ctx, userID, nil, "APPROVAL_STATUS_REPORT_DOWNLOAD_FAILED", map[string]interface{}{
-			"report_type": "approval_status",
-			"format":      req.Format,
-			"error":       err.Error(),
-			"role":        req.Role,
-			"status":      req.Status,
-		}, ip, "failure")
-		return nil, "", "", err
-	}
-
-	s.auditSvc.LogAction(ctx, userID, nil, "APPROVAL_STATUS_REPORT_DOWNLOADED", map[string]interface{}{
-		"report_type":  "approval_status",
-		"format":       req.Format,
-		"filename":     filename,
-		"entity_ids":   entityIDs,
-		"role":         req.Role,
-		"status":       req.Status,
-		"date_range":   req.DateRange,
-		"record_count": len(rows),
-	}, ip, "success")
-
-	return bytes, filename, mimeType, nil
+func (s *reportService) ExportApprovalStatusReport(
+    ctx context.Context,
+    req ApprovalStatusReportRequest,
+    entityIDs []string,
+    reportType string,
+    userID *uint,
+    ip string,
+) ([]byte, string, string, error) {
+    // Get report data
+    rows, err := s.GetApprovalStatusReport(req, entityIDs)
+    if err != nil {
+        s.auditSvc.LogAction(ctx, userID, nil, "APPROVAL_STATUS_REPORT_DOWNLOAD_FAILED", map[string]interface{}{
+            "report_type": "approval_status",
+            "format":      req.Format,
+            "error":       err.Error(),
+            "role":        req.Role,
+            "status":      req.Status,
+        }, ip, "failure")
+        return nil, "", "", err
+    }
+    
+    // Prepare data for export
+    data := ReportData{ApprovalStatus: rows}
+    
+    // Export the data (Excel, PDF, or CSV)
+    bytes, filename, mimeType, err := s.exporter.Export(reportType, req.Format, data)
+    if err != nil {
+        s.auditSvc.LogAction(ctx, userID, nil, "APPROVAL_STATUS_REPORT_DOWNLOAD_FAILED", map[string]interface{}{
+            "report_type": "approval_status",
+            "format":      req.Format,
+            "error":       err.Error(),
+            "role":        req.Role,
+            "status":      req.Status,
+        }, ip, "failure")
+        return nil, "", "", err
+    }
+    
+    // Log success
+    s.auditSvc.LogAction(ctx, userID, nil, "APPROVAL_STATUS_REPORT_DOWNLOADED", map[string]interface{}{
+        "report_type":  "approval_status",
+        "format":       req.Format,
+        "filename":     filename,
+        "entity_ids":   entityIDs,
+        "role":         req.Role,
+        "status":       req.Status,
+        "date_range":   req.DateRange,
+        "record_count": len(rows),
+    }, ip, "success")
+    
+    return bytes, filename, mimeType, nil
 }
-
 // ===============================
 // User Details Reports
 // ===============================
