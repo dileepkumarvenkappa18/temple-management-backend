@@ -70,6 +70,8 @@ func (e *reportExporter) Export(reportType, format string, data ReportData) ([]b
 		return e.exportDevoteeProfileExcel(data.DevoteeProfiles)
 	case ReportTypeDevoteeProfilePDF:
 		return e.exportDevoteeProfilePDF(data.DevoteeProfiles)
+	case ReportTypeDevoteeProfilePDF_ext:
+		return e.exportDevoteeProfilePDF_ext(data.DevoteeProfiles_ext)
 
 	case ReportTypeAuditLogs:
 		return e.exportAuditLogsByFormat(format, timestamp, data.AuditLogs)
@@ -697,12 +699,59 @@ func (e *reportExporter) exportDevoteeProfilePDF(rows []DevoteeProfileReportRow)
 	return buf.Bytes(), "devotee_profile_report.pdf", "application/pdf", nil
 }
 
+// Devotee Profile PDF export with extended fields (including Temple Name)
+func (e *reportExporter) exportDevoteeProfilePDF_ext(rows []DevoteeProfileReportRow_ext) ([]byte, string, string, error) {
+	pdf := gofpdf.New("L", "mm", "A4", "") // Landscape for more columns
+	pdf.AddPage()
+	pdf.SetFont("Arial", "B", 12)
+	pdf.Cell(40, 10, "Devotee Profile Report")
+	pdf.Ln(10)
+
+	pdf.SetFont("Arial", "B", 8) // Smaller font for headers
+	headers := []string{"User ID", "Full Name", "TempleName", "DOB", "Gender", "Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
+	widths := []float64{25, 35, 35, 22, 15, 50, 20, 25, 20, 20}
+
+	for i, h := range headers {
+		pdf.CellFormat(widths[i], 7, h, "1", 0, "C", false, 0, "")
+	}
+	pdf.Ln(-1)
+
+	pdf.SetFont("Arial", "", 7) // Even smaller font for data
+	for _, r := range rows {
+		pdf.CellFormat(widths[0], 6, r.UserID, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[1], 6, r.FullName, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[2], 6, r.TempleName, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[3], 6, r.DOB.Format("2006-01-02"), "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[4], 6, r.Gender, "1", 0, "C", false, 0, "")
+
+		// Truncate address if too long for PDF cell
+		address := r.FullAddress
+		if len(address) > 30 {
+			address = address[:27] + "..."
+		}
+		pdf.CellFormat(widths[5], 6, address, "1", 0, "L", false, 0, "")
+
+		pdf.CellFormat(widths[6], 6, r.Gotra, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[7], 6, r.Nakshatra, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[8], 6, r.Rashi, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[9], 6, r.Lagna, "1", 0, "C", false, 0, "")
+		pdf.Ln(-1)
+	}
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, "", "", err
+	}
+
+	return buf.Bytes(), "devotee_profile_report.pdf", "application/pdf", nil
+}
+
 // Devotee List CSV export
 func (e *reportExporter) exportDevoteeListCSV(rows []DevoteeListReportRow) ([]byte, string, string, error) {
 	buf := &bytes.Buffer{}
 	w := csv.NewWriter(buf)
 
-	headers := []string{"User ID", "Devotee Name", "Devotee Status", "Joined At", "Created At"}
+	headers := []string{"User ID", "Devotee Name", "Temple Name", "Devotee Status", "Joined At", "Created At"}
 	if err := w.Write(headers); err != nil {
 		return nil, "", "", err
 	}
@@ -711,6 +760,7 @@ func (e *reportExporter) exportDevoteeListCSV(rows []DevoteeListReportRow) ([]by
 		record := []string{
 			r.UserID,
 			r.DevoteeName,
+			r.TempleName,
 			r.DevoteeStatus,
 			r.JoinedAt.Format("2006-01-02 15:04:05"),
 			r.CreatedAt.Format("2006-01-02 15:04:05"),
@@ -739,7 +789,7 @@ func (e *reportExporter) exportDevoteeListExcel(rows []DevoteeListReportRow) ([]
 	f.DeleteSheet("Sheet1")
 	f.SetActiveSheet(index)
 
-	headers := []string{"User ID", "Devotee Name", "Devotee Status", "Joined At", "Created At"}
+	headers := []string{"User ID", "Devotee Name", "Temple Name", "Devotee Status", "Joined At", "Created At"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		f.SetCellValue(sheet, cell, h)
@@ -749,9 +799,10 @@ func (e *reportExporter) exportDevoteeListExcel(rows []DevoteeListReportRow) ([]
 		row := rIdx + 2
 		f.SetCellValue(sheet, fmt.Sprintf("A%d", row), r.UserID)
 		f.SetCellValue(sheet, fmt.Sprintf("B%d", row), r.DevoteeName)
-		f.SetCellValue(sheet, fmt.Sprintf("C%d", row), r.DevoteeStatus)
-		f.SetCellValue(sheet, fmt.Sprintf("D%d", row), r.JoinedAt.Format("2006-01-02 15:04:05"))
-		f.SetCellValue(sheet, fmt.Sprintf("E%d", row), r.CreatedAt.Format("2006-01-02 15:04:05"))
+		f.SetCellValue(sheet, fmt.Sprintf("C%d", row), r.TempleName)
+		f.SetCellValue(sheet, fmt.Sprintf("D%d", row), r.DevoteeStatus)
+		f.SetCellValue(sheet, fmt.Sprintf("E%d", row), r.JoinedAt.Format("2006-01-02 15:04:05"))
+		f.SetCellValue(sheet, fmt.Sprintf("F%d", row), r.CreatedAt.Format("2006-01-02 15:04:05"))
 	}
 
 	var buf bytes.Buffer
@@ -771,8 +822,8 @@ func (e *reportExporter) exportDevoteeListPDF(rows []DevoteeListReportRow) ([]by
 	pdf.Ln(10)
 
 	pdf.SetFont("Arial", "B", 10)
-	headers := []string{"User ID", "Devotee Name", "Devotee Status", "Joined At", "Created At"}
-	widths := []float64{30, 50, 30, 30, 40}
+	headers := []string{"User ID", "Devotee Name", "Temple Name", "Status", "Joined At", "Created At"}
+	widths := []float64{20, 30, 30, 20, 30, 40}
 
 	for i, h := range headers {
 		pdf.CellFormat(widths[i], 7, h, "1", 0, "C", false, 0, "")
@@ -783,9 +834,10 @@ func (e *reportExporter) exportDevoteeListPDF(rows []DevoteeListReportRow) ([]by
 	for _, r := range rows {
 		pdf.CellFormat(widths[0], 6, r.UserID, "1", 0, "C", false, 0, "")
 		pdf.CellFormat(widths[1], 6, r.DevoteeName, "1", 0, "L", false, 0, "")
-		pdf.CellFormat(widths[2], 6, r.DevoteeStatus, "1", 0, "C", false, 0, "")
-		pdf.CellFormat(widths[3], 6, r.JoinedAt.Format("2006-01-02 15:04:05"), "1", 0, "C", false, 0, "")
-		pdf.CellFormat(widths[4], 6, r.CreatedAt.Format("2006-01-02 15:04:05"), "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[2], 6, r.TempleName, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[3], 6, r.DevoteeStatus, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[4], 6, r.JoinedAt.Format("2006-01-02 15:04:05"), "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[5], 6, r.CreatedAt.Format("2006-01-02 15:04:05"), "1", 0, "C", false, 0, "")
 		pdf.Ln(-1)
 	}
 
@@ -796,7 +848,6 @@ func (e *reportExporter) exportDevoteeListPDF(rows []DevoteeListReportRow) ([]by
 
 	return buf.Bytes(), "devotee_list_report.pdf", "application/pdf", nil
 }
-
 
 func (e *reportExporter) exportAuditLogsPDF(logs []AuditLogReportRow) ([]byte, error) {
 	pdf := gofpdf.New("L", "mm", "A4", "")
@@ -887,10 +938,10 @@ func (e *reportExporter) exportAuditLogsExcel(logs []AuditLogReportRow) ([]byte,
 //// ============================
 /// APPROVAL STATUS EXPORTS
 //// ============================
-
+// exportApprovalStatusByFormat chooses export format for approval status
 func (e *reportExporter) exportApprovalStatusByFormat(format string, rows []ApprovalStatusReportRow) ([]byte, string, string, error) {
 	timestamp := time.Now().Format("20060102_150405")
-
+	
 	switch format {
 	case FormatExcel:
 		data, err := e.exportApprovalStatusExcel(rows)
@@ -899,7 +950,7 @@ func (e *reportExporter) exportApprovalStatusByFormat(format string, rows []Appr
 		}
 		filename := fmt.Sprintf("approval_status_report_%s.xlsx", timestamp)
 		return data, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nil
-
+		
 	case FormatCSV:
 		data, err := e.exportApprovalStatusCSV(rows)
 		if err != nil {
@@ -907,7 +958,7 @@ func (e *reportExporter) exportApprovalStatusByFormat(format string, rows []Appr
 		}
 		filename := fmt.Sprintf("approval_status_report_%s.csv", timestamp)
 		return data, filename, "text/csv", nil
-
+		
 	case FormatPDF:
 		data, err := e.exportApprovalStatusPDF(rows)
 		if err != nil {
@@ -915,29 +966,50 @@ func (e *reportExporter) exportApprovalStatusByFormat(format string, rows []Appr
 		}
 		filename := fmt.Sprintf("approval_status_report_%s.pdf", timestamp)
 		return data, filename, "application/pdf", nil
-
+		
 	default:
 		return nil, "", "", fmt.Errorf("unsupported format for approval status: %s", format)
 	}
 }
 
+// exportApprovalStatusCSV exports approval status report to CSV with all fields
 func (e *reportExporter) exportApprovalStatusCSV(rows []ApprovalStatusReportRow) ([]byte, error) {
 	var buf bytes.Buffer
 	writer := csv.NewWriter(&buf)
 
-	headers := []string{"Name", "Tenant ID", "Role", "Status", "Created At", "Email"}
+	// Updated headers with all new fields
+	headers := []string{
+		"Tenant ID", 
+		"Tenant Name", 
+		"Entity ID", 
+		"Entity Name", 
+		"Status", 
+		"Created At", 
+		"Approved At", 
+		"Email", 
+		"Role",
+	}
 	if err := writer.Write(headers); err != nil {
 		return nil, err
 	}
 
 	for _, row := range rows {
+		// Handle nullable ApprovedAt field
+		approvedAt := ""
+		if row.ApprovedAt != nil {
+			approvedAt = row.ApprovedAt.Format("2006-01-02 15:04:05")
+		}
+
 		record := []string{
-			row.Name,
 			row.TenantID,
-			row.Role,
+			row.TenantName,
+			row.EntityID,
+			row.EntityName,
 			row.Status,
 			row.CreatedAt.Format("2006-01-02 15:04:05"),
+			approvedAt,
 			row.Email,
+			row.Role,
 		}
 		if err := writer.Write(record); err != nil {
 			return nil, err
@@ -952,12 +1024,24 @@ func (e *reportExporter) exportApprovalStatusCSV(rows []ApprovalStatusReportRow)
 	return buf.Bytes(), nil
 }
 
+// exportApprovalStatusExcel exports approval status report to Excel with all fields
 func (e *reportExporter) exportApprovalStatusExcel(rows []ApprovalStatusReportRow) ([]byte, error) {
 	f := excelize.NewFile()
 	sheetName := "Approval Status"
 	f.SetSheetName("Sheet1", sheetName)
 
-	headers := []string{"Name", "Tenant ID", "Role", "Status", "Created At", "Email"}
+	// Updated headers with all new fields
+	headers := []string{
+		"Tenant ID", 
+		"Tenant Name", 
+		"Entity ID", 
+		"Entity Name", 
+		"Status", 
+		"Created At", 
+		"Approved At", 
+		"Email", 
+		"Role",
+	}
 	for i, header := range headers {
 		cell := fmt.Sprintf("%c1", 'A'+i)
 		f.SetCellValue(sheetName, cell, header)
@@ -965,12 +1049,22 @@ func (e *reportExporter) exportApprovalStatusExcel(rows []ApprovalStatusReportRo
 
 	for i, row := range rows {
 		rowNum := i + 2
-		f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), row.Name)
-		f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), row.TenantID)
-		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), row.Role)
-		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), row.Status)
-		f.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), row.CreatedAt.Format("2006-01-02 15:04:05"))
-		f.SetCellValue(sheetName, fmt.Sprintf("F%d", rowNum), row.Email)
+		
+		// Handle nullable ApprovedAt field
+		approvedAt := ""
+		if row.ApprovedAt != nil {
+			approvedAt = row.ApprovedAt.Format("2006-01-02 15:04:05")
+		}
+
+		f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), row.TenantID)
+		f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), row.TenantName)
+		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), row.EntityID)
+		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), row.EntityName)
+		f.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), row.Status)
+		f.SetCellValue(sheetName, fmt.Sprintf("F%d", rowNum), row.CreatedAt.Format("2006-01-02 15:04:05"))
+		f.SetCellValue(sheetName, fmt.Sprintf("G%d", rowNum), approvedAt)
+		f.SetCellValue(sheetName, fmt.Sprintf("H%d", rowNum), row.Email)
+		f.SetCellValue(sheetName, fmt.Sprintf("I%d", rowNum), row.Role)
 	}
 
 	var buf bytes.Buffer
@@ -980,6 +1074,7 @@ func (e *reportExporter) exportApprovalStatusExcel(rows []ApprovalStatusReportRo
 	return buf.Bytes(), nil
 }
 
+// exportApprovalStatusPDF exports approval status report to PDF with all fields
 func (e *reportExporter) exportApprovalStatusPDF(rows []ApprovalStatusReportRow) ([]byte, error) {
 	pdf := gofpdf.New("L", "mm", "A4", "")
 	pdf.AddPage()
@@ -987,27 +1082,60 @@ func (e *reportExporter) exportApprovalStatusPDF(rows []ApprovalStatusReportRow)
 	pdf.Cell(0, 10, "Approval Status Report")
 	pdf.Ln(20)
 
-	pdf.SetFont("Arial", "B", 10)
-	widths := []float64{40, 25, 30, 25, 35, 50}
-	headers := []string{"Name", "Tenant ID", "Role", "Status", "Created At", "Email"}
+	pdf.SetFont("Arial", "B", 8)
+	// Updated column widths for all fields (total: ~280mm fits landscape A4)
+	widths := []float64{20, 35, 20, 40, 20, 35, 35, 50, 25}
+	headers := []string{
+		"Tenant ID", 
+		"Tenant Name", 
+		"Entity ID", 
+		"Entity Name", 
+		"Status", 
+		"Created At", 
+		"Approved At", 
+		"Email", 
+		"Role",
+	}
 
 	for i, h := range headers {
 		pdf.CellFormat(widths[i], 7, h, "1", 0, "C", false, 0, "")
 	}
 	pdf.Ln(-1)
 
-	pdf.SetFont("Arial", "", 9)
+	pdf.SetFont("Arial", "", 7)
 	for _, row := range rows {
+		// Handle nullable ApprovedAt field
+		approvedAt := "N/A"
+		if row.ApprovedAt != nil {
+			approvedAt = row.ApprovedAt.Format("2006-01-02 15:04")
+		}
+
 		values := []string{
-			row.Name,
 			row.TenantID,
-			row.Role,
+			row.TenantName,
+			row.EntityID,
+			row.EntityName,
 			row.Status,
-			row.CreatedAt.Format("2006-01-02 15:04:05"),
+			row.CreatedAt.Format("2006-01-02 15:04"),
+			approvedAt,
 			row.Email,
+			row.Role,
 		}
 
 		for i, v := range values {
+			// Truncate long values for PDF display to fit in cells
+			maxLen := 30
+			switch i {
+case 1, 3: // Tenant Name or Entity Name
+				maxLen = 25
+			case 7: // Email
+				maxLen = 35
+			}
+			
+			if len(v) > maxLen {
+				v = v[:maxLen-3] + "..."
+			}
+			
 			pdf.CellFormat(widths[i], 6, v, "1", 0, "L", false, 0, "")
 		}
 		pdf.Ln(-1)
@@ -1019,7 +1147,6 @@ func (e *reportExporter) exportApprovalStatusPDF(rows []ApprovalStatusReportRow)
 	}
 	return buf.Bytes(), nil
 }
-
 //// ============================
 /// USER DETAILS EXPORTS
 //// ============================

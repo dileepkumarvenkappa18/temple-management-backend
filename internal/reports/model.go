@@ -15,7 +15,7 @@ const (
 	ReportTypeDonations = "donations"
 
 	// Date range constants
-	DateRangeDaily   = "daily" // Added this line
+	DateRangeDaily   = "daily"
 	DateRangeWeekly  = "weekly"
 	DateRangeMonthly = "monthly"
 	DateRangeYearly  = "yearly"
@@ -46,11 +46,12 @@ const (
 	ReportTypeDevoteeListExcel = "devotee-list-excel"
 	ReportTypeDevoteeListPDF   = "devotee-list-pdf"
 
-	// Devotee profile report types - NEW
-	ReportTypeDevoteeProfile      = "devotee-profile"
-	ReportTypeDevoteeProfileCSV   = "devotee-profile-csv"
-	ReportTypeDevoteeProfileExcel = "devotee-profile-excel"
-	ReportTypeDevoteeProfilePDF   = "devotee-profile-pdf"
+	// Devotee profile report types
+	ReportTypeDevoteeProfile        = "devotee-profile"
+	ReportTypeDevoteeProfileCSV     = "devotee-profile-csv"
+	ReportTypeDevoteeProfileExcel   = "devotee-profile-excel"
+	ReportTypeDevoteeProfilePDF     = "devotee-profile-pdf"
+	ReportTypeDevoteeProfilePDF_ext = "devotee-profile_ext-pdf"
 
 	// Audit log report types
 	ReportTypeAuditLogs      = "audit-logs"
@@ -82,19 +83,20 @@ type ActivitiesReportRequest struct {
 	Format    string    `json:"format"`
 }
 
-// Fix 2: Update the ReportData struct in models.go to fix the missing JSON tags
+// ReportData struct with all report types
 type ReportData struct {
-	Events            []EventReportRow            `json:"events,omitempty"`
-	Sevas             []SevaReportRow             `json:"sevas,omitempty"`
-	Bookings          []SevaBookingReportRow      `json:"bookings,omitempty"`
-	Donations         []DonationReportRow         `json:"donations,omitempty"`
-	TemplesRegistered []TempleRegisteredReportRow `json:"temples_registered,omitempty"`
-	DevoteeBirthdays  []DevoteeBirthdayReportRow  `json:"devotee_birthdays,omitempty"`
-	DevoteeList       []DevoteeListReportRow      `json:"devotee_list,omitempty"`
-	DevoteeProfiles   []DevoteeProfileReportRow   `json:"devotee_profiles,omitempty"`
-	AuditLogs         []AuditLogReportRow         `json:"audit_logs,omitempty"`
-	UserDetails       []UserDetailsReportRow      `json:"user_details,omitempty"`    // Fixed missing backticks
-	ApprovalStatus    []ApprovalStatusReportRow   `json:"approval_status,omitempty"` // Fixed missing backticks
+	Events              []EventReportRow              `json:"events,omitempty"`
+	Sevas               []SevaReportRow               `json:"sevas,omitempty"`
+	Bookings            []SevaBookingReportRow        `json:"bookings,omitempty"`
+	Donations           []DonationReportRow           `json:"donations,omitempty"`
+	TemplesRegistered   []TempleRegisteredReportRow   `json:"temples_registered,omitempty"`
+	DevoteeBirthdays    []DevoteeBirthdayReportRow    `json:"devotee_birthdays,omitempty"`
+	DevoteeList         []DevoteeListReportRow        `json:"devotee_list,omitempty"`
+	DevoteeProfiles     []DevoteeProfileReportRow     `json:"devotee_profiles,omitempty"`
+	DevoteeProfiles_ext []DevoteeProfileReportRow_ext `json:"devotee_profiles_ext,omitempty"`
+	AuditLogs           []AuditLogReportRow           `json:"audit_logs,omitempty"`
+	UserDetails         []UserDetailsReportRow        `json:"user_details,omitempty"`
+	ApprovalStatus      []ApprovalStatusReportRow     `json:"approval_status,omitempty"`
 }
 
 // EventReportRow represents a single row in the events report
@@ -212,12 +214,13 @@ type DevoteeListReportRequest struct {
 type DevoteeListReportRow struct {
 	UserID        string    `json:"user_id"`
 	DevoteeName   string    `json:"devotee_name"`
+	TempleName    string    `json:"temple_name"`
 	JoinedAt      time.Time `json:"joined_at"`
 	DevoteeStatus string    `json:"devotee_status"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
-// DevoteeProfileReportRequest represents request parameters for devotee profile report - NEW
+// DevoteeProfileReportRequest represents request parameters for devotee profile report
 type DevoteeProfileReportRequest struct {
 	EntityID  string    `json:"entity_id"`
 	DateRange string    `json:"date_range"`
@@ -227,10 +230,24 @@ type DevoteeProfileReportRequest struct {
 	Format    string    `json:"format"`
 }
 
-// DevoteeProfileReportRow represents a single row in the devotee profile report - NEW
+// DevoteeProfileReportRow represents a single row in the devotee profile report
 type DevoteeProfileReportRow struct {
 	UserID      string    `json:"user_id"`
 	FullName    string    `json:"full_name"`
+	DOB         time.Time `json:"dob"`
+	Gender      string    `json:"gender"`
+	FullAddress string    `json:"full_address"`
+	Gotra       string    `json:"gotra"`
+	Nakshatra   string    `json:"nakshatra"`
+	Rashi       string    `json:"rashi"`
+	Lagna       string    `json:"lagna"`
+}
+
+// DevoteeProfileReportRow_ext represents an extended row with temple name
+type DevoteeProfileReportRow_ext struct {
+	UserID      string    `json:"user_id"`
+	FullName    string    `json:"full_name"`
+	TempleName  string    `json:"temple_name"`
 	DOB         time.Time `json:"dob"`
 	Gender      string    `json:"gender"`
 	FullAddress string    `json:"full_address"`
@@ -255,7 +272,7 @@ type AuditLogReportRow struct {
 	ID         uint      `json:"id"`
 	UserID     *uint     `json:"user_id"`
 	UserName   string    `json:"user_name"`
-	UserRole   string    `json:"user_role"` // ✅ Added
+	UserRole   string    `json:"user_role"`
 	EntityID   uint      `json:"entity_id"`
 	EntityName string    `json:"entity_name"`
 	Action     string    `json:"action"`
@@ -269,46 +286,46 @@ type AuditLogReportRow struct {
 // ApprovalStatusReportRequest represents request parameters for approval status report
 type ApprovalStatusReportRequest struct {
 	EntityID  string    `json:"entity_id"`
-	Role      string    `json:"role"`       // Filter by role (all roles if empty)
-	Status    string    `json:"status"`     // Filter by status (all statuses if empty)
-	DateRange string    `json:"date_range"` // Optional: e.g., "last_week", "last_month"
+	Role      string    `json:"role"` // "Tenant" or "Temple"
+	Status    string    `json:"status"` // "pending", "approved", "rejected"
+	DateRange string    `json:"date_range"`
 	StartDate time.Time `json:"start_date"`
 	EndDate   time.Time `json:"end_date"`
-	Format    string    `json:"format"`  // e.g., "csv", "pdf"
-	UserID    uint      `json:"user_id"` // Optional: who requested the report
+	Format    string    `json:"format"`
+	UserID    uint      `json:"user_id"`
 }
 
-// ApprovalStatusReportRow represents a detailed approval status row
-// Update in reports/model.go if needed
+// ApprovalStatusReportRow represents a detailed approval status row with tenant and entity information
 type ApprovalStatusReportRow struct {
-	Name         string    `json:"name"`
-	TenantID     string    `json:"tenant_id"`
-	ApprovalType string    `json:"approval_type"` // Add this field to distinguish: "tenant" or "temple"
-	Role         string    `json:"role"`
-	Status       string    `json:"status"`
-	CreatedAt    time.Time `json:"created_at"`
-	Email        string    `json:"email"`
+	TenantID     string    `json:"tenant_id"`     // User ID if Tenant role, otherwise NA
+	TenantName   string    `json:"tenant_name"`   // Full name of tenant
+	EntityID     string    `json:"entity_id"`     // Entity ID if Temple role, otherwise NA
+	EntityName   string    `json:"entity_name"`   // Entity name if Temple role, otherwise NA
+	Status       string    `json:"status"`        // pending, approved, rejected
+	CreatedAt    time.Time `json:"created_at"`    // When user was created
+	ApprovedAt   *time.Time `json:"approved_at"`  // When approval happened (nullable)
+	Email        string    `json:"email"`         // User email
+	Role         string    `json:"role"`          // Tenant or Temple
 }
-
 type UserDetailsReportRow = UserDetailReportRow
 
 type UserDetailReportRequest struct {
-	EntityID  string    `json:"entity_id"`  // Filter by entity/tenant
-	Role      string    `json:"role"`       // Filter by role, empty = all roles
-	Status    string    `json:"status"`     // Filter by user status, empty = all statuses
-	DateRange string    `json:"date_range"` // Optional: "last_week", "last_month"
-	StartDate time.Time `json:"start_date"` // Optional: used if DateRange not provided
-	EndDate   time.Time `json:"end_date"`   // Optional: used if DateRange not provided
-	Format    string    `json:"format"`     // e.g., "csv", "pdf"
-	UserID    uint      `json:"user_id"`    // Optional: ID of requesting user
+	EntityID  string    `json:"entity_id"`
+	Role      string    `json:"role"`
+	Status    string    `json:"status"`
+	DateRange string    `json:"date_range"`
+	StartDate time.Time `json:"start_date"`
+	EndDate   time.Time `json:"end_date"`
+	Format    string    `json:"format"`
+	UserID    uint      `json:"user_id"`
 }
 
 type UserDetailReportRow struct {
 	ID         uint      `json:"id"`
 	Name       string    `json:"name"`
-	EntityName string    `json:"entity_name"` // OK: shows tenant/entity
+	EntityName string    `json:"entity_name"`
 	Email      string    `json:"email"`
-	Role       string    `json:"role"`   // Tenant, Devotee, Volunteer, etc.
-	Status     string    `json:"status"` // Active, Inactive, Locked, or Approved/Rejected
+	Role       string    `json:"role"`
+	Status     string    `json:"status"`
 	CreatedAt  time.Time `json:"created_at"`
 }

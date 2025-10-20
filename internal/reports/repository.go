@@ -12,7 +12,7 @@ type ReportRepository interface {
 	// GetEntitiesByTenant returns entity IDs created by the given tenant (temple admin user)
 	GetEntitiesByTenant(userID uint) ([]uint, error)
 
-	// 🔹 Added for superadmin and tenant-based access
+	// Added for superadmin and tenant-based access
 	GetAllEntityIDs() ([]uint, error)
 	GetEntitiesByTenantID(tenantID uint) ([]uint, error)
 
@@ -24,6 +24,7 @@ type ReportRepository interface {
 	GetDonations(entityIDs []uint, start, end time.Time) ([]DonationReportRow, error)
 	GetDevoteeList(entityIDs []uint, start, end time.Time, status string) ([]DevoteeListReportRow, error)
 	GetDevoteeProfiles(entityIDs []uint, start, end time.Time, status string) ([]DevoteeProfileReportRow, error)
+	GetDevoteeProfiles_ext(entityIDs []uint, start, end time.Time, status string, all string) ([]DevoteeProfileReportRow_ext, error)
 	GetAuditLogs(entityIDs []uint, start, end time.Time, actionTypes []string, status string) ([]AuditLogReportRow, error)
 	GetApprovalStatus(entityIDs []uint, start, end time.Time, role, status string) ([]ApprovalStatusReportRow, error)
 	GetUserDetails(entityIDs []uint, start, end time.Time, role, status string) ([]UserDetailsReportRow, error)
@@ -38,7 +39,7 @@ func NewRepository(db *gorm.DB) ReportRepository {
 }
 
 // ======================
-// 🔹 Entity Fetch Methods
+// Entity Fetch Methods
 // ======================
 
 func (r *repository) GetEntitiesByTenant(userID uint) ([]uint, error) {
@@ -52,7 +53,7 @@ func (r *repository) GetEntitiesByTenant(userID uint) ([]uint, error) {
 	return ids, err
 }
 
-// 🔹 Added: Get all entities (for superadmin)
+// Get all entities (for superadmin)
 func (r *repository) GetAllEntityIDs() ([]uint, error) {
 	var ids []uint
 	err := r.db.Table("entities").
@@ -61,7 +62,7 @@ func (r *repository) GetAllEntityIDs() ([]uint, error) {
 	return ids, err
 }
 
-// 🔹 Added: Get entities by tenant ID (for tenant-level users)
+// Get entities by tenant ID (for tenant-level users)
 func (r *repository) GetEntitiesByTenantID(tenantID uint) ([]uint, error) {
 	var ids []uint
 	err := r.db.Table("entities").
@@ -73,7 +74,7 @@ func (r *repository) GetEntitiesByTenantID(tenantID uint) ([]uint, error) {
 }
 
 // ======================
-// 🔹 Reports
+// Reports
 // ======================
 
 func (r *repository) GetEvents(entityIDs []uint, start, end time.Time) ([]EventReportRow, error) {
@@ -295,11 +296,13 @@ func (r *repository) GetDevoteeList(entityIDs []uint, start, end time.Time, stat
 		Select(`
 			u.id as user_id,
 			u.full_name as devotee_name,
+			en.name as temple_name,
 			uem.joined_at,
 			uem.status as devotee_status,
 			u.created_at
 		`).
 		Joins("INNER JOIN user_entity_memberships uem ON u.id = uem.user_id").
+		Joins("INNER JOIN entities en ON en.id = uem.entity_id").
 		Where("uem.entity_id IN ?", entityIDs)
 
 	if status != "" {
@@ -346,6 +349,49 @@ func (r *repository) GetDevoteeProfiles(entityIDs []uint, start, end time.Time, 
 
 	query = query.Where("uem.joined_at BETWEEN ? AND ?", start, end).Order("u.full_name ASC")
 	err := query.Scan(&rows).Error
+
+	return rows, err
+}
+
+func (r *repository) GetDevoteeProfiles_ext(entityIDs []uint, start, end time.Time, status string, all string) ([]DevoteeProfileReportRow_ext, error) {
+	var rows []DevoteeProfileReportRow_ext
+	if len(entityIDs) == 0 {
+		return rows, nil
+	}
+
+	query := r.db.Table("users u").
+		Select(`
+			u.id as user_id,
+			u.full_name,
+			en.name as temple_name,
+			dp.dob,
+			dp.gender,
+			CONCAT(
+				COALESCE(dp.street_address, ''), ' ',
+				COALESCE(dp.city, ''), ' ',
+				COALESCE(dp.state, ''), ' ',
+				COALESCE(dp.country, ''), ' ',
+				COALESCE(dp.pincode, '')
+			) as full_address,
+			COALESCE(dp.gotra, '') as gotra,
+			COALESCE(dp.nakshatra, '') as nakshatra,
+			COALESCE(dp.rashi, '') as rashi,
+			COALESCE(dp.lagna, '') as lagna
+		`).
+		Joins("INNER JOIN user_entity_memberships AS uem ON uem.user_id = u.id").
+		Joins("INNER JOIN devotee_profiles AS dp ON dp.user_id = u.id").
+		Joins("INNER JOIN entities AS en ON en.id = uem.entity_id").
+		Where("u.role_id = ?", 3).
+		Where("uem.entity_id IN ?", entityIDs)
+
+	if status != "" {
+		query = query.Where("uem.status = ?", status)
+	}
+
+	query = query.Where("uem.joined_at BETWEEN ? AND ?", start, end).Order("u.full_name ASC")
+
+	err := query.Scan(&rows).Error
+
 	return rows, err
 }
 
@@ -391,47 +437,75 @@ func (r *repository) GetAuditLogs(entityIDs []uint, start, end time.Time, action
 func (r *repository) GetApprovalStatus(entityIDs []uint, start, end time.Time, role, status string) ([]ApprovalStatusReportRow, error) {
 	var rows []ApprovalStatusReportRow
 
+	// Query for both tenant-level and temple-level approvals
 	query := r.db.Table("users u").
 		Select(`
-			u.full_name as name,
-			COALESCE(CAST(uem.entity_id AS CHAR), 'N/A') as tenant_id,
-			CASE 
-				WHEN ur.role_name = 'Tenant' THEN 'tenant'
-				ELSE 'temple'
-			END as approval_type,
-			ur.role_name as role,
-			uem.status,
+			'NA' as tenant_id,
+			'NA' as tenant_name,
+			COALESCE(CAST(e.id AS CHAR), 'NA') as entity_id,
+			COALESCE(e.name, 'NA') as entity_name,
+			COALESCE(uem.status, u.status, 'pending') as status,
 			u.created_at,
-			u.email
+			CASE 
+				WHEN COALESCE(uem.status, u.status) = 'approved' THEN COALESCE(uem.joined_at, u.created_at)
+				ELSE NULL
+			END as approved_at,
+			u.email,
+			ur.role_name as role
 		`).
+		Joins("INNER JOIN user_roles ur ON u.role_id = ur.id").
 		Joins("LEFT JOIN user_entity_memberships uem ON u.id = uem.user_id").
-		Joins("LEFT JOIN user_roles ur ON u.role_id = ur.id")
+		Joins("LEFT JOIN entities e ON uem.entity_id = e.id")
 
-	if len(entityIDs) > 0 {
-		query = query.Where("uem.entity_id IN ?", entityIDs)
+	// Filter by role if specified, otherwise get both tenantadmin and templeadmin
+	if role != "" {
+		query = query.Where("ur.role_name = ?", role)
+	} else {
+		query = query.Where("ur.role_name IN ('tenantadmin', 'templeadmin')")
 	}
 
+	// Optional: filter by specific entity IDs
+	if len(entityIDs) > 0 {
+		query = query.Where("e.id IN ?", entityIDs)
+	}
+
+	// Optional: filter by date range
 	if !start.IsZero() && !end.IsZero() {
 		query = query.Where("u.created_at BETWEEN ? AND ?", start, end)
 	}
 
-	if role != "" {
-		query = query.Where("ur.role_name = ?", role)
-	}
-
+	// Optional: filter by status
 	if status != "" {
-		query = query.Where("uem.status = ?", status)
+		query = query.Where("(uem.status = ? OR (uem.status IS NULL AND u.status = ?))", status, status)
 	}
 
-	err := query.Order("u.created_at DESC").Scan(&rows).Error
+	// Order by user creation date
+	query = query.Order("u.created_at DESC")
+
+	// Execute query
+	err := query.Scan(&rows).Error
+
+	// Post-process to ensure no empty values
 	for i := range rows {
 		if rows[i].Status == "" {
-			rows[i].Status = "N/A"
+			rows[i].Status = "pending"
+		}
+		if rows[i].TenantID == "" {
+			rows[i].TenantID = "NA"
+		}
+		if rows[i].TenantName == "" {
+			rows[i].TenantName = "NA"
+		}
+		if rows[i].EntityID == "" {
+			rows[i].EntityID = "NA"
+		}
+		if rows[i].EntityName == "" {
+			rows[i].EntityName = "NA"
 		}
 	}
+
 	return rows, err
 }
-
 func (r *repository) GetUserDetails(entityIDs []uint, start, end time.Time, role, status string) ([]UserDetailsReportRow, error) {
 	var rows []UserDetailsReportRow
 

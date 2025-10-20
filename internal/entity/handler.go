@@ -795,6 +795,18 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		return
 	}
 
+	// Get authenticated user
+	userVal, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	user, ok := userVal.(auth.User)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user object"})
+		return
+	}
+
 	// Get access context
 	accessContextVal, exists := c.Get("access_context")
 	if !exists {
@@ -807,12 +819,79 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		return
 	}
 
-	// Check write permissions
+	// Get the existing entity to check ownership
+	existingEntity, err := h.Service.GetEntityByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Temple not found"})
+		return
+	}
+
+	// **UPDATED PERMISSION LOGIC: Allow SuperAdmin and TempleAdmin**
+	hasAccess := false
+	
+	switch user.Role.RoleName {
+	case "superadmin":
+		// SuperAdmin can edit ANY temple
+		hasAccess = true
+		log.Printf("✅ SuperAdmin %d granted access to edit entity %d", user.ID, id)
+		
+	case "templeadmin":
+		// TempleAdmin can edit temples they created
+		hasAccess = (existingEntity.CreatedBy == user.ID)
+		
+		// Also allow if entity ID matches their direct entity
+		if !hasAccess && accessContext.DirectEntityID != nil {
+			hasAccess = (*accessContext.DirectEntityID == uint(id))
+		}
+		
+		if hasAccess {
+			log.Printf("✅ TempleAdmin %d granted access to edit entity %d (createdBy=%d)", 
+				user.ID, id, existingEntity.CreatedBy)
+		} else {
+			log.Printf("❌ TempleAdmin %d DENIED access to entity %d (createdBy=%d, directEntityID=%v)", 
+				user.ID, id, existingEntity.CreatedBy, accessContext.DirectEntityID)
+		}
+		
+	case "standarduser", "monitoringuser":
+		// Standard/monitoring users can only edit their assigned entity
+		entityIDUint := uint(id)
+		hasAccess = (accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityIDUint)
+		
+		if hasAccess {
+			log.Printf("✅ StandardUser %d granted access to edit assigned entity %d", user.ID, id)
+		} else {
+			log.Printf("❌ StandardUser %d DENIED access to entity %d (assignedEntityID=%v)", 
+				user.ID, id, accessContext.AssignedEntityID)
+		}
+		
+	default:
+		log.Printf("❌ Unknown role '%s' for user %d", user.Role.RoleName, user.ID)
+		hasAccess = false
+	}
+
+	// **DENY ACCESS IF NO PERMISSION**
+	if !hasAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "Access denied to update this entity",
+			"details": map[string]interface{}{
+				"user_id":        user.ID,
+				"user_role":      user.Role.RoleName,
+				"entity_id":      id,
+				"entity_creator": existingEntity.CreatedBy,
+				"message":        "Only SuperAdmins and the TempleAdmin who created this temple can update it",
+			},
+		})
+		return
+	}
+
+	// Check write permissions from access context
 	if !accessContext.CanWrite() {
+		log.Printf("❌ User %d has no write permissions (role: %s)", user.ID, user.Role.RoleName)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient write permissions"})
 		return
 	}
 
+	// Parse update input
 	var input Entity
 	if err := c.ShouldBindJSON(&input); err != nil {
 		log.Printf("Update Bind Error: %v", err)
@@ -820,39 +899,29 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		return
 	}
 
-	// Get authenticated user for audit logging
-	user, exists := c.Get("user")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
-	userID := user.(auth.User).ID
-
-	// Check if entity ID matches accessible entity
-	entityIDUint := uint(id)
-	hasAccess := (accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityIDUint) ||
-		(accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityIDUint)
-
-	if !hasAccess {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied to update this entity"})
-		return
-	}
-
+	// Preserve the original creator and important fields
 	input.ID = uint(id)
+	input.CreatedBy = existingEntity.CreatedBy // Don't change who created it
 	input.UpdatedAt = time.Now()
 
 	// Get IP address for audit logging
 	ip := middleware.GetIPFromContext(c)
 
-	if err := h.Service.UpdateEntity(input, userID, ip); err != nil {
-		log.Printf("Update Error: %v", err)
+	// Perform the update
+	if err := h.Service.UpdateEntity(input, user.ID, ip); err != nil {
+		log.Printf("❌ Update Error for entity %d by user %d: %v", id, user.ID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update temple", "details": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Temple updated successfully"})
+	log.Printf("✅ Entity %d updated successfully by user %d (role: %s)", id, user.ID, user.Role.RoleName)
+	
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "Temple updated successfully",
+		"temple_id": id,
+		"updated_by": user.ID,
+	})
 }
-
 // DeleteEntity handles entity deletion (superadmin only)
 func (h *Handler) DeleteEntity(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
