@@ -322,7 +322,7 @@ func (r *Repository) CreateTenantDetails(ctx context.Context, details *auth.Tena
 	return r.db.WithContext(ctx).Create(details).Error
 }
 
-// Get users with pagination and filters (excluding devotee and volunteer roles)
+// Get users with pagination and filters (excluding devotee, volunteer roles and pending status)
 func (r *Repository) GetUsers(ctx context.Context, limit, page int, search, roleFilter, statusFilter string) ([]UserResponse, int64, error) {
 	var users []UserResponse
 	var total int64
@@ -330,10 +330,12 @@ func (r *Repository) GetUsers(ctx context.Context, limit, page int, search, role
 	offset := (page - 1) * limit
 
 	// Build base query for total count
-	baseQuery := r.db.WithContext(ctx).
+	baseQuery := r.db.Debug().WithContext(ctx).
 		Table("users").
 		Joins("JOIN user_roles ON users.role_id = user_roles.id").
-		Where("user_roles.role_name NOT IN (?)", []string{"devotee", "volunteer"})
+		Joins("LEFT JOIN approval_requests ar ON ar.user_id = users.id and users.role_id = 2 and ar.status = 'approved'").
+		Where("user_roles.role_name NOT IN (?)", []string{"devotee","volunteer"}).
+		Where("LOWER(users.status) != ?", "pending") // exclude pending users
 
 	// Apply search filter
 	if search != "" {
@@ -349,7 +351,7 @@ func (r *Repository) GetUsers(ctx context.Context, limit, page int, search, role
 		baseQuery = baseQuery.Where("LOWER(user_roles.role_name) = LOWER(?)", roleFilter)
 	}
 
-	// Apply status filter
+	// Apply status filter (still allow other status filters)
 	if statusFilter != "" {
 		baseQuery = baseQuery.Where("LOWER(users.status) = LOWER(?)", statusFilter)
 	}
@@ -388,7 +390,8 @@ func (r *Repository) GetUsers(ctx context.Context, limit, page int, search, role
 		Joins("LEFT JOIN tenant_details td ON users.id = td.user_id AND user_roles.role_name = 'templeadmin'").
 		Joins("LEFT JOIN tenant_user_assignments tua ON users.id = tua.user_id AND user_roles.role_name IN ('standarduser', 'monitoringuser') AND tua.status = 'active'").
 		Joins("LEFT JOIN users tenant_user ON tua.tenant_id = tenant_user.id").
-		Where("user_roles.role_name NOT IN (?)", []string{"devotee", "volunteer"})
+		Where("user_roles.role_name NOT IN (?)", []string{"devotee", "volunteer"}).
+		Where("LOWER(users.status) != ?", "pending") 
 
 	// Apply same filters to main query
 	if search != "" {
@@ -449,14 +452,13 @@ func (r *Repository) GetUsers(ctx context.Context, limit, page int, search, role
 			}
 		}
 
-// Conditionally populate TenantAssignmentDetails and TenantAssigned string
+		// Conditionally populate TenantAssignmentDetails and TenantAssigned string
 		if tenantName != nil {
 			user.TenantAssignmentDetails = &TenantAssignmentDetails{
 				TenantName: *tenantName,
 				AssignedOn: *assignmentCreatedAt,
 				UpdatedOn:  *assignmentUpdatedAt,
 			}
-			// Set tenant name directly in UserResponse
 			user.TenantAssigned = *tenantName
 			user.AssignedDate = assignmentCreatedAt
 			user.ReassignmentDate = assignmentUpdatedAt

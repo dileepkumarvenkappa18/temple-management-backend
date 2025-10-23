@@ -409,6 +409,9 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 			// File routes for entity documents
 			entityRoutes.GET("/:id/files", entityHandler.GetEntityFiles)
 			entityRoutes.GET("/directories", entityHandler.GetAllEntityDirectories)
+			//profileHandler := userprofile.NewHandler(profileService)
+			        
+			// entityRoutes.GET("/:entityId/devotees/:userId/profile", profileHandler.GetDevoteeProfileByEntity)
 		}
 
 		// Special endpoints that bypass temple access check
@@ -474,8 +477,9 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		profileRoutes.GET("/me", middleware.RBACMiddleware("devotee"), profileHandler.GetMyProfile)
 		profileRoutes.POST("/", middleware.RBACMiddleware("devotee"), profileHandler.CreateOrUpdateProfile)
 		profileRoutes.PUT("/", middleware.RBACMiddleware("devotee"), profileHandler.CreateOrUpdateProfile)
+	
+	//entityRoutes.GET("/:entityId/devotees/:userId/profile", profileHandler.GetDevoteeProfileByEntity)
 	}
-
 	// ========== Membership (Join Temples) ==========
 	membershipRoutes := protected.Group("/memberships")
 	{

@@ -13,6 +13,8 @@ type Repository interface {
 	// DevoteeProfile methods
 	Create(profile *DevoteeProfile) error
 	GetByUserID(userID uint) (*DevoteeProfile, error)
+	// NEW: fetch a devotee profile scoped to an entity (tenant) with associations
+	GetByUserAndEntity(userID, entityID uint) (*DevoteeProfile, error)
 	Update(profile *DevoteeProfile) error
 
 	// Membership methods
@@ -69,8 +71,25 @@ func (r *repository) Create(profile *DevoteeProfile) error {
 
 func (r *repository) GetByUserID(userID uint) (*DevoteeProfile, error) {
 	var profile DevoteeProfile
-	if err := r.db.Preload("Children").Preload("EmergencyContacts").
-		Where("user_id = ?", userID).First(&profile).Error; err != nil {
+	if err := r.db.
+		Preload("Children").
+		Preload("EmergencyContacts").
+		Where("user_id = ?", userID).
+		Order("updated_at DESC").
+		First(&profile).Error; err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+// NEW: entity-scoped fetch with eager loading for UI
+func (r *repository) GetByUserAndEntity(userID, entityID uint) (*DevoteeProfile, error) {
+	var profile DevoteeProfile
+	if err := r.db.
+		Preload("Children").
+		Preload("EmergencyContacts").
+		Where("user_id = ? AND entity_id = ?", userID, entityID).
+		First(&profile).Error; err != nil {
 		return nil, err
 	}
 	return &profile, nil

@@ -2,6 +2,7 @@ package userprofile
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auth"
@@ -36,6 +37,48 @@ func (h *Handler) GetMyProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, profile)
+}
+// NEW: GET /entities/:entityId/devotees/:userId/profile
+func (h *Handler) GetDevoteeProfileByEntity(c *gin.Context) {
+    userVal, ok := c.Get("user")
+    if !ok {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+        return
+    }
+    currentUser := userVal.(auth.User)
+
+    role := currentUser.Role.RoleName
+    if !isViewerRole(role) {
+        c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: insufficient role"})
+        return
+    }
+
+    entityIDStr := c.Param("entityId")
+    userIDStr := c.Param("userId") // changed from devoteeId
+    entityID, err := parseUint(entityIDStr)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entityId"})
+        return
+    }
+    targetUserID, err := parseUint(userIDStr)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid userId"})
+        return
+    }
+
+    profile, svcErr := h.service.GetDevoteeProfileByEntity(
+        c.Request.Context(),
+        currentUser.ID,
+        role,
+        entityID,
+        targetUserID,
+    )
+    if svcErr != nil {
+        c.JSON(http.StatusForbidden, gin.H{"error": svcErr.Error()})
+        return
+    }
+
+    c.JSON(http.StatusOK, profile)
 }
 
 // POST /profiles
@@ -86,7 +129,6 @@ func (h *Handler) CreateOrUpdateProfile(c *gin.Context) {
 // ===========================
 
 // POST /memberships
-// POST /memberships
 func (h *Handler) JoinTemple(c *gin.Context) {
 	user, ok := c.Get("user")
 	if !ok {
@@ -122,7 +164,6 @@ func (h *Handler) JoinTemple(c *gin.Context) {
 	c.JSON(http.StatusOK, membership)
 }
 
-
 // GET /memberships
 func (h *Handler) ListMemberships(c *gin.Context) {
 	user, ok := c.Get("user")
@@ -147,9 +188,9 @@ func (h *Handler) ListMemberships(c *gin.Context) {
 
 // GET /temples/search?query=&state=&temple_type=
 func (h *Handler) SearchTemples(c *gin.Context) {
-	query := c.Query("query")             // name/city/state search text
-	state := c.Query("state")             // optional filter
-	templeType := c.Query("temple_type")  // optional filter
+	query := c.Query("query")       // name/city/state search text
+	state := c.Query("state")       // optional filter
+	templeType := c.Query("temple_type") // optional filter
 
 	results, err := h.service.SearchTemples(query, state, templeType)
 	if err != nil {
@@ -168,4 +209,22 @@ func (h *Handler) GetRecentTemples(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, temples)
+}
+
+// ===========================
+// 🔹 Helpers
+// ===========================
+
+func isViewerRole(role string) bool {
+	switch role {
+	case "superadmin", "tenant_admin", "entity_admin", "templeadmin":
+		return true
+	default:
+		return false
+	}
+}
+
+func parseUint(s string) (uint, error) {
+	v, err := strconv.ParseUint(s, 10, 64)
+	return uint(v), err
 }
