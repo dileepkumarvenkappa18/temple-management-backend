@@ -28,8 +28,6 @@ type Repository interface {
 	GetFullTempleByID(entityID uint) (*entity.Entity, error)
 	FetchRecentTemples() ([]entity.Entity, error)
 	UpdateMembershipStatus(userID uint, entityID uint, status string) error
-
-
 }
 
 type repository struct {
@@ -69,7 +67,6 @@ func (r *repository) Create(profile *DevoteeProfile) error {
 	return nil
 }
 
-
 func (r *repository) GetByUserID(userID uint) (*DevoteeProfile, error) {
 	var profile DevoteeProfile
 	if err := r.db.Preload("Children").Preload("EmergencyContacts").
@@ -78,7 +75,6 @@ func (r *repository) GetByUserID(userID uint) (*DevoteeProfile, error) {
 	}
 	return &profile, nil
 }
-
 
 func (r *repository) Update(profile *DevoteeProfile) error {
 	// Start a transaction to keep things consistent
@@ -113,7 +109,6 @@ func (r *repository) Update(profile *DevoteeProfile) error {
 		return nil
 	})
 }
-
 
 // ==============================
 // 🔹 Membership Operations
@@ -221,5 +216,3 @@ func (r *repository) UpdateMembershipStatus(userID uint, entityID uint, status s
 		Where("user_id = ? AND entity_id = ?", userID, entityID).
 		Update("status", status).Error
 }
-
-

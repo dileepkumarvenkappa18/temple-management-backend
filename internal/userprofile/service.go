@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
+	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/entity"
 	"gorm.io/gorm"
 )
@@ -88,14 +88,14 @@ type DevoteeProfileInput struct {
 	SpecialInterestsOrNotes    *string `json:"special_interests_or_notes"`
 
 	// Section 5
-	SpouseName         *string             `json:"spouse_name"`
-	SpouseEmail        *string             `json:"spouse_email"`
-	SpousePhone        *string             `json:"spouse_phone"`
-	SpouseDOB          *time.Time          `json:"spouse_dob"`
-	SpouseGotra        *string             `json:"spouse_gotra"`
-	SpouseNakshatra    *string             `json:"spouse_nakshatra"`
-	Children           []*Child            `json:"children"`
-	EmergencyContacts  []*EmergencyContact `json:"emergency_contacts"`
+	SpouseName        *string             `json:"spouse_name"`
+	SpouseEmail       *string             `json:"spouse_email"`
+	SpousePhone       *string             `json:"spouse_phone"`
+	SpouseDOB         *time.Time          `json:"spouse_dob"`
+	SpouseGotra       *string             `json:"spouse_gotra"`
+	SpouseNakshatra   *string             `json:"spouse_nakshatra"`
+	Children          []*Child            `json:"children"`
+	EmergencyContacts []*EmergencyContact `json:"emergency_contacts"`
 
 	// Section 6
 	HealthNotes           *string `json:"health_notes"`
@@ -119,58 +119,58 @@ func (s *service) CreateOrUpdateProfile(ctx context.Context, userID, entityID ui
 
 	// Fill the profile from input
 	profile := &DevoteeProfile{
-		UserID:                     userID,
-		EntityID:                   entityID,
-		FullName:                   input.FullName,
-		DOB:                        input.DOB,
-		Gender:                     input.Gender,
-		StreetAddress:              input.StreetAddress,
-		City:                       input.City,
-		State:                      input.State,
-		Pincode:                    input.Pincode,
-		Country:                    input.Country,
-		Gotra:                      input.Gotra,
-		Nakshatra:                  input.Nakshatra,
-		Rashi:                      input.Rashi,
-		Lagna:                      input.Lagna,
-		VedaShaka:                  input.VedaShaka,
-		FatherName:                 input.FatherName,
-		FatherGotra:                input.FatherGotra,
-		FatherNativePlace:          input.FatherNativePlace,
-		FatherVedaShaka:            input.FatherVedaShaka,
-		MotherName:                 input.MotherName,
-		MaidenGotra:                input.MaidenGotra,
-		MotherNativePlace:          input.MotherNativePlace,
-		MaternalGrandfatherName:   input.MaternalGrandfatherName,
-		PaternalGrandfatherName:   input.PaternalGrandfatherName,
-		PaternalGrandmotherName:   input.PaternalGrandmotherName,
-		MaternalGrandmotherName:   input.MaternalGrandmotherName,
-		SevaAbhisheka:              input.SevaAbhisheka,
-		SevaArti:                   input.SevaArti,
-		SevaAnnadana:               input.SevaAnnadana,
-		SevaArchana:                input.SevaArchana,
-		SevaKalyanam:               input.SevaKalyanam,
-		SevaHomam:                  input.SevaHomam,
-		DonateTempleMaintenance:    input.DonateTempleMaintenance,
-		DonateAnnadanaProgram:      input.DonateAnnadanaProgram,
-		DonateFestivalCelebrations: input.DonateFestivalCelebrations,
-		DonateReligiousEducation:   input.DonateReligiousEducation,
-		DonateTempleConstruction:   input.DonateTempleConstruction,
-		DonateGeneral:              input.DonateGeneral,
-		SpecialInterestsOrNotes:    input.SpecialInterestsOrNotes,
-		SpouseName:                 input.SpouseName,
-		SpouseEmail:                input.SpouseEmail,
-		SpousePhone:                input.SpousePhone,
-		SpouseDOB:                  input.SpouseDOB,
-		SpouseGotra:                input.SpouseGotra,
-		SpouseNakshatra:            input.SpouseNakshatra,
-		Children:                   input.Children,
-		EmergencyContacts:          input.EmergencyContacts,
-		HealthNotes:                input.HealthNotes,
-		AllergiesOrConditions:      input.AllergiesOrConditions,
-		DietaryRestrictions:        input.DietaryRestrictions,
-		PersonalSankalpa:           input.PersonalSankalpa,
-		AdditionalNotes:            input.AdditionalNotes,
+		UserID:                      userID,
+		EntityID:                    entityID,
+		FullName:                    input.FullName,
+		DOB:                         input.DOB,
+		Gender:                      input.Gender,
+		StreetAddress:               input.StreetAddress,
+		City:                        input.City,
+		State:                       input.State,
+		Pincode:                     input.Pincode,
+		Country:                     input.Country,
+		Gotra:                       input.Gotra,
+		Nakshatra:                   input.Nakshatra,
+		Rashi:                       input.Rashi,
+		Lagna:                       input.Lagna,
+		VedaShaka:                   input.VedaShaka,
+		FatherName:                  input.FatherName,
+		FatherGotra:                 input.FatherGotra,
+		FatherNativePlace:           input.FatherNativePlace,
+		FatherVedaShaka:             input.FatherVedaShaka,
+		MotherName:                  input.MotherName,
+		MaidenGotra:                 input.MaidenGotra,
+		MotherNativePlace:           input.MotherNativePlace,
+		MaternalGrandfatherName:     input.MaternalGrandfatherName,
+		PaternalGrandfatherName:     input.PaternalGrandfatherName,
+		PaternalGrandmotherName:     input.PaternalGrandmotherName,
+		MaternalGrandmotherName:     input.MaternalGrandmotherName,
+		SevaAbhisheka:               input.SevaAbhisheka,
+		SevaArti:                    input.SevaArti,
+		SevaAnnadana:                input.SevaAnnadana,
+		SevaArchana:                 input.SevaArchana,
+		SevaKalyanam:                input.SevaKalyanam,
+		SevaHomam:                   input.SevaHomam,
+		DonateTempleMaintenance:     input.DonateTempleMaintenance,
+		DonateAnnadanaProgram:       input.DonateAnnadanaProgram,
+		DonateFestivalCelebrations:  input.DonateFestivalCelebrations,
+		DonateReligiousEducation:    input.DonateReligiousEducation,
+		DonateTempleConstruction:    input.DonateTempleConstruction,
+		DonateGeneral:               input.DonateGeneral,
+		SpecialInterestsOrNotes:     input.SpecialInterestsOrNotes,
+		SpouseName:                  input.SpouseName,
+		SpouseEmail:                 input.SpouseEmail,
+		SpousePhone:                 input.SpousePhone,
+		SpouseDOB:                   input.SpouseDOB,
+		SpouseGotra:                 input.SpouseGotra,
+		SpouseNakshatra:             input.SpouseNakshatra,
+		Children:                    input.Children,
+		EmergencyContacts:           input.EmergencyContacts,
+		HealthNotes:                 input.HealthNotes,
+		AllergiesOrConditions:       input.AllergiesOrConditions,
+		DietaryRestrictions:         input.DietaryRestrictions,
+		PersonalSankalpa:            input.PersonalSankalpa,
+		AdditionalNotes:             input.AdditionalNotes,
 		ProfileCompletionPercentage: calculateCompletionPercentage(input),
 		UpdatedAt:                   time.Now(),
 	}
@@ -244,9 +244,9 @@ func (s *service) JoinTemple(ctx context.Context, userID uint, entityID uint, us
 		EntityID: entityID,
 		JoinedAt: time.Now(),
 	}
-	
+
 	err = s.repo.CreateMembership(membership)
-	
+
 	// ✅ AUDIT LOG: Temple Join
 	var action string
 	var status string

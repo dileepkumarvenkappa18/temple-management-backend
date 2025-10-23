@@ -304,7 +304,7 @@ type ApprovalStatusReportRow struct {
 	CreatedAt  time.Time  `json:"created_at"`
 	ApprovedAt *time.Time `json:"approved_at"`
 	Email      string     `json:"email"`
-	Role       string     `json:"role"` // "tenantadmin" or "templeadmin"
+	//Role       string     `json:"role"` // "tenantadmin" or "templeadmin"
 }
 type UserDetailsReportRow = UserDetailReportRow
 

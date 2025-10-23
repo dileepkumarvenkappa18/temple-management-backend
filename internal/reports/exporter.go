@@ -1009,7 +1009,7 @@ func (e *reportExporter) exportApprovalStatusCSV(rows []ApprovalStatusReportRow)
 			row.CreatedAt.Format("2006-01-02 15:04:05"),
 			approvedAt,
 			row.Email,
-			row.Role,
+			//row.Role,
 		}
 		if err := writer.Write(record); err != nil {
 			return nil, err
@@ -1040,7 +1040,7 @@ func (e *reportExporter) exportApprovalStatusExcel(rows []ApprovalStatusReportRo
 		"Created At", 
 		"Approved At", 
 		"Email", 
-		"Role",
+		//"Role",
 	}
 	for i, header := range headers {
 		cell := fmt.Sprintf("%c1", 'A'+i)
@@ -1064,7 +1064,7 @@ func (e *reportExporter) exportApprovalStatusExcel(rows []ApprovalStatusReportRo
 		f.SetCellValue(sheetName, fmt.Sprintf("F%d", rowNum), row.CreatedAt.Format("2006-01-02 15:04:05"))
 		f.SetCellValue(sheetName, fmt.Sprintf("G%d", rowNum), approvedAt)
 		f.SetCellValue(sheetName, fmt.Sprintf("H%d", rowNum), row.Email)
-		f.SetCellValue(sheetName, fmt.Sprintf("I%d", rowNum), row.Role)
+		//f.SetCellValue(sheetName, fmt.Sprintf("I%d", rowNum), row.Role)
 	}
 
 	var buf bytes.Buffer
@@ -1094,7 +1094,7 @@ func (e *reportExporter) exportApprovalStatusPDF(rows []ApprovalStatusReportRow)
 		"Created At", 
 		"Approved At", 
 		"Email", 
-		"Role",
+		//"Role",
 	}
 
 	for i, h := range headers {
@@ -1119,7 +1119,7 @@ func (e *reportExporter) exportApprovalStatusPDF(rows []ApprovalStatusReportRow)
 			row.CreatedAt.Format("2006-01-02 15:04"),
 			approvedAt,
 			row.Email,
-			row.Role,
+			//row.Role,
 		}
 
 		for i, v := range values {

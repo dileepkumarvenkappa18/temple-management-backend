@@ -63,6 +63,7 @@ func main() {
 		&event.Event{},
 		&eventrsvp.RSVP{},
 		&notification.InAppNotification{},
+		
 	); err != nil {
 		panic(fmt.Sprintf("❌ DB AutoMigrate failed: %v", err))
 	}

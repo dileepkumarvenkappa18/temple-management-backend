@@ -36,7 +36,7 @@ func (h *Handler) CreateTemplate(c *gin.Context) {
 	}
 
 	ctx := accessContext.(middleware.AccessContext)
-	
+
 	// Check if user can write (templeadmin and standarduser only)
 	if !ctx.CanWrite() {
 		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
@@ -80,7 +80,7 @@ func (h *Handler) GetTemplates(c *gin.Context) {
 	}
 
 	ctx := accessContext.(middleware.AccessContext)
-	
+
 	// Get accessible entity ID
 	entityID := ctx.GetAccessibleEntityID()
 	if entityID == nil {
@@ -107,7 +107,7 @@ func (h *Handler) GetTemplateByID(c *gin.Context) {
 	}
 
 	ctx := accessContext.(middleware.AccessContext)
-	
+
 	// Get accessible entity ID
 	entityID := ctx.GetAccessibleEntityID()
 	if entityID == nil {
@@ -140,7 +140,7 @@ func (h *Handler) UpdateTemplate(c *gin.Context) {
 	}
 
 	ctx := accessContext.(middleware.AccessContext)
-	
+
 	// Check if user can write (templeadmin and standarduser only)
 	if !ctx.CanWrite() {
 		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
@@ -191,7 +191,7 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 	}
 
 	ctx := accessContext.(middleware.AccessContext)
-	
+
 	// Check if user can write (templeadmin and standarduser only)
 	if !ctx.CanWrite() {
 		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
@@ -232,7 +232,7 @@ func (h *Handler) SendNotification(c *gin.Context) {
 	}
 
 	ctx := accessContext.(middleware.AccessContext)
-	
+
 	// Check if user can write (templeadmin and standarduser only)
 	if !ctx.CanWrite() {
 		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
@@ -249,12 +249,12 @@ func (h *Handler) SendNotification(c *gin.Context) {
 	ip := middleware.GetIPFromContext(c) // ✅ Extract IP for audit
 
 	var req struct {
-		TemplateID *uint    `json:"template_id"`                 // Optional
+		TemplateID *uint    `json:"template_id"`                // Optional
 		Channel    string   `json:"channel" binding:"required"` // email, sms, whatsapp
-		Subject    string   `json:"subject"`                     // only for email
+		Subject    string   `json:"subject"`                    // only for email
 		Body       string   `json:"body" binding:"required"`
-		Recipients []string `json:"recipients"`                  // Optional now
-		Audience   string   `json:"audience"`                    // all, devotees, volunteers
+		Recipients []string `json:"recipients"` // Optional now
+		Audience   string   `json:"audience"`   // all, devotees, volunteers
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {

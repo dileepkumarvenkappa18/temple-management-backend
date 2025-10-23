@@ -499,10 +499,7 @@ applyDateFilter := !start.IsZero() && !end.IsZero() && start.Year() > 1
 		}
 
 		// Mark these as 'tenantadmin' for the report
-		for i := range tenantRows {
-			tenantRows[i].Role = "tenantadmin"
-		}
-
+		
 		fmt.Printf("   ✅ Fetched %d tenant admin records\n", len(tenantRows))
 		
 		// Debug: Print tenant records
