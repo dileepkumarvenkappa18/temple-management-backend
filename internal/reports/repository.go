@@ -437,74 +437,197 @@ func (r *repository) GetAuditLogs(entityIDs []uint, start, end time.Time, action
 func (r *repository) GetApprovalStatus(entityIDs []uint, start, end time.Time, role, status string) ([]ApprovalStatusReportRow, error) {
 	var rows []ApprovalStatusReportRow
 
-	// Query for both tenant-level and temple-level approvals
-	query := r.db.Table("users u").
-		Select(`
-			'NA' as tenant_id,
-			'NA' as tenant_name,
-			COALESCE(CAST(e.id AS CHAR), 'NA') as entity_id,
-			COALESCE(e.name, 'NA') as entity_name,
-			COALESCE(uem.status, u.status, 'pending') as status,
-			u.created_at,
-			CASE 
-				WHEN COALESCE(uem.status, u.status) = 'approved' THEN COALESCE(uem.joined_at, u.created_at)
-				ELSE NULL
-			END as approved_at,
-			u.email,
-			ur.role_name as role
-		`).
+applyDateFilter := !start.IsZero() && !end.IsZero() && start.Year() > 1
+	// Check role names
+	var roleCheck []struct {
+		RoleName string
+		Count    int64
+	}
+	r.db.Table("users u").
+		Select("ur.role_name, COUNT(*) as count").
 		Joins("INNER JOIN user_roles ur ON u.role_id = ur.id").
-		Joins("LEFT JOIN user_entity_memberships uem ON u.id = uem.user_id").
-		Joins("LEFT JOIN entities e ON uem.entity_id = e.id")
+		Group("ur.role_name").
+		Scan(&roleCheck)
+	
+	fmt.Printf("   📊 Users by role in database:\n")
+	for _, rc := range roleCheck {
+		fmt.Printf("      - %s: %d users\n", rc.RoleName, rc.Count)
+	}
+	var tenantRows []ApprovalStatusReportRow
+	
+	if role == "" || role == "tenantadmin" {
+		fmt.Printf("\n    Fetching Tenant Admin Approvals...\n")
+		
+		// Query for BOTH tenantadmin and templeadmin roles
+		// because in your system, templeadmin users are the tenant-level admins
+		tenantQuery := r.db.Table("users u").
+			Select(`
+				CAST(u.id AS VARCHAR) as tenant_id,
+				u.full_name as tenant_name,
+				'N/A' as entity_id,
+				'N/A' as entity_name,
+				COALESCE(u.status, 'pending') as status,
+				u.created_at,
+				CASE 
+					WHEN u.status = 'approved' THEN u.updated_at
+					ELSE NULL
+				END as approved_at,
+				u.email,
+				ur.role_name as role
+			`).
+			Joins("INNER JOIN user_roles ur ON u.role_id = ur.id").
+			Where("ur.role_name IN (?)", []string{"tenantadmin", "templeadmin"})
 
-	// Filter by role if specified, otherwise get both tenantadmin and templeadmin
-	if role != "" {
-		query = query.Where("ur.role_name = ?", role)
-	} else {
-		query = query.Where("ur.role_name IN ('tenantadmin', 'templeadmin')")
+		// Apply date filter if valid
+		if applyDateFilter {
+			
+			tenantQuery = tenantQuery.Where("u.created_at BETWEEN ? AND ?", start, end)
+		} else {
+			
+		}
+
+		// Apply status filter
+		if status != "" {
+			fmt.Printf("      🎯 Applying status filter: %s\n", status)
+			tenantQuery = tenantQuery.Where("u.status = ?", status)
+		}
+
+		// Execute tenant query
+		if err := tenantQuery.Order("u.created_at DESC").Scan(&tenantRows).Error; err != nil {
+			fmt.Printf("❌ Error fetching tenant admins: %v\n", err)
+			return nil, err
+		}
+
+		// Mark these as 'tenantadmin' for the report
+		for i := range tenantRows {
+			tenantRows[i].Role = "tenantadmin"
+		}
+
+		fmt.Printf("   ✅ Fetched %d tenant admin records\n", len(tenantRows))
+		
+		// Debug: Print tenant records
+		if len(tenantRows) > 0 {
+			fmt.Printf("   📋 Tenant admin records:\n")
+			for i, row := range tenantRows {
+				if i < 5 {
+					fmt.Printf("      %d. TenantID=%s, Name=%s, Status=%s, Email=%s, Created=%s\n",
+						i+1, row.TenantID, row.TenantName, row.Status, row.Email, 
+						row.CreatedAt.Format("2006-01-02"))
+				}
+			}
+		} else {
+			fmt.Printf("   ⚠️ No tenant admin records found!\n")
+		}
 	}
 
-	// Optional: filter by specific entity IDs
-	if len(entityIDs) > 0 {
-		query = query.Where("e.id IN ?", entityIDs)
+	// ============================================
+	// STEP 2: FETCH TEMPLE (ENTITY) APPROVALS
+	// These are the temples/entities created by the tenant admins
+	// ============================================
+	var templeRows []ApprovalStatusReportRow
+	
+	if role == "" || role == "templeadmin" {
+		
+		
+		templeQuery := r.db.Table("entities e").
+			Select(`
+				CAST(e.created_by AS VARCHAR) as tenant_id,
+				u.full_name as tenant_name,
+				CAST(e.id AS VARCHAR) as entity_id,
+				e.name as entity_name,
+				COALESCE(e.status, 'pending') as status,
+				e.created_at,
+				CASE 
+					WHEN e.status = 'approved' THEN e.updated_at
+					ELSE NULL
+				END as approved_at,
+				u.email,
+				'templeadmin' as role
+			`).
+			Joins("INNER JOIN users u ON e.created_by = u.id")
+
+		// Apply entity filter if provided (for non-superadmin users)
+		if len(entityIDs) > 0 {
+			
+			templeQuery = templeQuery.Where("e.id IN ?", entityIDs)
+		}
+
+		// Apply date filter if valid
+		if applyDateFilter {
+			fmt.Printf("      ⏰ Applying date filter for entities: %s to %s\n", 
+				start.Format("2006-01-02"), end.Format("2006-01-02"))
+			templeQuery = templeQuery.Where("e.created_at BETWEEN ? AND ?", start, end)
+		} else {
+			fmt.Printf("      ⚠️ No date filter - fetching ALL entities\n")
+		}
+
+		// Apply status filter (entity status)
+		if status != "" {
+		
+			templeQuery = templeQuery.Where("e.status = ?", status)
+		}
+
+		// Execute temple query
+		if err := templeQuery.Order("e.created_at DESC").Scan(&templeRows).Error; err != nil {
+			fmt.Printf("❌ Error fetching temple/entity records: %v\n", err)
+			return nil, err
+		}
+
+	
+		
+		// Debug: Print temple records
+		if len(templeRows) > 0 {
+		
+			for i, row := range templeRows {
+				if i < 3 {
+					fmt.Printf("      %d. TenantID=%s, TenantName=%s, EntityID=%s, EntityName=%s, Status=%s\n",
+						i+1, row.TenantID, row.TenantName, row.EntityID, row.EntityName, row.Status)
+				}
+			}
+		}
 	}
 
-	// Optional: filter by date range
-	if !start.IsZero() && !end.IsZero() {
-		query = query.Where("u.created_at BETWEEN ? AND ?", start, end)
-	}
+	// ============================================
+	// STEP 3: COMBINE RESULTS
+	// ============================================
+	rows = append(tenantRows, templeRows...)
 
-	// Optional: filter by status
-	if status != "" {
-		query = query.Where("(uem.status = ? OR (uem.status IS NULL AND u.status = ?))", status, status)
-	}
 
-	// Order by user creation date
-	query = query.Order("u.created_at DESC")
-
-	// Execute query
-	err := query.Scan(&rows).Error
-
-	// Post-process to ensure no empty values
+	// Post-process to ensure no empty/null values
 	for i := range rows {
 		if rows[i].Status == "" {
 			rows[i].Status = "pending"
 		}
-		if rows[i].TenantID == "" {
-			rows[i].TenantID = "NA"
+		if rows[i].TenantID == "" || rows[i].TenantID == "0" {
+			rows[i].TenantID = "N/A"
 		}
 		if rows[i].TenantName == "" {
-			rows[i].TenantName = "NA"
+			rows[i].TenantName = "N/A"
 		}
-		if rows[i].EntityID == "" {
-			rows[i].EntityID = "NA"
+		if rows[i].EntityID == "" || rows[i].EntityID == "0" {
+			rows[i].EntityID = "N/A"
 		}
 		if rows[i].EntityName == "" {
-			rows[i].EntityName = "NA"
+			rows[i].EntityName = "N/A"
+		}
+		if rows[i].Email == "" {
+			rows[i].Email = "N/A"
 		}
 	}
 
-	return rows, err
+	// Sort by created_at DESC to show most recent first
+	if len(rows) > 1 {
+		for i := 0; i < len(rows)-1; i++ {
+			for j := i + 1; j < len(rows); j++ {
+				if rows[i].CreatedAt.Before(rows[j].CreatedAt) {
+					rows[i], rows[j] = rows[j], rows[i]
+				}
+			}
+		}
+	}
+
+	fmt.Printf("✅ Returning %d approval status records\n", len(rows))
+	return rows, nil
 }
 func (r *repository) GetUserDetails(entityIDs []uint, start, end time.Time, role, status string) ([]UserDetailsReportRow, error) {
 	var rows []UserDetailsReportRow

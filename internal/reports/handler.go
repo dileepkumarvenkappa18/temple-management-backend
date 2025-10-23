@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
@@ -2440,10 +2441,6 @@ func (h *Handler) GetSuperAdminTenantAuditLogsReport(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
 	c.Data(http.StatusOK, mime, bytes)
 }
-
-// ==============================
-// Approval Status Report Handler
-// ==============================
 // GetApprovalStatusReport handles requests for approval status reports
 func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
 	// Access context from middleware
@@ -2456,7 +2453,7 @@ func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
 	ip := middleware.GetIPFromContext(c)
 
 	// Query params
-	role := c.Query("role")     // "Tenant" or "Temple"
+	role := c.Query("role")     // "tenantadmin" or "templeadmin" or empty (both)
 	status := c.Query("status") // "approved", "rejected", "pending", etc.
 	dateRange := c.Query("date_range")
 	if dateRange == "" {
@@ -2466,14 +2463,28 @@ func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
 	endDateStr := c.Query("end_date")
 	format := c.Query("format") // excel, csv, pdf -> empty = JSON
 
-	// Debug log
-	fmt.Printf("Processing approval status report: role=%s, status=%s, format=%s\n", role, status, format)
+	fmt.Printf("\n📋 Handler: Processing approval status report\n")
+	fmt.Printf("   Role: '%s'\n", role)
+	fmt.Printf("   Status: '%s'\n", status)
+	fmt.Printf("   DateRange: '%s'\n", dateRange)
+	fmt.Printf("   Format: '%s'\n", format)
 
-	// Compute start & end dates
-	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	// Handle date range - allow fetching all records if not specified
+	var start, end time.Time
+	var err error
+
+	if startDateStr != "" && endDateStr != "" {
+		start, end, err = GetDateRange(dateRange, startDateStr, endDateStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		fmt.Printf("   ✅ Date filter: %s to %s\n", start.Format("2006-01-02"), end.Format("2006-01-02"))
+	} else {
+		// No date filter - fetch all records
+		fmt.Printf("   ⚠️ No date filter - fetching ALL approval records\n")
+		start = time.Time{}
+		end = time.Time{}
 	}
 
 	// Create request object
@@ -2491,16 +2502,12 @@ func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
 	var entityIDs []string
 	switch ctx.RoleName {
 	case "superadmin":
-		// Superadmin can access all entities (pass empty slice for all)
-		// Keep entityIDs as empty slice
-	case "tenantadmin":
-		accessibleEntityID := ctx.GetAccessibleEntityID()
-		if accessibleEntityID == nil {
-			c.JSON(http.StatusForbidden, gin.H{"error": "no accessible tenant entity"})
-			return
-		}
-		entityIDs = append(entityIDs, fmt.Sprint(*accessibleEntityID))
+		// Superadmin can access all entities
+		fmt.Printf("   👑 SuperAdmin: No entity filter (access all)\n")
+		// Keep entityIDs empty for all access
+		
 	case "templeadmin":
+		// Temple admin can only see their own entities
 		ids, err := h.repo.GetEntitiesByTenant(ctx.UserID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch temple entities"})
@@ -2509,6 +2516,8 @@ func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
 		for _, id := range ids {
 			entityIDs = append(entityIDs, fmt.Sprint(id))
 		}
+		fmt.Printf("   🛕 TempleAdmin: Entity filter = %v\n", entityIDs)
+		
 	default:
 		c.JSON(http.StatusForbidden, gin.H{"error": "role not allowed for approval reports"})
 		return
@@ -2543,6 +2552,13 @@ func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"report_type": "approval-status",
 			"data":        data,
+			"meta": gin.H{
+				"total_records": len(data),
+				"filters": gin.H{
+					"role":   role,
+					"status": status,
+				},
+			},
 		})
 		return
 	}
@@ -2578,7 +2594,6 @@ func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
 	c.Data(http.StatusOK, mime, bytes)
 }
-
 // ==============================
 // User Details Report Handler
 // ==============================

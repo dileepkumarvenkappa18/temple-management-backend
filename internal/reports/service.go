@@ -419,12 +419,14 @@ func (s *reportService) ExportAuditLogsReport(ctx context.Context, req AuditLogR
 	return bytes, filename, mimeType, nil
 }
 
-// ===============================
-// Approval Status Reports
-// ===============================
-
 func (s *reportService) GetApprovalStatusReport(req ApprovalStatusReportRequest, entityIDs []string) ([]ApprovalStatusReportRow, error) {
 	ids := convertUintSlice(entityIDs)
+	
+	fmt.Printf("\n📋 Service: GetApprovalStatusReport\n")
+	fmt.Printf("   Role: '%s'\n", req.Role)
+	fmt.Printf("   Status: '%s'\n", req.Status)
+	fmt.Printf("   Entity IDs: %v\n", ids)
+	
 	return s.repo.GetApprovalStatus(ids, req.StartDate, req.EndDate, req.Role, req.Status)
 }
 

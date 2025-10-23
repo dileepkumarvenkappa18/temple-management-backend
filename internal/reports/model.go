@@ -283,29 +283,28 @@ type AuditLogReportRow struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-// ApprovalStatusReportRequest represents request parameters for approval status report
+// ApprovalStatusReportRequest defines filters for approval status report
 type ApprovalStatusReportRequest struct {
-	EntityID  string    `json:"entity_id"`
-	Role      string    `json:"role"` // "Tenant" or "Temple"
-	Status    string    `json:"status"` // "pending", "approved", "rejected"
-	DateRange string    `json:"date_range"`
-	StartDate time.Time `json:"start_date"`
-	EndDate   time.Time `json:"end_date"`
-	Format    string    `json:"format"`
-	UserID    uint      `json:"user_id"`
+	Role      string    // "tenantadmin" or "templeadmin" or empty (both)
+	Status    string    // "approved", "rejected", "pending"
+	DateRange string    // "weekly", "monthly", etc.
+	StartDate time.Time
+	EndDate   time.Time
+	Format    string // "excel", "csv", "pdf", or empty for JSON
+	UserID    uint   // Current user requesting the report
 }
 
-// ApprovalStatusReportRow represents a detailed approval status row with tenant and entity information
+// ApprovalStatusReportRow represents a single row in the approval status report
 type ApprovalStatusReportRow struct {
-	TenantID     string    `json:"tenant_id"`     // User ID if Tenant role, otherwise NA
-	TenantName   string    `json:"tenant_name"`   // Full name of tenant
-	EntityID     string    `json:"entity_id"`     // Entity ID if Temple role, otherwise NA
-	EntityName   string    `json:"entity_name"`   // Entity name if Temple role, otherwise NA
-	Status       string    `json:"status"`        // pending, approved, rejected
-	CreatedAt    time.Time `json:"created_at"`    // When user was created
-	ApprovedAt   *time.Time `json:"approved_at"`  // When approval happened (nullable)
-	Email        string    `json:"email"`         // User email
-	Role         string    `json:"role"`          // Tenant or Temple
+	TenantID   string     `json:"tenant_id"`
+	TenantName string     `json:"tenant_name"`
+	EntityID   string     `json:"entity_id"`
+	EntityName string     `json:"entity_name"`
+	Status     string     `json:"status"`
+	CreatedAt  time.Time  `json:"created_at"`
+	ApprovedAt *time.Time `json:"approved_at"`
+	Email      string     `json:"email"`
+	Role       string     `json:"role"` // "tenantadmin" or "templeadmin"
 }
 type UserDetailsReportRow = UserDetailReportRow
 
