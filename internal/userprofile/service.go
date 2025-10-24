@@ -16,14 +16,12 @@ import (
 type Service interface {
 	CreateOrUpdateProfile(ctx context.Context, userID uint, entityID uint, input DevoteeProfileInput, ip string) (*DevoteeProfile, error)
 	Get(userID uint) (*DevoteeProfile, error)
+	GetByUserIDAndEntity(userID uint, entityID uint) (*DevoteeProfile, error)
 	JoinTemple(ctx context.Context, userID uint, entityID uint, userRole string, ip string) (*UserEntityMembership, error)
 	ListMemberships(userID uint) ([]UserEntityMembership, error)
 	SearchTemples(query, state, templeType string) ([]entity.Entity, error)
 	GetRecentTemples() ([]entity.Entity, error)
 	UpdateMembershipStatus(userID uint, entityID uint, status string) error
-
-	// NEW: Admin view of devotee profile within an entity scope
-	GetDevoteeProfileByEntity(ctx context.Context, requesterID uint, requesterRole string, entityID uint, targetUserID uint) (*DevoteeProfile, error)
 }
 
 // ========== SERVICE INIT ==========
@@ -76,19 +74,19 @@ type DevoteeProfileInput struct {
 	MaternalGrandmotherName *string `json:"maternal_grandmother_name"`
 
 	// Section 4
-	SevaAbhisheka             *bool   `json:"seva_abhisheka"`
-	SevaArti                  *bool   `json:"seva_arti"`
-	SevaAnnadana              *bool   `json:"seva_annadana"`
-	SevaArchana               *bool   `json:"seva_archana"`
-	SevaKalyanam              *bool   `json:"seva_kalyanam"`
-	SevaHomam                 *bool   `json:"seva_homam"`
-	DonateTempleMaintenance   *bool   `json:"donate_temple_maintenance"`
-	DonateAnnadanaProgram     *bool   `json:"donate_annadana_program"`
-	DonateFestivalCelebrations *bool  `json:"donate_festival_celebrations"`
-	DonateReligiousEducation  *bool   `json:"donate_religious_education"`
-	DonateTempleConstruction  *bool   `json:"donate_temple_construction"`
-	DonateGeneral             *bool   `json:"donate_general"`
-	SpecialInterestsOrNotes   *string `json:"special_interests_or_notes"`
+	SevaAbhisheka              *bool   `json:"seva_abhisheka"`
+	SevaArti                   *bool   `json:"seva_arti"`
+	SevaAnnadana               *bool   `json:"seva_annadana"`
+	SevaArchana                *bool   `json:"seva_archana"`
+	SevaKalyanam               *bool   `json:"seva_kalyanam"`
+	SevaHomam                  *bool   `json:"seva_homam"`
+	DonateTempleMaintenance    *bool   `json:"donate_temple_maintenance"`
+	DonateAnnadanaProgram      *bool   `json:"donate_annadana_program"`
+	DonateFestivalCelebrations *bool   `json:"donate_festival_celebrations"`
+	DonateReligiousEducation   *bool   `json:"donate_religious_education"`
+	DonateTempleConstruction   *bool   `json:"donate_temple_construction"`
+	DonateGeneral              *bool   `json:"donate_general"`
+	SpecialInterestsOrNotes    *string `json:"special_interests_or_notes"`
 
 	// Section 5
 	SpouseName        *string             `json:"spouse_name"`
@@ -101,11 +99,11 @@ type DevoteeProfileInput struct {
 	EmergencyContacts []*EmergencyContact `json:"emergency_contacts"`
 
 	// Section 6
-	HealthNotes          *string `json:"health_notes"`
+	HealthNotes           *string `json:"health_notes"`
 	AllergiesOrConditions *string `json:"allergies_or_conditions"`
-	DietaryRestrictions  *string `json:"dietary_restrictions"`
-	PersonalSankalpa     *string `json:"personal_sankalpa"`
-	AdditionalNotes      *string `json:"additional_notes"`
+	DietaryRestrictions   *string `json:"dietary_restrictions"`
+	PersonalSankalpa      *string `json:"personal_sankalpa"`
+	AdditionalNotes       *string `json:"additional_notes"`
 }
 
 // ========== PROFILE LOGIC ==========
@@ -114,87 +112,100 @@ func (s *service) Get(userID uint) (*DevoteeProfile, error) {
 	return s.repo.GetByUserID(userID)
 }
 
+func (s *service) GetByUserIDAndEntity(userID uint, entityID uint) (*DevoteeProfile, error) {
+	profile, err := s.repo.GetByUserIDAndEntity(userID, entityID)
+	if err != nil {
+		return nil, err
+	}
+	return profile, nil
+}
+
 func (s *service) CreateOrUpdateProfile(ctx context.Context, userID, entityID uint, input DevoteeProfileInput, ip string) (*DevoteeProfile, error) {
 	existing, err := s.repo.GetByUserID(userID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
 
+	// Fill the profile from input
 	profile := &DevoteeProfile{
-		UserID:                       userID,
-		EntityID:                     entityID,
-		FullName:                     input.FullName,
-		DOB:                          input.DOB,
-		Gender:                       input.Gender,
-		StreetAddress:                input.StreetAddress,
-		City:                         input.City,
-		State:                        input.State,
-		Pincode:                      input.Pincode,
-		Country:                      input.Country,
-		Gotra:                        input.Gotra,
-		Nakshatra:                    input.Nakshatra,
-		Rashi:                        input.Rashi,
-		Lagna:                        input.Lagna,
-		VedaShaka:                    input.VedaShaka,
-		FatherName:                   input.FatherName,
-		FatherGotra:                  input.FatherGotra,
-		FatherNativePlace:            input.FatherNativePlace,
-		FatherVedaShaka:              input.FatherVedaShaka,
-		MotherName:                   input.MotherName,
-		MaidenGotra:                  input.MaidenGotra,
-		MotherNativePlace:            input.MotherNativePlace,
-		MaternalGrandfatherName:      input.MaternalGrandfatherName,
-		PaternalGrandfatherName:      input.PaternalGrandfatherName,
-		PaternalGrandmotherName:      input.PaternalGrandmotherName,
-		MaternalGrandmotherName:      input.MaternalGrandmotherName,
-		SevaAbhisheka:                input.SevaAbhisheka,
-		SevaArti:                     input.SevaArti,
-		SevaAnnadana:                 input.SevaAnnadana,
-		SevaArchana:                  input.SevaArchana,
-		SevaKalyanam:                 input.SevaKalyanam,
-		SevaHomam:                    input.SevaHomam,
-		DonateTempleMaintenance:      input.DonateTempleMaintenance,
-		DonateAnnadanaProgram:        input.DonateAnnadanaProgram,
-		DonateFestivalCelebrations:   input.DonateFestivalCelebrations,
-		DonateReligiousEducation:     input.DonateReligiousEducation,
-		DonateTempleConstruction:     input.DonateTempleConstruction,
-		DonateGeneral:                input.DonateGeneral,
-		SpecialInterestsOrNotes:      input.SpecialInterestsOrNotes,
-		SpouseName:                   input.SpouseName,
-		SpouseEmail:                  input.SpouseEmail,
-		SpousePhone:                  input.SpousePhone,
-		SpouseDOB:                    input.SpouseDOB,
-		SpouseGotra:                  input.SpouseGotra,
-		SpouseNakshatra:              input.SpouseNakshatra,
-		Children:                     input.Children,
-		EmergencyContacts:            input.EmergencyContacts,
-		HealthNotes:                  input.HealthNotes,
-		AllergiesOrConditions:        input.AllergiesOrConditions,
-		DietaryRestrictions:          input.DietaryRestrictions,
-		PersonalSankalpa:             input.PersonalSankalpa,
-		AdditionalNotes:              input.AdditionalNotes,
-		ProfileCompletionPercentage:  calculateCompletionPercentage(input),
-		UpdatedAt:                    time.Now(),
+		UserID:                      userID,
+		EntityID:                    entityID,
+		FullName:                    input.FullName,
+		DOB:                         input.DOB,
+		Gender:                      input.Gender,
+		StreetAddress:               input.StreetAddress,
+		City:                        input.City,
+		State:                       input.State,
+		Pincode:                     input.Pincode,
+		Country:                     input.Country,
+		Gotra:                       input.Gotra,
+		Nakshatra:                   input.Nakshatra,
+		Rashi:                       input.Rashi,
+		Lagna:                       input.Lagna,
+		VedaShaka:                   input.VedaShaka,
+		FatherName:                  input.FatherName,
+		FatherGotra:                 input.FatherGotra,
+		FatherNativePlace:           input.FatherNativePlace,
+		FatherVedaShaka:             input.FatherVedaShaka,
+		MotherName:                  input.MotherName,
+		MaidenGotra:                 input.MaidenGotra,
+		MotherNativePlace:           input.MotherNativePlace,
+		MaternalGrandfatherName:     input.MaternalGrandfatherName,
+		PaternalGrandfatherName:     input.PaternalGrandfatherName,
+		PaternalGrandmotherName:     input.PaternalGrandmotherName,
+		MaternalGrandmotherName:     input.MaternalGrandmotherName,
+		SevaAbhisheka:               input.SevaAbhisheka,
+		SevaArti:                    input.SevaArti,
+		SevaAnnadana:                input.SevaAnnadana,
+		SevaArchana:                 input.SevaArchana,
+		SevaKalyanam:                input.SevaKalyanam,
+		SevaHomam:                   input.SevaHomam,
+		DonateTempleMaintenance:     input.DonateTempleMaintenance,
+		DonateAnnadanaProgram:       input.DonateAnnadanaProgram,
+		DonateFestivalCelebrations:  input.DonateFestivalCelebrations,
+		DonateReligiousEducation:    input.DonateReligiousEducation,
+		DonateTempleConstruction:    input.DonateTempleConstruction,
+		DonateGeneral:               input.DonateGeneral,
+		SpecialInterestsOrNotes:     input.SpecialInterestsOrNotes,
+		SpouseName:                  input.SpouseName,
+		SpouseEmail:                 input.SpouseEmail,
+		SpousePhone:                 input.SpousePhone,
+		SpouseDOB:                   input.SpouseDOB,
+		SpouseGotra:                 input.SpouseGotra,
+		SpouseNakshatra:             input.SpouseNakshatra,
+		Children:                    input.Children,
+		EmergencyContacts:           input.EmergencyContacts,
+		HealthNotes:                 input.HealthNotes,
+		AllergiesOrConditions:       input.AllergiesOrConditions,
+		DietaryRestrictions:         input.DietaryRestrictions,
+		PersonalSankalpa:            input.PersonalSankalpa,
+		AdditionalNotes:             input.AdditionalNotes,
+		ProfileCompletionPercentage: calculateCompletionPercentage(input),
+		UpdatedAt:                   time.Now(),
 	}
 
 	var action string
 	var status string
 
+	// If profile already exists, update it
 	if existing != nil && existing.ID > 0 {
 		profile.ID = existing.ID
 		err = s.repo.Update(profile)
 		action = "PROFILE_UPDATED"
 	} else {
+		// Else create new
 		err = s.repo.Create(profile)
 		action = "PROFILE_CREATED"
 	}
 
+	// ✅ AUDIT LOG: Profile Create/Update
 	if err != nil {
 		status = "failure"
 	} else {
 		status = "success"
 	}
 
+	// Get profile name for audit details
 	profileName := ""
 	if input.FullName != nil {
 		profileName = *input.FullName
@@ -206,37 +217,12 @@ func (s *service) CreateOrUpdateProfile(ctx context.Context, userID, entityID ui
 		"entity_id":  entityID,
 	}
 
+	// Log the audit action (don't fail the operation if audit fails)
 	if auditErr := s.auditSvc.LogAction(ctx, &userID, &entityID, action, auditDetails, ip, status); auditErr != nil {
-		// swallow audit errors
+		// Log error but don't fail the operation
 	}
 
 	return profile, err
-}
-
-// NEW: Admin-view profile loader with RBAC and tenant scoping
-func (s *service) GetDevoteeProfileByEntity(ctx context.Context, requesterID uint, requesterRole string, entityID uint, targetUserID uint) (*DevoteeProfile, error) {
-	// Role-level check
-	if !canViewDevoteeProfile(requesterRole) {
-		return nil, errors.New("forbidden")
-	}
-
-	// Scope check for non-superadmins: must be active member (or admin) of the entity
-	if requesterRole != "superadmin" {
-		m, err := s.repo.GetMembership(requesterID, entityID)
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
-		if m == nil || m.Status != "active" {
-			return nil, errors.New("forbidden")
-		}
-	}
-
-	// Load the devotee's profile within the entity (with associations in repo)
-	profile, err := s.repo.GetByUserAndEntity(targetUserID, entityID)
-	if err != nil {
-		return nil, err
-	}
-	return profile, nil
 }
 
 // ========== MEMBERSHIP LOGIC ==========
@@ -269,6 +255,7 @@ func (s *service) JoinTemple(ctx context.Context, userID uint, entityID uint, us
 
 	err = s.repo.CreateMembership(membership)
 
+	// ✅ AUDIT LOG: Temple Join
 	var action string
 	var status string
 
@@ -278,6 +265,7 @@ func (s *service) JoinTemple(ctx context.Context, userID uint, entityID uint, us
 		status = "success"
 	}
 
+	// Determine action based on user role
 	switch userRole {
 	case "volunteer":
 		action = "VOLUNTEER_JOINED_TEMPLE"
@@ -293,8 +281,9 @@ func (s *service) JoinTemple(ctx context.Context, userID uint, entityID uint, us
 		"entity_id":   entityID,
 	}
 
+	// Log the audit action
 	if auditErr := s.auditSvc.LogAction(ctx, &userID, &entityID, action, auditDetails, ip, status); auditErr != nil {
-		// swallow audit errors
+		// Log error but don't fail the operation
 	}
 
 	if err != nil {
@@ -362,15 +351,4 @@ func (s *service) GetRecentTemples() ([]entity.Entity, error) {
 
 func (s *service) UpdateMembershipStatus(userID uint, entityID uint, status string) error {
 	return s.repo.UpdateMembershipStatus(userID, entityID, status)
-}
-
-// ========== HELPERS ==========
-
-func canViewDevoteeProfile(role string) bool {
-	switch role {
-	case "superadmin", "tenant_admin", "entity_admin", "templeadmin":
-		return true
-	default:
-		return false
-	}
 }

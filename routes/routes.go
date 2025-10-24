@@ -351,82 +351,81 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		devoteeSevaRoutes.GET("/my-bookings", sevaHandler.GetMyBookings)
 		devoteeSevaRoutes.GET("/", sevaHandler.GetSevas)
 	}
+// ========== Entity ==========
+{
+	entityRepo := entity.NewRepository(database.DB)
+	profileRepo := userprofile.NewRepository(database.DB)
+	profileService := userprofile.NewService(profileRepo, authRepo, auditSvc)
+	profileHandler := userprofile.NewHandler(profileService)
 
-	// ========== Entity ==========
-	{
-		entityRepo := entity.NewRepository(database.DB)
-		profileRepo := userprofile.NewRepository(database.DB)
-		profileService := userprofile.NewService(profileRepo, authRepo, auditSvc)
+	entityService := entity.NewService(entityRepo, profileService, auditSvc)
+	// UPDATED: Use persistent volume path and proper file serving path
+	entityHandler := entity.NewHandler(entityService, "/data/uploads", "/files")
 
-		entityService := entity.NewService(entityRepo, profileService, auditSvc)
-		// UPDATED: Use persistent volume path and proper file serving path
-		entityHandler := entity.NewHandler(entityService, "/data/uploads", "/files")
-
-		// Add special endpoint for templeadmins to view their created entities
-		protected.GET("/entities/by-creator", middleware.RBACMiddleware("templeadmin"), func(c *gin.Context) {
-			// Get user ID from context
-			userVal, exists := c.Get("user")
-			if !exists {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-				return
-			}
-
-			user, ok := userVal.(auth.User)
-			if !ok {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user object"})
-				return
-			}
-
-			// Call repository to get entities created by this user
-			entities, err := entityRepo.GetEntitiesByCreator(user.ID)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch temples", "details": err.Error()})
-				return
-			}
-
-			c.JSON(http.StatusOK, entities)
-		})
-
-		// Entity routes with proper permission system
-		entityRoutes := protected.Group("/entities")
-		// Allow templeadmin, standarduser, monitoringuser to access entity routes
-		entityRoutes.Use(middleware.RequireTempleAccess())
-		{
-			// Write operations - only templeadmin and standarduser can access
-			writeRoutes := entityRoutes.Group("")
-			writeRoutes.Use(middleware.RequireWriteAccess())
-			{
-				writeRoutes.PUT("/:id", entityHandler.UpdateEntity)
-				writeRoutes.DELETE("/:id", entityHandler.DeleteEntity)
-				writeRoutes.PATCH("/:entityID/devotees/:userID/status", entityHandler.UpdateDevoteeMembershipStatus)
-			}
-
-			// Read operations - all three roles can access
-			entityRoutes.GET("/:id", entityHandler.GetEntityByID)
-			entityRoutes.GET("/:id/devotees", entityHandler.GetDevoteesByEntity)
-			entityRoutes.GET("/:id/devotee-stats", entityHandler.GetDevoteeStats)
-			entityRoutes.GET("/dashboard-summary", entityHandler.GetDashboardSummary)
-			// File routes for entity documents
-			entityRoutes.GET("/:id/files", entityHandler.GetEntityFiles)
-			entityRoutes.GET("/directories", entityHandler.GetAllEntityDirectories)
-			//profileHandler := userprofile.NewHandler(profileService)
-			        
-			// entityRoutes.GET("/:entityId/devotees/:userId/profile", profileHandler.GetDevoteeProfileByEntity)
+	// Add special endpoint for templeadmins to view their created entities
+	protected.GET("/entities/by-creator", middleware.RBACMiddleware("templeadmin"), func(c *gin.Context) {
+		// Get user ID from context
+		userVal, exists := c.Get("user")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
 		}
 
-		// Special endpoints that bypass temple access check
-		// CreateEntity - allowed for templeadmin, superadmin, standarduser
-		protected.POST("/entities",
-			middleware.RBACMiddleware("templeadmin", "superadmin", "standarduser"),
-			entityHandler.CreateEntity,
-		)
+		user, ok := userVal.(auth.User)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user object"})
+			return
+		}
 
-		// GetAllEntities - allowed for templeadmin, superadmin, standarduser, monitoringuser
-		protected.GET("/entities",
-			middleware.RBACMiddleware("templeadmin", "superadmin", "standarduser", "monitoringuser"),
-			entityHandler.GetAllEntities,
-		)
+		// Call repository to get entities created by this user
+		entities, err := entityRepo.GetEntitiesByCreator(user.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch temples", "details": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, entities)
+	})
+
+	// Entity routes with proper permission system
+	entityRoutes := protected.Group("/entities")
+	// Allow templeadmin, standarduser, monitoringuser to access entity routes
+	entityRoutes.Use(middleware.RequireTempleAccess())
+	{
+		// Write operations - only templeadmin and standarduser can access
+		writeRoutes := entityRoutes.Group("")
+		writeRoutes.Use(middleware.RequireWriteAccess())
+		{
+			writeRoutes.PUT("/:id", entityHandler.UpdateEntity)
+			writeRoutes.DELETE("/:id", entityHandler.DeleteEntity)
+			writeRoutes.PATCH("/:id/devotees/:userID/status", entityHandler.UpdateDevoteeMembershipStatus)
+		}
+
+		// Read operations - all three roles can access
+		entityRoutes.GET("/:id", entityHandler.GetEntityByID)
+		entityRoutes.GET("/:id/devotees", entityHandler.GetDevoteesByEntity)
+		entityRoutes.GET("/:id/devotee-stats", entityHandler.GetDevoteeStats)
+		entityRoutes.GET("/:id/devotees/:userId/profile", profileHandler.GetDevoteeProfileByEntity) // ✅ UPDATED: Changed :entityId to :id
+		entityRoutes.GET("/dashboard-summary", entityHandler.GetDashboardSummary)
+		
+		// File routes for entity documents
+		entityRoutes.GET("/:id/files", entityHandler.GetEntityFiles)
+		entityRoutes.GET("/directories", entityHandler.GetAllEntityDirectories)
 	}
+
+	// Special endpoints that bypass temple access check
+	// CreateEntity - allowed for templeadmin, superadmin, standarduser
+	protected.POST("/entities",
+		middleware.RBACMiddleware("templeadmin", "superadmin", "standarduser"),
+		entityHandler.CreateEntity,
+	)
+
+	// GetAllEntities - allowed for templeadmin, superadmin, standarduser, monitoringuser
+	protected.GET("/entities",
+		middleware.RBACMiddleware("templeadmin", "superadmin", "standarduser", "monitoringuser"),
+		entityHandler.GetAllEntities,
+	)
+}
 
 	// ========== Event & RSVP ==========
 	eventRepo := event.NewRepository(database.DB)

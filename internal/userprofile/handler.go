@@ -1,8 +1,8 @@
 package userprofile
 
 import (
+	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auth"
@@ -38,47 +38,61 @@ func (h *Handler) GetMyProfile(c *gin.Context) {
 
 	c.JSON(http.StatusOK, profile)
 }
-// NEW: GET /entities/:entityId/devotees/:userId/profile
+
+// GET /entities/:entityId/devotees/:userId/profile
 func (h *Handler) GetDevoteeProfileByEntity(c *gin.Context) {
-    userVal, ok := c.Get("user")
-    if !ok {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
-        return
-    }
-    currentUser := userVal.(auth.User)
+	entityIDStr := c.Param("id")
+	userIDStr := c.Param("userId")
 
-    role := currentUser.Role.RoleName
-    if !isViewerRole(role) {
-        c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: insufficient role"})
-        return
-    }
+	var entityID, userID uint
+	if _, err := fmt.Sscanf(entityIDStr, "%d", &entityID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entity ID"})
+		return
+	}
+	if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
 
-    entityIDStr := c.Param("entityId")
-    userIDStr := c.Param("userId") // changed from devoteeId
-    entityID, err := parseUint(entityIDStr)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entityId"})
-        return
-    }
-    targetUserID, err := parseUint(userIDStr)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid userId"})
-        return
-    }
+	// Get the requesting user from context
+	user, ok := c.Get("user")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
+	}
+	currentUser := user.(auth.User)
 
-    profile, svcErr := h.service.GetDevoteeProfileByEntity(
-        c.Request.Context(),
-        currentUser.ID,
-        role,
-        entityID,
-        targetUserID,
-    )
-    if svcErr != nil {
-        c.JSON(http.StatusForbidden, gin.H{"error": svcErr.Error()})
-        return
-    }
+	// Check if requesting user has access to this entity
+	if currentUser.EntityID == nil || *currentUser.EntityID != entityID {
+		// Check if user has membership
+		memberships, err := h.service.ListMemberships(currentUser.ID)
+		if err != nil || len(memberships) == 0 {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied to this entity"})
+			return
+		}
 
-    c.JSON(http.StatusOK, profile)
+		hasAccess := false
+		for _, m := range memberships {
+			if m.EntityID == entityID {
+				hasAccess = true
+				break
+			}
+		}
+
+		if !hasAccess {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied to this entity"})
+			return
+		}
+	}
+
+	// Verify the devotee belongs to this entity
+	profile, err := h.service.GetByUserIDAndEntity(userID, entityID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Profile not found for this entity"})
+		return
+	}
+
+	c.JSON(http.StatusOK, profile)
 }
 
 // POST /profiles
@@ -188,9 +202,9 @@ func (h *Handler) ListMemberships(c *gin.Context) {
 
 // GET /temples/search?query=&state=&temple_type=
 func (h *Handler) SearchTemples(c *gin.Context) {
-	query := c.Query("query")       // name/city/state search text
-	state := c.Query("state")       // optional filter
-	templeType := c.Query("temple_type") // optional filter
+	query := c.Query("query")             // name/city/state search text
+	state := c.Query("state")             // optional filter
+	templeType := c.Query("temple_type")  // optional filter
 
 	results, err := h.service.SearchTemples(query, state, templeType)
 	if err != nil {
@@ -209,22 +223,4 @@ func (h *Handler) GetRecentTemples(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, temples)
-}
-
-// ===========================
-// 🔹 Helpers
-// ===========================
-
-func isViewerRole(role string) bool {
-	switch role {
-	case "superadmin", "tenant_admin", "entity_admin", "templeadmin":
-		return true
-	default:
-		return false
-	}
-}
-
-func parseUint(s string) (uint, error) {
-	v, err := strconv.ParseUint(s, 10, 64)
-	return uint(v), err
 }
