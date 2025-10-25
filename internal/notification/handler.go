@@ -1,6 +1,8 @@
 package notification
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -287,23 +289,34 @@ func (h *Handler) SendNotification(c *gin.Context) {
 		}
 	}
 
-	// ✅ Pass IP to service for audit logging
-	if err := h.Service.SendNotification(
-		c.Request.Context(),
-		ctx.UserID,
-		*entityID,
-		req.TemplateID,
-		req.Channel,
-		req.Subject,
-		req.Body,
-		req.Recipients,
-		ip,
-	); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send notification"})
-		return
-	}
+	// ✅ FIXED: Send notification asynchronously in background
+	// Return immediately to avoid timeout
+	go func() {
+		// Use background context since the request context will be cancelled
+		bgCtx := context.Background()
+		
+		if err := h.Service.SendNotification(
+			bgCtx,
+			ctx.UserID,
+			*entityID,
+			req.TemplateID,
+			req.Channel,
+			req.Subject,
+			req.Body,
+			req.Recipients,
+			ip,
+		); err != nil {
+			// Log error but don't fail the response since it's already sent
+			fmt.Printf("❌ Background notification send error: %v\n", err)
+		}
+	}()
 
-	c.JSON(http.StatusOK, gin.H{"message": "notification sent"})
+	// Return success immediately
+	c.JSON(http.StatusAccepted, gin.H{
+		"message":         "notification queued for sending",
+		"recipients_count": len(req.Recipients),
+		"status":          "processing",
+	})
 }
 
 // GET /api/v1/notifications/logs

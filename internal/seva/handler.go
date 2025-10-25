@@ -232,6 +232,95 @@ func (h *Handler) ListEntitySevas(c *gin.Context) {
 		"limit": limit,
 	})
 }
+// Add this new handler method to handler.go
+
+// 📊 Get Approved Booking Counts Per Seva - NEW ENDPOINT
+// This endpoint returns only APPROVED bookings count per seva
+// Used by frontend to calculate available slots
+func (h *Handler) GetApprovedBookingCounts(c *gin.Context) {
+	// Get entity ID from query parameter or URL path
+	var entityID uint
+	entityIDParam := c.Query("entity_id")
+	if entityIDParam != "" {
+		id, err := strconv.ParseUint(entityIDParam, 10, 32)
+		if err == nil {
+			entityID = uint(id)
+		}
+	} else {
+		// Try getting from URL path
+		entityIDPath := c.Param("entity_id")
+		if entityIDPath != "" {
+			id, err := strconv.ParseUint(entityIDPath, 10, 32)
+			if err == nil {
+				entityID = uint(id)
+			}
+		} else {
+			// Check for entity ID in header
+			entityIDHeader := c.GetHeader("X-Entity-ID")
+			if entityIDHeader != "" {
+				id, err := strconv.ParseUint(entityIDHeader, 10, 32)
+				if err == nil {
+					entityID = uint(id)
+				}
+			}
+		}
+	}
+
+	// If no entity ID found from parameters, try to get from user context
+	if entityID == 0 {
+		user, exists := c.Get("user")
+		if exists {
+			if authUser, ok := user.(auth.User); ok && authUser.EntityID != nil {
+				entityID = *authUser.EntityID
+			}
+		}
+	}
+
+	// If still no entity ID, try access context
+	if entityID == 0 {
+		accessContext, ok := getAccessContextFromContext(c)
+		if ok {
+			contextEntityID := accessContext.GetAccessibleEntityID()
+			if contextEntityID != nil {
+				entityID = *contextEntityID
+			}
+		}
+	}
+
+	if entityID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "entity_id is required"})
+		return
+	}
+
+	// Get approved bookings count per seva from repository
+	counts, err := h.service.GetApprovedBookingCountsPerSeva(c, entityID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch booking counts: " + err.Error()})
+		return
+	}
+
+	// Convert map to array format for frontend
+	type SevaCountResponse struct {
+		SevaID        uint  `json:"seva_id"`
+		ApprovedCount int64 `json:"approved_count"`
+	}
+
+	var response []SevaCountResponse
+	for sevaID, count := range counts {
+		response = append(response, SevaCountResponse{
+			SevaID:        sevaID,
+			ApprovedCount: count,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": response})
+}
+
+// REGISTER THIS ROUTE IN YOUR ROUTER:
+// Example in routes.go or main.go:
+// sevaGroup.GET("/approved-counts", sevaHandler.GetApprovedBookingCounts)
+// OR
+// sevaGroup.GET("/entities/:entity_id/seva-approved-counts", sevaHandler.GetApprovedBookingCounts)
 
 // 🔍 Get seva by ID for temple admin (UPDATED - Similar to GetEventByID)
 func (h *Handler) GetSevaByID(c *gin.Context) {

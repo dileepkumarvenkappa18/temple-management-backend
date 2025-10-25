@@ -37,7 +37,7 @@ type Service interface {
 type service struct {
 	repo     Repository
 	authRepo auth.Repository
-	auditSvc auditlog.Service // ✅ NEW: Audit service
+	auditSvc auditlog.Service
 	email    Channel
 	sms      Channel
 	whatsapp Channel
@@ -48,7 +48,7 @@ func NewService(repo Repository, authRepo auth.Repository, cfg *config.Config, a
 	return &service{
 		repo:     repo,
 		authRepo: authRepo,
-		auditSvc: auditSvc, // ✅ injected audit service
+		auditSvc: auditSvc,
 		email:    NewEmailSender(cfg),
 		sms:      NewSMSChannel(),
 		whatsapp: NewWhatsAppChannel(),
@@ -72,7 +72,6 @@ func (s *service) CreateTemplate(ctx context.Context, t *NotificationTemplate, i
 
 	auditErr := s.auditSvc.LogAction(ctx, &t.UserID, &t.EntityID, "TEMPLATE_CREATED", details, ip, status)
 	if auditErr != nil {
-		// Log audit error but don't fail the main operation
 		fmt.Printf("❌ Audit log error: %v\n", auditErr)
 	}
 
@@ -141,7 +140,7 @@ func (s *service) DeleteTemplate(ctx context.Context, id uint, entityID uint, us
 	return err
 }
 
-// ✅ Updated with audit logging
+// ✅ COMPLETELY REWRITTEN with batch processing and async support
 func (s *service) SendNotification(
 	ctx context.Context,
 	senderID, entityID uint,
@@ -154,6 +153,7 @@ func (s *service) SendNotification(
 		return errors.New("no recipients specified")
 	}
 
+	// Create notification log entry first
 	recipientsJSON, _ := json.Marshal(recipients)
 	log := &NotificationLog{
 		UserID:     senderID,
@@ -172,14 +172,19 @@ func (s *service) SendNotification(
 		return err
 	}
 
+	fmt.Printf("📨 Starting notification send: channel=%s, recipients=%d\n", channel, len(recipients))
+
+	// ✅ Process notifications based on channel with batch support
 	var sendErr error
+	batchSize := 50 // Send 50 at a time to avoid overwhelming services
+	
 	switch channel {
 	case "email":
-		sendErr = s.email.Send(recipients, subject, body)
+		sendErr = s.sendEmailInBatches(recipients, subject, body, batchSize)
 	case "sms":
-		sendErr = s.sms.Send(recipients, subject, body)
+		sendErr = s.sendSMSInBatches(recipients, subject, body, batchSize)
 	case "whatsapp":
-		sendErr = s.whatsapp.Send(recipients, subject, body)
+		sendErr = s.sendWhatsAppInBatches(recipients, subject, body, batchSize)
 	default:
 		sendErr = fmt.Errorf("unsupported channel: %s", channel)
 	}
@@ -189,8 +194,10 @@ func (s *service) SendNotification(
 		errMsg := sendErr.Error()
 		log.Status = "failed"
 		log.Error = &errMsg
+		fmt.Printf("❌ Notification send failed: %v\n", sendErr)
 	} else {
 		log.Status = "sent"
+		fmt.Printf("✅ Notification sent successfully to %d recipients\n", len(recipients))
 	}
 
 	log.UpdatedAt = time.Now()
@@ -231,6 +238,163 @@ func (s *service) SendNotification(
 		return sendErr
 	}
 	return updateErr
+}
+
+// ✅ NEW: Helper function to send emails in batches
+func (s *service) sendEmailInBatches(recipients []string, subject, body string, batchSize int) error {
+	totalRecipients := len(recipients)
+	var lastErr error
+	successCount := 0
+	failedCount := 0
+	
+	fmt.Printf("📧 Sending emails in batches of %d (total: %d)\n", batchSize, totalRecipients)
+	
+	for i := 0; i < totalRecipients; i += batchSize {
+		end := i + batchSize
+		if end > totalRecipients {
+			end = totalRecipients
+		}
+		
+		batch := recipients[i:end]
+		batchNum := (i / batchSize) + 1
+		totalBatches := (totalRecipients + batchSize - 1) / batchSize
+		
+		fmt.Printf("📤 Processing batch %d/%d: sending to %d recipients\n", 
+			batchNum, totalBatches, len(batch))
+		
+		if err := s.email.Send(batch, subject, body); err != nil {
+			fmt.Printf("❌ Batch %d/%d failed: %v\n", batchNum, totalBatches, err)
+			lastErr = err
+			failedCount += len(batch)
+			// Continue with next batch instead of stopping
+		} else {
+			successCount += len(batch)
+			fmt.Printf("✅ Batch %d/%d sent successfully\n", batchNum, totalBatches)
+		}
+		
+		// Small delay between batches to avoid rate limiting
+		if end < totalRecipients {
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+	
+	fmt.Printf("📊 Email send complete: %d succeeded, %d failed out of %d total\n", 
+		successCount, failedCount, totalRecipients)
+	
+	// If some emails succeeded, consider it a partial success
+	if successCount > 0 && failedCount > 0 {
+		return fmt.Errorf("partial success: %d/%d emails sent, last error: %v", 
+			successCount, totalRecipients, lastErr)
+	}
+	
+	// If all failed, return the last error
+	if failedCount == totalRecipients && lastErr != nil {
+		return fmt.Errorf("all batches failed: %v", lastErr)
+	}
+	
+	return nil
+}
+
+// ✅ NEW: Helper function to send SMS in batches
+func (s *service) sendSMSInBatches(recipients []string, subject, body string, batchSize int) error {
+	totalRecipients := len(recipients)
+	var lastErr error
+	successCount := 0
+	failedCount := 0
+	
+	fmt.Printf("📱 Sending SMS in batches of %d (total: %d)\n", batchSize, totalRecipients)
+	
+	for i := 0; i < totalRecipients; i += batchSize {
+		end := i + batchSize
+		if end > totalRecipients {
+			end = totalRecipients
+		}
+		
+		batch := recipients[i:end]
+		batchNum := (i / batchSize) + 1
+		totalBatches := (totalRecipients + batchSize - 1) / batchSize
+		
+		fmt.Printf("📤 Processing SMS batch %d/%d: sending to %d recipients\n", 
+			batchNum, totalBatches, len(batch))
+		
+		if err := s.sms.Send(batch, subject, body); err != nil {
+			fmt.Printf("❌ SMS Batch %d/%d failed: %v\n", batchNum, totalBatches, err)
+			lastErr = err
+			failedCount += len(batch)
+		} else {
+			successCount += len(batch)
+			fmt.Printf("✅ SMS Batch %d/%d sent successfully\n", batchNum, totalBatches)
+		}
+		
+		if end < totalRecipients {
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+	
+	fmt.Printf("📊 SMS send complete: %d succeeded, %d failed out of %d total\n", 
+		successCount, failedCount, totalRecipients)
+	
+	if successCount > 0 && failedCount > 0 {
+		return fmt.Errorf("partial success: %d/%d SMS sent, last error: %v", 
+			successCount, totalRecipients, lastErr)
+	}
+	
+	if failedCount == totalRecipients && lastErr != nil {
+		return fmt.Errorf("all SMS batches failed: %v", lastErr)
+	}
+	
+	return nil
+}
+
+// ✅ NEW: Helper function to send WhatsApp in batches
+func (s *service) sendWhatsAppInBatches(recipients []string, subject, body string, batchSize int) error {
+	totalRecipients := len(recipients)
+	var lastErr error
+	successCount := 0
+	failedCount := 0
+	
+	fmt.Printf("💬 Sending WhatsApp in batches of %d (total: %d)\n", batchSize, totalRecipients)
+	
+	for i := 0; i < totalRecipients; i += batchSize {
+		end := i + batchSize
+		if end > totalRecipients {
+			end = totalRecipients
+		}
+		
+		batch := recipients[i:end]
+		batchNum := (i / batchSize) + 1
+		totalBatches := (totalRecipients + batchSize - 1) / batchSize
+		
+		fmt.Printf("📤 Processing WhatsApp batch %d/%d: sending to %d recipients\n", 
+			batchNum, totalBatches, len(batch))
+		
+		if err := s.whatsapp.Send(batch, subject, body); err != nil {
+			fmt.Printf("❌ WhatsApp Batch %d/%d failed: %v\n", batchNum, totalBatches, err)
+			lastErr = err
+			failedCount += len(batch)
+		} else {
+			successCount += len(batch)
+			fmt.Printf("✅ WhatsApp Batch %d/%d sent successfully\n", batchNum, totalBatches)
+		}
+		
+		if end < totalRecipients {
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+	
+	fmt.Printf("📊 WhatsApp send complete: %d succeeded, %d failed out of %d total\n", 
+		successCount, failedCount, totalRecipients)
+	
+	if successCount > 0 && failedCount > 0 {
+		return fmt.Errorf("partial success: %d/%d WhatsApp sent, last error: %v", 
+			successCount, totalRecipients, lastErr)
+	}
+	
+	if failedCount == totalRecipients && lastErr != nil {
+		return fmt.Errorf("all WhatsApp batches failed: %v", lastErr)
+	}
+	
+	return nil
 }
 
 // CreateInAppNotification stores a bell notification for a specific user

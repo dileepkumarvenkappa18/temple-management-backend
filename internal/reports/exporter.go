@@ -984,7 +984,7 @@ func (e *reportExporter) exportApprovalStatusCSV(rows []ApprovalStatusReportRow)
 		"Entity ID", 
 		"Entity Name", 
 		"Status", 
-		"Created At", 
+		"Requested At", 
 		"Approved At", 
 		"Email", 
 		"Role",
@@ -1037,7 +1037,7 @@ func (e *reportExporter) exportApprovalStatusExcel(rows []ApprovalStatusReportRo
 		"Entity ID", 
 		"Entity Name", 
 		"Status", 
-		"Created At", 
+		"Requested At", 
 		"Approved At", 
 		"Email", 
 		//"Role",
@@ -1091,7 +1091,7 @@ func (e *reportExporter) exportApprovalStatusPDF(rows []ApprovalStatusReportRow)
 		"Entity ID", 
 		"Entity Name", 
 		"Status", 
-		"Created At", 
+		"Requested At", 
 		"Approved At", 
 		"Email", 
 		//"Role",
@@ -1188,7 +1188,7 @@ func (e *reportExporter) exportUserDetailsCSV(rows []UserDetailsReportRow) ([]by
 	var buf bytes.Buffer
 	writer := csv.NewWriter(&buf)
 
-	headers := []string{"ID", "Name", "Entity Name", "Email", "Role", "Status", "Created At"}
+	headers := []string{"ID", "User Name", "Entity Name", "Email", "Role", "Status", "Created At"}
 	if err := writer.Write(headers); err != nil {
 		return nil, err
 	}
@@ -1221,7 +1221,7 @@ func (e *reportExporter) exportUserDetailsExcel(rows []UserDetailsReportRow) ([]
 	sheetName := "User Details"
 	f.SetSheetName("Sheet1", sheetName)
 
-	headers := []string{"ID", "Name", "Entity Name", "Email", "Role", "Status", "Created At"}
+	headers := []string{"ID", "User Name", "Entity Name", "Email", "Role", "Status", "Created At"}
 	for i, header := range headers {
 		cell := fmt.Sprintf("%c1", 'A'+i)
 		f.SetCellValue(sheetName, cell, header)
@@ -1254,7 +1254,7 @@ func (e *reportExporter) exportUserDetailsPDF(rows []UserDetailsReportRow) ([]by
 
 	pdf.SetFont("Arial", "B", 10)
 	widths := []float64{15, 40, 40, 50, 30, 25, 35}
-	headers := []string{"ID", "Name", "Entity Name", "Email", "Role", "Status", "Created At"}
+	headers := []string{"ID", "User Name", "Entity Name", "Email", "Role", "Status", "Created At"}
 
 	for i, h := range headers {
 		pdf.CellFormat(widths[i], 7, h, "1", 0, "C", false, 0, "")

@@ -1,4 +1,3 @@
-
 package seva
 
 import (
@@ -25,8 +24,10 @@ type Repository interface {
 	ListBookingsByEntityID(ctx context.Context, entityID uint) ([]SevaBooking, error)
 	UpdateBookingStatus(ctx context.Context, bookingID uint, newStatus string) error
 
-	// Booking limits
+	// Booking limits - UPDATED
 	CountBookingsForSlot(ctx context.Context, sevaID uint, date time.Time, slot string) (int64, error)
+	CountApprovedBookingsForSeva(ctx context.Context, sevaID uint) (int64, error)
+	GetApprovedBookingsCountPerSeva(ctx context.Context, entityID uint) (map[uint]int64, error)
 
 	// Composite list with Seva + User info
 	ListBookingsWithDetails(ctx context.Context, entityID uint) ([]DetailedBooking, error)
@@ -164,13 +165,51 @@ func (r *repository) UpdateBookingStatus(ctx context.Context, bookingID uint, ne
 }
 
 // -----------------------------------------
-// Booking Limit Checker
+// Booking Limit Checker - UPDATED
 // -----------------------------------------
 func (r *repository) CountBookingsForSlot(ctx context.Context, sevaID uint, date time.Time, slot string) (int64, error) {
 	var count int64
 	// This can be implemented based on your specific slot booking requirements
 	// For now, returning 0 as placeholder
 	return count, nil
+}
+
+// NEW: Count only approved bookings for a specific seva
+func (r *repository) CountApprovedBookingsForSeva(ctx context.Context, sevaID uint) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&SevaBooking{}).
+		Where("seva_id = ? AND status = ?", sevaID, "approved").
+		Count(&count).Error
+	return count, err
+}
+
+// NEW: Get approved bookings count per seva for an entity
+func (r *repository) GetApprovedBookingsCountPerSeva(ctx context.Context, entityID uint) (map[uint]int64, error) {
+	type Result struct {
+		SevaID uint  `gorm:"column:seva_id"`
+		Count  int64 `gorm:"column:count"`
+	}
+	
+	var results []Result
+	err := r.db.WithContext(ctx).
+		Model(&SevaBooking{}).
+		Select("seva_id, COUNT(*) as count").
+		Where("entity_id = ? AND status = ?", entityID, "approved").
+		Group("seva_id").
+		Scan(&results).Error
+	
+	if err != nil {
+		return nil, err
+	}
+	
+	// Convert to map
+	countMap := make(map[uint]int64)
+	for _, r := range results {
+		countMap[r.SevaID] = r.Count
+	}
+	
+	return countMap, nil
 }
 
 // -----------------------------------------
