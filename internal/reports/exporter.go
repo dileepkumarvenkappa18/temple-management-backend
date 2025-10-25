@@ -585,7 +585,7 @@ func (e *reportExporter) exportDevoteeProfileCSV(rows []DevoteeProfileReportRow)
 	buf := &bytes.Buffer{}
 	w := csv.NewWriter(buf)
 
-	headers := []string{"User ID", "Full Name", "Date of Birth", "Gender", "Full Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
+	headers := []string{"User ID", "Full Name","Temple Name", "Date of Birth", "Gender", "Full Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
 	if err := w.Write(headers); err != nil {
 		return nil, "", "", err
 	}
@@ -594,6 +594,7 @@ func (e *reportExporter) exportDevoteeProfileCSV(rows []DevoteeProfileReportRow)
 		record := []string{
 			r.UserID,
 			r.FullName,
+			r.TempleName,
 			r.DOB.Format("2006-01-02"),
 			r.Gender,
 			r.FullAddress,
@@ -626,7 +627,7 @@ func (e *reportExporter) exportDevoteeProfileExcel(rows []DevoteeProfileReportRo
 	f.DeleteSheet("Sheet1")
 	f.SetActiveSheet(index)
 
-	headers := []string{"User ID", "Full Name", "Date of Birth", "Gender", "Full Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
+	headers := []string{"User ID", "Full Name","TempleName", "Date of Birth", "Gender", "Full Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		f.SetCellValue(sheet, cell, h)
@@ -636,6 +637,7 @@ func (e *reportExporter) exportDevoteeProfileExcel(rows []DevoteeProfileReportRo
 		row := rIdx + 2
 		f.SetCellValue(sheet, fmt.Sprintf("A%d", row), r.UserID)
 		f.SetCellValue(sheet, fmt.Sprintf("B%d", row), r.FullName)
+		f.SetCellValue(sheet, fmt.Sprintf("C%d", row), r.TempleName)
 		f.SetCellValue(sheet, fmt.Sprintf("C%d", row), r.DOB.Format("2006-01-02"))
 		f.SetCellValue(sheet, fmt.Sprintf("D%d", row), r.Gender)
 		f.SetCellValue(sheet, fmt.Sprintf("E%d", row), r.FullAddress)
@@ -662,8 +664,8 @@ func (e *reportExporter) exportDevoteeProfilePDF(rows []DevoteeProfileReportRow)
 	pdf.Ln(10)
 
 	pdf.SetFont("Arial", "B", 8) // Smaller font for headers
-	headers := []string{"User ID", "Full Name", "DOB", "Gender", "Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
-	widths := []float64{25, 35, 22, 15, 50, 20, 25, 20, 20}
+	headers := []string{"User ID", "Full Name","Temple Name", "DOB", "Gender", "Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
+	widths := []float64{20, 30, 35, 20, 15, 45, 18, 22, 18, 18}
 
 	for i, h := range headers {
 		pdf.CellFormat(widths[i], 7, h, "1", 0, "C", false, 0, "")
@@ -674,6 +676,7 @@ func (e *reportExporter) exportDevoteeProfilePDF(rows []DevoteeProfileReportRow)
 	for _, r := range rows {
 		pdf.CellFormat(widths[0], 6, r.UserID, "1", 0, "C", false, 0, "")
 		pdf.CellFormat(widths[1], 6, r.FullName, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[2], 6, r.TempleName, "1", 0, "L", false, 0, "")
 		pdf.CellFormat(widths[2], 6, r.DOB.Format("2006-01-02"), "1", 0, "C", false, 0, "")
 		pdf.CellFormat(widths[3], 6, r.Gender, "1", 0, "C", false, 0, "")
 

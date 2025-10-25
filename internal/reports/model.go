@@ -234,6 +234,7 @@ type DevoteeProfileReportRequest struct {
 type DevoteeProfileReportRow struct {
 	UserID      string    `json:"user_id"`
 	FullName    string    `json:"full_name"`
+	TempleName  string    `json:"temple_name"`
 	DOB         time.Time `json:"dob"`
 	Gender      string    `json:"gender"`
 	FullAddress string    `json:"full_address"`

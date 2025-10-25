@@ -90,7 +90,7 @@ func (r *repository) GetEvents(entityIDs []uint, start, end time.Time) ([]EventR
 			e.description,
 			e.event_type,
 			e.event_date,
-			e.event_time,
+			TO_CHAR(e.event_time, 'HH24:MI') as event_time,
 			e.location,
 			e.created_by,
 			e.is_active,
@@ -324,6 +324,7 @@ func (r *repository) GetDevoteeProfiles(entityIDs []uint, start, end time.Time, 
 		Select(`
 			u.id as user_id,
 			u.full_name,
+			en.name as temple_name,  -- ADDED THIS LINE
 			dp.dob,
 			dp.gender,
 			CONCAT(
@@ -339,6 +340,7 @@ func (r *repository) GetDevoteeProfiles(entityIDs []uint, start, end time.Time, 
 			COALESCE(dp.lagna, '') as lagna
 		`).
 		Joins("INNER JOIN user_entity_memberships uem ON u.id = uem.user_id").
+		Joins("INNER JOIN entities en ON uem.entity_id = en.id"). // ADDED THIS JOIN
 		Joins("INNER JOIN devotee_profiles dp ON u.id = dp.user_id").
 		Where("u.role_id = ?", 3).
 		Where("uem.entity_id IN ?", entityIDs)
