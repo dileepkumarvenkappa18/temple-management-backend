@@ -65,6 +65,7 @@ type FileInfo struct {
 	UploadedAt   time.Time `json:"uploaded_at"`
 	OriginalName string    `json:"original_name"`
 }
+
 /*
 type UserEntityMembership struct {
 	ID       uint      `gorm:"primaryKey"`

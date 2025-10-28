@@ -25,7 +25,7 @@ var (
 )
 
 // ======================
-// Low-level sendEmail
+// ✅ FIXED: Low-level sendEmail with proper TLS handling
 // ======================
 func sendEmail(to, subject, body string) error {
 	fmt.Println("📧 Sending Email:")
@@ -41,46 +41,53 @@ func sendEmail(to, subject, body string) error {
 	}
 	smtpFromEmail = strings.TrimSuffix(smtpFromEmail, "i") // Remove accidental typo
 
-	auth := smtp.PlainAuth("", smtpUsername, smtpPassword, smtpHost)
 	addr := fmt.Sprintf("%s:%s", smtpHost, smtpPort)
 
-	// TLS config
+	// ✅ FIX: Use smtp.Dial first, then StartTLS (not tls.Dial directly)
+	// This is the same approach that works in your notification system
+	client, err := smtp.Dial(addr)
+	if err != nil {
+		fmt.Printf("❌ Failed to dial SMTP server: %v\n", err)
+		return fmt.Errorf("failed to dial SMTP server: %w", err)
+	}
+	defer client.Close()
+
+	// ✅ TLS config - skip verification for Docker environments
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true, // ⚠️ Only for testing/self-signed certs
+		InsecureSkipVerify: true,
 		ServerName:         smtpHost,
 	}
 
-	conn, err := tls.Dial("tcp", addr, tlsConfig)
-	if err != nil {
+	// ✅ Start TLS upgrade on existing connection
+	if err = client.StartTLS(tlsConfig); err != nil {
 		fmt.Printf("❌ TLS connection error: %v\n", err)
-		return err
+		return fmt.Errorf("failed to start TLS: %w", err)
 	}
 
-	c, err := smtp.NewClient(conn, smtpHost)
-	if err != nil {
-		fmt.Printf("❌ SMTP client error: %v\n", err)
-		return err
-	}
-	defer c.Quit()
-
-	if err := c.Auth(auth); err != nil {
+	// ✅ Authenticate after TLS is established
+	auth := smtp.PlainAuth("", smtpUsername, smtpPassword, smtpHost)
+	if err := client.Auth(auth); err != nil {
 		fmt.Printf("❌ SMTP auth error: %v\n", err)
-		return err
+		return fmt.Errorf("authentication failed: %w", err)
 	}
 
-	if err := c.Mail(smtpFromEmail); err != nil {
-		return err
-	}
-	if err := c.Rcpt(to); err != nil {
-		return err
+	// Set sender
+	if err := client.Mail(smtpFromEmail); err != nil {
+		return fmt.Errorf("failed to set sender: %w", err)
 	}
 
-	w, err := c.Data()
+	// Set recipient
+	if err := client.Rcpt(to); err != nil {
+		return fmt.Errorf("failed to set recipient: %w", err)
+	}
+
+	// Get data writer
+	w, err := client.Data()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get data writer: %w", err)
 	}
-	defer w.Close()
 
+	// Build message
 	from := smtpFromName
 	if from == "" {
 		from = smtpFromEmail
@@ -95,9 +102,22 @@ func sendEmail(to, subject, body string) error {
 		"Content-Type: text/plain; charset=UTF-8\r\n"+
 		"\r\n%s", from, to, subject, body))
 
+	// Write message
 	_, err = w.Write(msg)
 	if err != nil {
-		return err
+		w.Close()
+		return fmt.Errorf("failed to write message: %w", err)
+	}
+
+	// Close writer
+	err = w.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close writer: %w", err)
+	}
+
+	// Send QUIT command
+	if err := client.Quit(); err != nil {
+		fmt.Printf("⚠️ QUIT command error (non-critical): %v\n", err)
 	}
 
 	fmt.Println("✅ Email sent successfully!")
@@ -131,7 +151,7 @@ func SendBulkEmailsAsync(recipients []string, subject, body string) {
 func SendResetLink(toEmail string, resetToken string) error {
 	baseURL := frontendURL
 	if baseURL == "" {
-		baseURL = "http://localhost:8080"
+		baseURL = "http://localhost:5173" // Updated to match your frontend
 		fmt.Println("⚠️ FRONTEND_URL not set, using default:", baseURL)
 	}
 

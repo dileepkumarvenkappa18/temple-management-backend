@@ -585,7 +585,7 @@ func (e *reportExporter) exportDevoteeProfileCSV(rows []DevoteeProfileReportRow)
 	buf := &bytes.Buffer{}
 	w := csv.NewWriter(buf)
 
-	headers := []string{"User ID", "Full Name","Temple Name", "Date of Birth", "Gender", "Full Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
+	headers := []string{"User ID", "Full Name", "Temple Name", "Date of Birth", "Gender", "Full Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
 	if err := w.Write(headers); err != nil {
 		return nil, "", "", err
 	}
@@ -627,7 +627,7 @@ func (e *reportExporter) exportDevoteeProfileExcel(rows []DevoteeProfileReportRo
 	f.DeleteSheet("Sheet1")
 	f.SetActiveSheet(index)
 
-	headers := []string{"User ID", "Full Name","TempleName", "Date of Birth", "Gender", "Full Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
+	headers := []string{"User ID", "Full Name", "Temple Name", "Date of Birth", "Gender", "Full Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		f.SetCellValue(sheet, cell, h)
@@ -638,13 +638,13 @@ func (e *reportExporter) exportDevoteeProfileExcel(rows []DevoteeProfileReportRo
 		f.SetCellValue(sheet, fmt.Sprintf("A%d", row), r.UserID)
 		f.SetCellValue(sheet, fmt.Sprintf("B%d", row), r.FullName)
 		f.SetCellValue(sheet, fmt.Sprintf("C%d", row), r.TempleName)
-		f.SetCellValue(sheet, fmt.Sprintf("C%d", row), r.DOB.Format("2006-01-02"))
-		f.SetCellValue(sheet, fmt.Sprintf("D%d", row), r.Gender)
-		f.SetCellValue(sheet, fmt.Sprintf("E%d", row), r.FullAddress)
-		f.SetCellValue(sheet, fmt.Sprintf("F%d", row), r.Gotra)
-		f.SetCellValue(sheet, fmt.Sprintf("G%d", row), r.Nakshatra)
-		f.SetCellValue(sheet, fmt.Sprintf("H%d", row), r.Rashi)
-		f.SetCellValue(sheet, fmt.Sprintf("I%d", row), r.Lagna)
+		f.SetCellValue(sheet, fmt.Sprintf("D%d", row), r.DOB.Format("2006-01-02"))
+		f.SetCellValue(sheet, fmt.Sprintf("E%d", row), r.Gender)
+		f.SetCellValue(sheet, fmt.Sprintf("F%d", row), r.FullAddress)
+		f.SetCellValue(sheet, fmt.Sprintf("G%d", row), r.Gotra)
+		f.SetCellValue(sheet, fmt.Sprintf("H%d", row), r.Nakshatra)
+		f.SetCellValue(sheet, fmt.Sprintf("I%d", row), r.Rashi)
+		f.SetCellValue(sheet, fmt.Sprintf("J%d", row), r.Lagna)
 	}
 
 	var buf bytes.Buffer
@@ -664,55 +664,8 @@ func (e *reportExporter) exportDevoteeProfilePDF(rows []DevoteeProfileReportRow)
 	pdf.Ln(10)
 
 	pdf.SetFont("Arial", "B", 8) // Smaller font for headers
-	headers := []string{"User ID", "Full Name","Temple Name", "DOB", "Gender", "Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
+	headers := []string{"User ID", "Full Name", "Temple Name", "DOB", "Gender", "Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
 	widths := []float64{20, 30, 35, 20, 15, 45, 18, 22, 18, 18}
-
-	for i, h := range headers {
-		pdf.CellFormat(widths[i], 7, h, "1", 0, "C", false, 0, "")
-	}
-	pdf.Ln(-1)
-
-	pdf.SetFont("Arial", "", 7) // Even smaller font for data
-	for _, r := range rows {
-		pdf.CellFormat(widths[0], 6, r.UserID, "1", 0, "C", false, 0, "")
-		pdf.CellFormat(widths[1], 6, r.FullName, "1", 0, "L", false, 0, "")
-		pdf.CellFormat(widths[2], 6, r.TempleName, "1", 0, "L", false, 0, "")
-		pdf.CellFormat(widths[2], 6, r.DOB.Format("2006-01-02"), "1", 0, "C", false, 0, "")
-		pdf.CellFormat(widths[3], 6, r.Gender, "1", 0, "C", false, 0, "")
-
-		// Truncate address if too long for PDF cell
-		address := r.FullAddress
-		if len(address) > 30 {
-			address = address[:27] + "..."
-		}
-		pdf.CellFormat(widths[4], 6, address, "1", 0, "L", false, 0, "")
-
-		pdf.CellFormat(widths[5], 6, r.Gotra, "1", 0, "C", false, 0, "")
-		pdf.CellFormat(widths[6], 6, r.Nakshatra, "1", 0, "C", false, 0, "")
-		pdf.CellFormat(widths[7], 6, r.Rashi, "1", 0, "C", false, 0, "")
-		pdf.CellFormat(widths[8], 6, r.Lagna, "1", 0, "C", false, 0, "")
-		pdf.Ln(-1)
-	}
-
-	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
-		return nil, "", "", err
-	}
-
-	return buf.Bytes(), "devotee_profile_report.pdf", "application/pdf", nil
-}
-
-// Devotee Profile PDF export with extended fields (including Temple Name)
-func (e *reportExporter) exportDevoteeProfilePDF_ext(rows []DevoteeProfileReportRow_ext) ([]byte, string, string, error) {
-	pdf := gofpdf.New("L", "mm", "A4", "") // Landscape for more columns
-	pdf.AddPage()
-	pdf.SetFont("Arial", "B", 12)
-	pdf.Cell(40, 10, "Devotee Profile Report")
-	pdf.Ln(10)
-
-	pdf.SetFont("Arial", "B", 8) // Smaller font for headers
-	headers := []string{"User ID", "Full Name", "TempleName", "DOB", "Gender", "Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
-	widths := []float64{25, 35, 35, 22, 15, 50, 20, 25, 20, 20}
 
 	for i, h := range headers {
 		pdf.CellFormat(widths[i], 7, h, "1", 0, "C", false, 0, "")
@@ -749,6 +702,52 @@ func (e *reportExporter) exportDevoteeProfilePDF_ext(rows []DevoteeProfileReport
 	return buf.Bytes(), "devotee_profile_report.pdf", "application/pdf", nil
 }
 
+// Devotee Profile PDF export with extended fields (including Temple Name)
+func (e *reportExporter) exportDevoteeProfilePDF_ext(rows []DevoteeProfileReportRow_ext) ([]byte, string, string, error) {
+	pdf := gofpdf.New("L", "mm", "A4", "") // Landscape for more columns
+	pdf.AddPage()
+	pdf.SetFont("Arial", "B", 12)
+	pdf.Cell(40, 10, "Devotee Profile Report")
+	pdf.Ln(10)
+
+	pdf.SetFont("Arial", "B", 8) // Smaller font for headers
+	headers := []string{"User ID", "Full Name", "Temple Name", "DOB", "Gender", "Address", "Gotra", "Nakshatra", "Rashi", "Lagna"}
+	widths := []float64{20, 30, 35, 20, 15, 45, 18, 22, 18, 18}
+
+	for i, h := range headers {
+		pdf.CellFormat(widths[i], 7, h, "1", 0, "C", false, 0, "")
+	}
+	pdf.Ln(-1)
+
+	pdf.SetFont("Arial", "", 7) // Even smaller font for data
+	for _, r := range rows {
+		pdf.CellFormat(widths[0], 6, r.UserID, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[1], 6, r.FullName, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[2], 6, r.TempleName, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[3], 6, r.DOB.Format("2006-01-02"), "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[4], 6, r.Gender, "1", 0, "C", false, 0, "")
+
+		// Truncate address if too long for PDF cell
+		address := r.FullAddress
+		if len(address) > 30 {
+			address = address[:27] + "..."
+		}
+		pdf.CellFormat(widths[5], 6, address, "1", 0, "L", false, 0, "")
+
+		pdf.CellFormat(widths[6], 6, r.Gotra, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[7], 6, r.Nakshatra, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[8], 6, r.Rashi, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(widths[9], 6, r.Lagna, "1", 0, "C", false, 0, "")
+		pdf.Ln(-1)
+	}
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, "", "", err
+	}
+
+	return buf.Bytes(), "devotee_profile_report.pdf", "application/pdf", nil
+}
 // Devotee List CSV export
 func (e *reportExporter) exportDevoteeListCSV(rows []DevoteeListReportRow) ([]byte, string, string, error) {
 	buf := &bytes.Buffer{}
@@ -1391,7 +1390,7 @@ func (e *reportExporter) exportEventsExcel(events []EventReportRow) ([]byte, err
 	f.SetSheetName("Sheet1", sheetName)
 
 	// Headers - UPDATED with Temple Name
-	headers := []string{"Title", "Temple Name", "Description", "Event Type", "Event Date", "Event Time", "Location", "Created By", "Created At", "Updated At", "Is Active"}
+	headers := []string{"Title", "Temple Name", "Description", "Event Type", "Event Date", "Event Time", "Location", "Created By", "Created At", "Updated At"}
 	for i, header := range headers {
 		cell := fmt.Sprintf("%c1", 'A'+i)
 		f.SetCellValue(sheetName, cell, header)
@@ -1410,7 +1409,7 @@ func (e *reportExporter) exportEventsExcel(events []EventReportRow) ([]byte, err
 		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), event.CreatedBy)
 		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), event.CreatedAt.Format("2006-01-02 15:04:05"))
 		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), event.UpdatedAt.Format("2006-01-02 15:04:05"))
-		f.SetCellValue(sheetName, fmt.Sprintf("K%d", row), event.IsActive)
+		//f.SetCellValue(sheetName, fmt.Sprintf("K%d", row), event.IsActive)
 	}
 
 	buf, err := f.WriteToBuffer()
@@ -1425,7 +1424,7 @@ func (e *reportExporter) exportEventsCSV(events []EventReportRow) ([]byte, error
 	writer := csv.NewWriter(&buf)
 
 	// Headers - UPDATED with Temple Name
-	headers := []string{"Title", "Temple Name", "Description", "Event Type", "Event Date", "Event Time", "Location", "Created By", "Created At", "Updated At", "Is Active"}
+	headers := []string{"Title", "Temple Name", "Description", "Event Type", "Event Date", "Event Time", "Location", "Created By", "Created At", "Updated At"}
 	if err := writer.Write(headers); err != nil {
 		return nil, err
 	}
@@ -1443,7 +1442,7 @@ func (e *reportExporter) exportEventsCSV(events []EventReportRow) ([]byte, error
 			strconv.FormatUint(uint64(event.CreatedBy), 10),
 			event.CreatedAt.Format("2006-01-02 15:04:05"),
 			event.UpdatedAt.Format("2006-01-02 15:04:05"),
-			strconv.FormatBool(event.IsActive),
+			//strconv.FormatBool(event.IsActive),
 		}
 		if err := writer.Write(record); err != nil {
 			return nil, err
@@ -1469,7 +1468,7 @@ func (e *reportExporter) exportEventsPDF(events []EventReportRow) ([]byte, error
 	pdf.SetFont("Arial", "B", 10)
 	// Define column widths - UPDATED with Temple Name
 	widths := []float64{40, 30, 30, 25, 20, 30, 25, 15}
-	headers := []string{"Title", "Temple Name", "Event Type", "Date", "Time", "Location", "Created At", "Active"}
+	headers := []string{"Title", "Temple Name", "Event Type", "Date", "Time", "Location", "Created At"}
 
 	// Print headers with borders
 	for i, header := range headers {
@@ -1487,7 +1486,7 @@ func (e *reportExporter) exportEventsPDF(events []EventReportRow) ([]byte, error
 		pdf.CellFormat(widths[4], 6, event.EventTime, "1", 0, "L", false, 0, "")
 		pdf.CellFormat(widths[5], 6, event.Location, "1", 0, "L", false, 0, "")
 		pdf.CellFormat(widths[6], 6, event.CreatedAt.Format("02-01-06"), "1", 0, "C", false, 0, "")
-		pdf.CellFormat(widths[7], 6, strconv.FormatBool(event.IsActive), "1", 0, "C", false, 0, "")
+		//pdf.CellFormat(widths[7], 6, strconv.FormatBool(event.IsActive), "1", 0, "C", false, 0, "")
 		pdf.Ln(-1)
 	}
 

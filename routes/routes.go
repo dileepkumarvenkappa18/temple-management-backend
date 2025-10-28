@@ -482,8 +482,8 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	// ========== Membership (Join Temples) ==========
 	membershipRoutes := protected.Group("/memberships")
 	{
-		membershipRoutes.POST("/", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.JoinTemple)
-		membershipRoutes.GET("/", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.ListMemberships)
+		membershipRoutes.POST("", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.JoinTemple)
+		membershipRoutes.GET("", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.ListMemberships)
 	}
 
 	// ========== Temple Search ==========

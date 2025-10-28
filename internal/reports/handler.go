@@ -2198,7 +2198,16 @@ func (h *Handler) GetAuditLogsReport(c *gin.Context) {
 	ip := middleware.GetIPFromContext(c)
 
 	entityParam := c.Param("id") // "all" or specific entity id
-	action := c.Query("action")
+
+	// ✅ FIX: Support multiple possible query param names for action type
+	action := c.Query("action_type") // main expected param (matches frontend)
+	if action == "" {
+		action = c.Query("actionType") // fallback to camelCase
+	}
+	if action == "" {
+		action = c.Query("action") // fallback to legacy name
+	}
+
 	status := c.Query("status")
 	dateRange := c.Query("date_range")
 	if dateRange == "" {
@@ -2208,6 +2217,15 @@ func (h *Handler) GetAuditLogsReport(c *gin.Context) {
 	endDateStr := c.Query("end_date")
 	format := c.Query("format")
 
+	// 🔍 DEBUG: Log the received parameters
+	fmt.Printf("\n🔍 DEBUG: Audit Logs Request Parameters\n")
+	fmt.Printf("   Raw Query: %s\n", c.Request.URL.RawQuery)
+	fmt.Printf("   Entity Param: %s\n", entityParam)
+	fmt.Printf("   Action Type: '%s'\n", action)
+	fmt.Printf("   Status: '%s'\n", status)
+	fmt.Printf("   Date Range: %s\n", dateRange)
+	fmt.Printf("   Format: %s\n", format)
+
 	start, end, err := GetDateRange(dateRange, startDateStr, endDateStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -2216,11 +2234,10 @@ func (h *Handler) GetAuditLogsReport(c *gin.Context) {
 
 	var entityIDs []string
 
-	// ✅ CASE 1: “all” temples for the tenant
+	// ✅ CASE 1: "all" temples for the tenant
 	if strings.ToLower(entityParam) == "all" {
 		switch ctx.RoleName {
 		case "superadmin":
-			// Superadmin can view all entities in the system
 			ids, err := h.repo.GetAllEntityIDs()
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch all entities"})
@@ -2241,8 +2258,7 @@ func (h *Handler) GetAuditLogsReport(c *gin.Context) {
 			}
 
 		case "standarduser", "monitoringuser":
-			// Get all temples under the tenant
-			if ctx.TenantID > 0 {
+			if ctx.TenantID == 0 {
 				c.JSON(http.StatusForbidden, gin.H{"error": "tenant context missing"})
 				return
 			}
@@ -2280,6 +2296,8 @@ func (h *Handler) GetAuditLogsReport(c *gin.Context) {
 		entityIDs = append(entityIDs, fmt.Sprint(eid))
 	}
 
+	fmt.Printf("   📋 Entity IDs to query: %v\n", entityIDs)
+
 	req := AuditLogReportRequest{
 		EntityID:  entityParam,
 		Action:    action,
@@ -2290,34 +2308,42 @@ func (h *Handler) GetAuditLogsReport(c *gin.Context) {
 		Format:    format,
 	}
 
-	// JSON preview
+	fmt.Printf("   📤 Request object - Action: '%s', Status: '%s'\n", req.Action, req.Status)
+
+	// JSON preview (no export format)
 	if format == "" {
 		data, err := h.service.GetAuditLogsReport(req, entityIDs)
 		if err != nil {
+			fmt.Printf("   ❌ Error fetching audit logs: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+
+		fmt.Printf("   ✅ Fetched %d audit log records\n", len(data))
+
 		h.auditSvc.LogAction(
 			c.Request.Context(),
 			&ctx.UserID,
 			nil,
 			"AUDIT_LOGS_REPORT_VIEWED",
 			map[string]interface{}{
-				"report_type": "audit_logs",
-				"format":      "json_preview",
-				"entity_ids":  entityIDs,
-				"action":      action,
-				"status":      status,
-				"ip_address":  ip,
+				"report_type":  "audit_logs",
+				"format":       "json_preview",
+				"entity_ids":   entityIDs,
+				"action":       action,
+				"status":       status,
+				"ip_address":   ip,
+				"record_count": len(data),
 			},
 			ip,
 			"success",
 		)
+
 		c.JSON(http.StatusOK, data)
 		return
 	}
 
-	// Export format
+	// Export formats (Excel, PDF, CSV)
 	var reportType string
 	switch format {
 	case "excel":
@@ -2347,6 +2373,7 @@ func (h *Handler) GetAuditLogsReport(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
 	c.Data(http.StatusOK, mime, bytes)
 }
+
 
 // GetSuperAdminAuditLogsReport handles audit logs report for superadmin with multiple tenants
 func (h *Handler) GetSuperAdminAuditLogsReport(c *gin.Context) {
