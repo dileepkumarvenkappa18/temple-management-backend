@@ -311,11 +311,11 @@ func (s *Service) DeleteEntity(id int, userID uint, ip string) error {
 
 // ========== DEVOTEE MANAGEMENT ==========
 
+
 // GetDevotees - Temple Admin → Get devotees for specific entity
 func (s *Service) GetDevotees(entityID uint) ([]DevoteeDTO, error) {
 	return s.Repo.GetDevoteesByEntityID(entityID)
 }
-
 // GetDevoteeStats - Temple Admin → Get devotee statistics for entity
 func (s *Service) GetDevoteeStats(entityID uint) (DevoteeStats, error) {
 	return s.Repo.GetDevoteeStats(entityID)

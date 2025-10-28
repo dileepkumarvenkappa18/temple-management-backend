@@ -2,9 +2,10 @@ package entity
 
 import (
 	"database/sql"
-	"time"
-	"math"
 	"fmt"
+	"log"
+	"math"
+	"time"
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"gorm.io/gorm"
@@ -212,30 +213,40 @@ func (r *Repository) DeleteEntity(id int) error {
 	return r.DB.Delete(&Entity{}, id).Error
 }
 
-// ========== DEVOTEE MANAGEMENT ==========
 
+// DevoteeDTO with added nakshatra, rashi, and lagna fields
 type DevoteeDTO struct {
-	UserID   uint   `json:"user_id"`
-	FullName string `json:"full_name"`
-	Email    string `json:"email"`
-	Phone    string `json:"phone"`
-	Status   string `json:"status"`
+	UserID    uint   `json:"user_id"`
+	FullName  string `json:"full_name"`
+	Email     string `json:"email"`
+	Phone     string `json:"phone"`
+	Status    string `json:"status"`
+	Nakshatra string `json:"nakshatra"`
+	Rashi     string `json:"rashi"`
+	Lagna     string `json:"lagna"`
 }
 
+// GetDevoteesByEntityID with LEFT JOIN to devotee_profiles table (PLURAL)
 func (r *Repository) GetDevoteesByEntityID(entityID uint) ([]DevoteeDTO, error) {
 	var devotees []DevoteeDTO
 
 	err := r.DB.
 		Table("user_entity_memberships AS uem").
-		Select("u.id AS user_id, u.full_name, u.email, u.phone, uem.status").
+		Select("u.id AS user_id, u.full_name, u.email, u.phone, uem.status, dp.nakshatra, dp.rashi, dp.lagna").
 		Joins("JOIN users u ON u.id = uem.user_id").
 		Joins("JOIN user_roles ur ON u.role_id = ur.id").
+		Joins("LEFT JOIN devotee_profiles dp ON dp.user_id = u.id").
 		Where("uem.entity_id = ? AND ur.role_name = ?", entityID, "devotee").
 		Scan(&devotees).Error
 
-	return devotees, err
-}
+	if err != nil {
+		log.Printf("Database error in GetDevoteesByEntityID: %v", err)
+		return nil, err
+	}
 
+	log.Printf("Found %d devotees for entity %d", len(devotees), entityID)
+	return devotees, nil
+}
 type DevoteeStats struct {
 	TotalDevotees  int64 `json:"total_devotees"`
 	ActiveDevotees int64 `json:"active_devotees"`

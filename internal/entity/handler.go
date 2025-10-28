@@ -1096,11 +1096,29 @@ func (h *Handler) GetDevoteesByEntity(c *gin.Context) {
 
 	// Check permissions
 	entityID := uint(entityIDUint)
+	
+	// Debug logging
+	log.Printf("=== Access Check Debug ===")
+	log.Printf("Requested Entity ID: %d", entityID)
+	log.Printf("DirectEntityID: %v", accessContext.DirectEntityID)
+	if accessContext.DirectEntityID != nil {
+		log.Printf("DirectEntityID value: %d", *accessContext.DirectEntityID)
+	}
+	log.Printf("AssignedEntityID: %v", accessContext.AssignedEntityID)
+	if accessContext.AssignedEntityID != nil {
+		log.Printf("AssignedEntityID value: %d", *accessContext.AssignedEntityID)
+	}
+	
 	hasAccess := (accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityID) ||
 		(accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityID)
 
+	log.Printf("hasAccess result: %v", hasAccess)
+	log.Printf("=========================")
+
 	if !hasAccess {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied to devotees for this entity"})
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "Access denied to devotees for this entity",
+		})
 		return
 	}
 
