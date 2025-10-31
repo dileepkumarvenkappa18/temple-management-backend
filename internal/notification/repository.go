@@ -3,6 +3,7 @@ package notification
 import (
 	"context"
 	"errors"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -25,6 +26,13 @@ type Repository interface {
 	CreateInApp(ctx context.Context, n *InAppNotification) error
 	ListInAppByUser(ctx context.Context, userID uint, entityID *uint, limit int) ([]InAppNotification, error)
 	MarkInAppAsRead(ctx context.Context, id uint, userID uint) error
+
+	// ✅ FCM Device Tokens
+	SaveDeviceToken(ctx context.Context, token *FCMDeviceToken) error
+	GetUserDeviceTokens(ctx context.Context, userID uint, entityID uint) ([]string, error)
+	GetDeviceTokensByEntityAndRole(ctx context.Context, entityID uint, roleNames []string) ([]string, error)
+	RemoveDeviceToken(ctx context.Context, userID uint, deviceToken string) error
+	DeactivateOldTokens(ctx context.Context, userID uint, keepToken string) error
 }
 
 type repository struct {
@@ -140,4 +148,92 @@ func (r *repository) MarkInAppAsRead(ctx context.Context, id uint, userID uint) 
 		Model(&InAppNotification{}).
 		Where("id = ? AND user_id = ?", id, userID).
 		Update("is_read", true).Error
+}
+
+// ------------------------------
+// ✅ FCM Device Tokens
+// ------------------------------
+
+// SaveDeviceToken creates or updates a device token
+func (r *repository) SaveDeviceToken(ctx context.Context, token *FCMDeviceToken) error {
+	// Check if token already exists
+	var existing FCMDeviceToken
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND device_token = ?", token.UserID, token.DeviceToken).
+		First(&existing).Error
+
+	if err == gorm.ErrRecordNotFound {
+		// Create new token
+		token.LastUsedAt = time.Now()
+		return r.db.WithContext(ctx).Create(token).Error
+	}
+
+	if err != nil {
+		return err
+	}
+
+	// Update existing token
+	existing.IsActive = true
+	existing.LastUsedAt = time.Now()
+	existing.DeviceType = token.DeviceType
+	existing.DeviceName = token.DeviceName
+	existing.EntityID = token.EntityID
+
+	return r.db.WithContext(ctx).Save(&existing).Error
+}
+
+// GetUserDeviceTokens retrieves all active device tokens for a user
+func (r *repository) GetUserDeviceTokens(ctx context.Context, userID uint, entityID uint) ([]string, error) {
+	var tokens []FCMDeviceToken
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND entity_id = ? AND is_active = ?", userID, entityID, true).
+		Find(&tokens).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]string, len(tokens))
+	for i, t := range tokens {
+		result[i] = t.DeviceToken
+	}
+
+	return result, nil
+}
+
+// GetDeviceTokensByEntityAndRole gets tokens for users with specific roles in an entity
+func (r *repository) GetDeviceTokensByEntityAndRole(ctx context.Context, entityID uint, roleNames []string) ([]string, error) {
+	var tokens []string
+
+	// This requires a join with users and roles tables
+	// Adjust based on your auth schema
+	query := `
+	SELECT DISTINCT fdt.device_token
+FROM fcm_device_tokens fdt
+INNER JOIN users u ON fdt.user_id = u.id
+INNER JOIN user_roles r ON u.role_id = r.id
+WHERE fdt.entity_id = ?
+AND fdt.is_active = true
+AND r.name IN (?)
+
+	`
+
+	err := r.db.WithContext(ctx).Raw(query, entityID, roleNames).Scan(&tokens).Error
+	return tokens, err
+}
+
+// RemoveDeviceToken deactivates a specific device token
+func (r *repository) RemoveDeviceToken(ctx context.Context, userID uint, deviceToken string) error {
+	return r.db.WithContext(ctx).
+		Model(&FCMDeviceToken{}).
+		Where("user_id = ? AND device_token = ?", userID, deviceToken).
+		Update("is_active", false).Error
+}
+
+// DeactivateOldTokens deactivates all tokens for a user except the specified one
+func (r *repository) DeactivateOldTokens(ctx context.Context, userID uint, keepToken string) error {
+	return r.db.WithContext(ctx).
+		Model(&FCMDeviceToken{}).
+		Where("user_id = ? AND device_token != ?", userID, keepToken).
+		Update("is_active", false).Error
 }

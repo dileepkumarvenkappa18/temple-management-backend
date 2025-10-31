@@ -9,24 +9,28 @@ import (
 // ======================
 
 type Seva struct {
-	ID                uint      `gorm:"primaryKey" json:"id"`
-	EntityID          uint      `gorm:"not null" json:"entity_id"`
-	Name              string    `gorm:"type:varchar(255);not null" json:"name"`
-	SevaType          string    `gorm:"type:varchar(50);not null" json:"seva_type"` // e.g., Archana, Abhishekam
-	Description       string    `gorm:"type:text" json:"description"`
-	Price             float64   `gorm:"type:decimal(10,2);default:0" json:"price"`
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	EntityID       uint      `gorm:"not null" json:"entity_id"`
+	Name           string    `gorm:"type:varchar(255);not null" json:"name"`
+	SevaType       string    `gorm:"type:varchar(50);not null" json:"seva_type"` // e.g., Archana, Abhishekam
+	Description    string    `gorm:"type:text" json:"description"`
+	Price          float64   `gorm:"type:decimal(10,2);default:0" json:"price"`
 
-	Date              string    `gorm:"type:varchar(20)" json:"date"`        // Format: dd-mm-yyyy
-	StartTime         string    `gorm:"type:varchar(10)" json:"start_time"`  // Format: HH:mm
-	EndTime           string    `gorm:"type:varchar(10)" json:"end_time"`    // Format: HH:mm
+	Date           string    `gorm:"type:varchar(20)" json:"date"`        // Format: dd-mm-yyyy
+	StartTime      string    `gorm:"type:varchar(10)" json:"start_time"`  // Format: HH:mm
+	EndTime        string    `gorm:"type:varchar(10)" json:"end_time"`    // Format: HH:mm
 
-	Duration          int       `json:"duration"` // in minutes
-	MaxBookingsPerDay int       `json:"max_bookings_per_day"`
+	Duration       int       `json:"duration"` // in minutes
+	
+	// ✅ UPDATED: Slot Management Fields
+	AvailableSlots int       `json:"available_slots" gorm:"default:0"` // Total slots available
+	BookedSlots    int       `json:"booked_slots" gorm:"default:0"`    // Number of approved bookings
+	RemainingSlots int       `json:"remaining_slots" gorm:"default:0"` // Calculated: AvailableSlots - BookedSlots
 
-	Status            string    `gorm:"type:varchar(20);default:'pending'" json:"status"` // e.g., approved/pending/rejected
-	IsActive          bool      `gorm:"default:true" json:"is_active"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	Status         string    `gorm:"type:varchar(20);default:'upcoming'" json:"status"` // upcoming/ongoing/completed
+	IsActive       bool      `gorm:"default:true" json:"is_active"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // ======================
@@ -34,16 +38,15 @@ type Seva struct {
 // ======================
 
 type SevaBooking struct {
-	ID          uint      // PK
-	SevaID      uint      // Which Seva is being booked
-	UserID      uint      // Who is booking (devotee)
-	EntityID    uint      // Temple where the seva is hosted
-	BookingTime time.Time // Auto-timestamp
-	Status      string    // pending / approved / rejected
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	SevaID      uint      `gorm:"not null" json:"seva_id"`        // Which Seva is being booked
+	UserID      uint      `gorm:"not null" json:"user_id"`        // Who is booking (devotee)
+	EntityID    uint      `gorm:"not null" json:"entity_id"`      // Temple where the seva is hosted
+	BookingTime time.Time `json:"booking_time"`                   // Auto-timestamp
+	Status      string    `gorm:"type:varchar(20);default:'pending'" json:"status"` // pending / approved / rejected
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
-
 
 // ✅ For Filtered Search (Admin Dashboard)
 type BookingFilter struct {

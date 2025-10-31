@@ -43,7 +43,7 @@ type Service interface {
 
     GetPaginatedSevas(ctx context.Context, entityID uint, sevaType string, search string, limit int, offset int) ([]Seva, error)
 
-    // NEW: Get approved booking counts per seva
+    // Get approved booking counts per seva
     GetApprovedBookingCountsPerSeva(ctx context.Context, entityID uint) (map[uint]int64, error)
 
     SetNotifService(n notification.Service)
@@ -97,6 +97,9 @@ func (s *service) CreateSeva(ctx context.Context, seva *Seva, accessContext midd
     }
 
     seva.EntityID = *entityID
+    // ✅ UPDATED: Initialize slot fields
+    seva.BookedSlots = 0
+    seva.RemainingSlots = seva.AvailableSlots
 
     err := s.repo.CreateSeva(ctx, seva)
     if err != nil {
@@ -110,12 +113,15 @@ func (s *service) CreateSeva(ctx context.Context, seva *Seva, accessContext midd
     }
 
     s.auditSvc.LogAction(ctx, &accessContext.UserID, entityID, "SEVA_CREATED", map[string]interface{}{
-        "seva_id":   seva.ID,
-        "seva_name": seva.Name,
-        "seva_type": seva.SevaType,
-        "price":     seva.Price,
-        "status":    seva.Status,
-        "role":      accessContext.RoleName,
+        "seva_id":         seva.ID,
+        "seva_name":       seva.Name,
+        "seva_type":       seva.SevaType,
+        "price":           seva.Price,
+        "status":          seva.Status,
+        "available_slots": seva.AvailableSlots,
+        "booked_slots":    seva.BookedSlots,
+        "remaining_slots": seva.RemainingSlots,
+        "role":            accessContext.RoleName,
     }, ip, "success")
 
     if s.notifSvc != nil {
@@ -162,6 +168,12 @@ func (s *service) UpdateSeva(ctx context.Context, seva *Seva, accessContext midd
         }
     }
 
+    // ✅ UPDATED: Recalculate remaining slots before update
+    seva.RemainingSlots = seva.AvailableSlots - seva.BookedSlots
+    if seva.RemainingSlots < 0 {
+        seva.RemainingSlots = 0
+    }
+
     err := s.repo.UpdateSeva(ctx, seva)
     if err != nil {
         s.auditSvc.LogAction(ctx, &accessContext.UserID, entityID, "SEVA_UPDATE_FAILED", map[string]interface{}{
@@ -173,12 +185,15 @@ func (s *service) UpdateSeva(ctx context.Context, seva *Seva, accessContext midd
     }
 
     s.auditSvc.LogAction(ctx, &accessContext.UserID, entityID, "SEVA_UPDATED", map[string]interface{}{
-        "seva_id":   seva.ID,
-        "seva_name": seva.Name,
-        "seva_type": seva.SevaType,
-        "price":     seva.Price,
-        "status":    seva.Status,
-        "role":      accessContext.RoleName,
+        "seva_id":         seva.ID,
+        "seva_name":       seva.Name,
+        "seva_type":       seva.SevaType,
+        "price":           seva.Price,
+        "status":          seva.Status,
+        "available_slots": seva.AvailableSlots,
+        "booked_slots":    seva.BookedSlots,
+        "remaining_slots": seva.RemainingSlots,
+        "role":            accessContext.RoleName,
     }, ip, "success")
 
     if s.notifSvc != nil && accessContext.GetAccessibleEntityID() != nil {
@@ -296,7 +311,7 @@ func (s *service) GetSevasWithFilters(ctx context.Context, entityID uint, sevaTy
     return s.repo.GetSevasWithFilters(ctx, entityID, sevaType, search, status, limit, offset)
 }
 
-// UPDATED: BookSeva with slot availability check
+// ✅ UPDATED: BookSeva with slot availability check using RemainingSlots
 func (s *service) BookSeva(ctx context.Context, booking *SevaBooking, userRole string, userID uint, entityID uint, ip string) error {
     if userRole != "devotee" {
         s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_BOOKING_FAILED", map[string]interface{}{
@@ -328,25 +343,16 @@ func (s *service) BookSeva(ctx context.Context, booking *SevaBooking, userRole s
         return errors.New("seva is not available for booking")
     }
 
-    // ✅ CRITICAL: Check available slots (only count approved bookings)
-    approvedCount, err := s.repo.CountApprovedBookingsForSeva(ctx, booking.SevaID)
-    if err != nil {
+    // ✅ CRITICAL: Check remaining slots (booking will be pending, not yet approved)
+    // We only check if there are available slots, approval will increment BookedSlots
+    if seva.AvailableSlots > 0 && seva.RemainingSlots <= 0 {
         s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_BOOKING_FAILED", map[string]interface{}{
-            "seva_id": booking.SevaID,
-            "reason":  "failed to check slot availability",
-            "error":   err.Error(),
-        }, ip, "failure")
-        return fmt.Errorf("failed to check slot availability: %v", err)
-    }
-
-    maxSlots := int64(seva.MaxBookingsPerDay)
-    if maxSlots > 0 && approvedCount >= maxSlots {
-        s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_BOOKING_FAILED", map[string]interface{}{
-            "seva_id":        booking.SevaID,
-            "seva_name":      seva.Name,
-            "reason":         "no slots available",
-            "approved_count": approvedCount,
-            "max_slots":      maxSlots,
+            "seva_id":         booking.SevaID,
+            "seva_name":       seva.Name,
+            "reason":          "no slots available",
+            "available_slots": seva.AvailableSlots,
+            "booked_slots":    seva.BookedSlots,
+            "remaining_slots": seva.RemainingSlots,
         }, ip, "failure")
         return errors.New("no slots available for this seva")
     }
@@ -368,14 +374,15 @@ func (s *service) BookSeva(ctx context.Context, booking *SevaBooking, userRole s
     }
 
     s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_BOOKED", map[string]interface{}{
-        "booking_id":     booking.ID,
-        "seva_id":        booking.SevaID,
-        "seva_name":      seva.Name,
-        "seva_type":      seva.SevaType,
-        "seva_status":    seva.Status,
-        "booking_status": booking.Status,
-        "approved_count": approvedCount,
-        "max_slots":      maxSlots,
+        "booking_id":      booking.ID,
+        "seva_id":         booking.SevaID,
+        "seva_name":       seva.Name,
+        "seva_type":       seva.SevaType,
+        "seva_status":     seva.Status,
+        "booking_status":  booking.Status,
+        "available_slots": seva.AvailableSlots,
+        "booked_slots":    seva.BookedSlots,
+        "remaining_slots": seva.RemainingSlots,
     }, ip, "success")
 
     if s.notifSvc != nil {
@@ -408,7 +415,7 @@ func (s *service) GetBookingsForEntity(ctx context.Context, entityID uint) ([]Se
     return s.repo.ListBookingsByEntityID(ctx, entityID)
 }
 
-// UPDATED: UpdateBookingStatus - When approved, slot is reduced
+// ✅ UPDATED: UpdateBookingStatus - Updates BookedSlots and RemainingSlots in Seva
 func (s *service) UpdateBookingStatus(ctx context.Context, bookingID uint, newStatus string, userID uint, ip string) error {
     booking, err := s.repo.GetBookingByID(ctx, bookingID)
     if err != nil {
@@ -421,36 +428,62 @@ func (s *service) UpdateBookingStatus(ctx context.Context, bookingID uint, newSt
         return err
     }
 
-    seva, _ := s.repo.GetSevaByID(ctx, booking.SevaID)
+    seva, err := s.repo.GetSevaByID(ctx, booking.SevaID)
+    if err != nil {
+        s.auditSvc.LogAction(ctx, &userID, &booking.EntityID, "SEVA_BOOKING_STATUS_UPDATE_FAILED", map[string]interface{}{
+            "booking_id": bookingID,
+            "new_status": newStatus,
+            "reason":     "seva not found",
+            "error":      err.Error(),
+        }, ip, "failure")
+        return err
+    }
 
-    // ✅ If approving, check if slots are still available
-    if newStatus == "approved" && booking.Status != "approved" {
-        approvedCount, err := s.repo.CountApprovedBookingsForSeva(ctx, booking.SevaID)
-        if err != nil {
+    oldStatus := booking.Status
+
+    // ✅ CRITICAL: Handle slot management based on status transitions
+    // Case 1: Approving a booking (pending/rejected -> approved)
+    if newStatus == "approved" && oldStatus != "approved" {
+        // Check if slots are available
+        if seva.RemainingSlots <= 0 {
+            s.auditSvc.LogAction(ctx, &userID, &booking.EntityID, "SEVA_BOOKING_STATUS_UPDATE_FAILED", map[string]interface{}{
+                "booking_id":      bookingID,
+                "new_status":      newStatus,
+                "reason":          "no slots available",
+                "available_slots": seva.AvailableSlots,
+                "booked_slots":    seva.BookedSlots,
+                "remaining_slots": seva.RemainingSlots,
+            }, ip, "failure")
+            return errors.New("no slots available for this seva")
+        }
+
+        // Increment booked slots and decrement remaining slots
+        if err := s.repo.IncrementBookedSlots(ctx, booking.SevaID); err != nil {
             s.auditSvc.LogAction(ctx, &userID, &booking.EntityID, "SEVA_BOOKING_STATUS_UPDATE_FAILED", map[string]interface{}{
                 "booking_id": bookingID,
                 "new_status": newStatus,
-                "reason":     "failed to check slot availability",
+                "reason":     "failed to update slots",
                 "error":      err.Error(),
             }, ip, "failure")
-            return fmt.Errorf("failed to check slot availability: %v", err)
-        }
-
-        if seva != nil {
-            maxSlots := int64(seva.MaxBookingsPerDay)
-            if maxSlots > 0 && approvedCount >= maxSlots {
-                s.auditSvc.LogAction(ctx, &userID, &booking.EntityID, "SEVA_BOOKING_STATUS_UPDATE_FAILED", map[string]interface{}{
-                    "booking_id":     bookingID,
-                    "new_status":     newStatus,
-                    "reason":         "no slots available",
-                    "approved_count": approvedCount,
-                    "max_slots":      maxSlots,
-                }, ip, "failure")
-                return errors.New("no slots available for this seva")
-            }
+            return fmt.Errorf("failed to update slots: %v", err)
         }
     }
 
+    // Case 2: Rejecting/Canceling an approved booking (approved -> rejected/pending)
+    if oldStatus == "approved" && newStatus != "approved" {
+        // Decrement booked slots and increment remaining slots
+        if err := s.repo.DecrementBookedSlots(ctx, booking.SevaID); err != nil {
+            s.auditSvc.LogAction(ctx, &userID, &booking.EntityID, "SEVA_BOOKING_STATUS_UPDATE_FAILED", map[string]interface{}{
+                "booking_id": bookingID,
+                "new_status": newStatus,
+                "reason":     "failed to update slots",
+                "error":      err.Error(),
+            }, ip, "failure")
+            return fmt.Errorf("failed to update slots: %v", err)
+        }
+    }
+
+    // Update booking status
     err = s.repo.UpdateBookingStatus(ctx, bookingID, newStatus)
     if err != nil {
         s.auditSvc.LogAction(ctx, &userID, &booking.EntityID, "SEVA_BOOKING_STATUS_UPDATE_FAILED", map[string]interface{}{
@@ -474,7 +507,7 @@ func (s *service) UpdateBookingStatus(ctx context.Context, bookingID uint, newSt
         "booking_id": bookingID,
         "seva_id":    booking.SevaID,
         "devotee_id": booking.UserID,
-        "old_status": booking.Status,
+        "old_status": oldStatus,
         "new_status": newStatus,
     }
 
@@ -482,6 +515,14 @@ func (s *service) UpdateBookingStatus(ctx context.Context, bookingID uint, newSt
         auditDetails["seva_name"] = seva.Name
         auditDetails["seva_type"] = seva.SevaType
         auditDetails["seva_status"] = seva.Status
+        
+        // Fetch updated slot info
+        updatedSeva, _ := s.repo.GetSevaByID(ctx, booking.SevaID)
+        if updatedSeva != nil {
+            auditDetails["available_slots"] = updatedSeva.AvailableSlots
+            auditDetails["booked_slots"] = updatedSeva.BookedSlots
+            auditDetails["remaining_slots"] = updatedSeva.RemainingSlots
+        }
     }
 
     s.auditSvc.LogAction(ctx, &userID, &booking.EntityID, action, auditDetails, ip, "success")
@@ -539,7 +580,7 @@ func (s *service) GetPaginatedSevas(ctx context.Context, entityID uint, sevaType
     return s.repo.ListPaginatedSevas(ctx, entityID, sevaType, search, limit, offset)
 }
 
-// NEW: Get approved booking counts per seva - THIS WAS MISSING
+// Get approved booking counts per seva
 func (s *service) GetApprovedBookingCountsPerSeva(ctx context.Context, entityID uint) (map[uint]int64, error) {
     return s.repo.GetApprovedBookingsCountPerSeva(ctx, entityID)
 }

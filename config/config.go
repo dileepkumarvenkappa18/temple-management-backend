@@ -10,7 +10,7 @@ import (
 
 // ✅ Global constants (accessible from other packages)
 var UploadPath = "./uploads"
-var BaseURL   = "http://localhost:8080"
+var BaseURL = "http://localhost:8080"
 
 type Config struct {
 	Port string
@@ -42,6 +42,10 @@ type Config struct {
 	SMTPPassword  string
 	SMTPFromName  string
 	SMTPFromEmail string
+
+	// ✅ FCM Config
+	FCMCredentialsPath string // Path to Firebase service account JSON
+	FCMProjectID       string // Firebase Project ID (optional, can be in JSON)
 }
 
 // Load reads environment variables and returns a Config object
@@ -81,5 +85,8 @@ func Load() *Config {
 		SMTPPassword:  os.Getenv("SMTP_PASSWORD"),
 		SMTPFromName:  os.Getenv("SMTP_FROM_NAME"),
 		SMTPFromEmail: os.Getenv("SMTP_FROM_EMAIL"),
+
+		FCMCredentialsPath: os.Getenv("FCM_CREDENTIALS_PATH"),
+		FCMProjectID:       os.Getenv("FCM_PROJECT_ID"),
 	}
 }

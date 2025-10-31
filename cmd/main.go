@@ -38,6 +38,13 @@ func main() {
 	// Init Kafka
 	utils.InitializeKafka()
 
+	// 🔥 Init Firebase
+	log.Println("🔄 Initializing Firebase...")
+	if err := utils.InitFirebase(); err != nil {
+		log.Printf("⚠️ Firebase initialization failed: %v", err)
+		log.Println("ℹ️ Continuing without Firebase features")
+	}
+
 	// Init repositories & services
 	authRepo := auth.NewRepository(db)
 	auditRepo := auditlog.NewRepository(db)
@@ -63,7 +70,6 @@ func main() {
 		&event.Event{},
 		&eventrsvp.RSVP{},
 		&notification.InAppNotification{},
-		
 	); err != nil {
 		panic(fmt.Sprintf("❌ DB AutoMigrate failed: %v", err))
 	}
@@ -99,13 +105,37 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// Handle preflight requests
-	router.OPTIONS("/*path", func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
+	// ✅ CRITICAL FIX: Explicit preflight handler for SuperAdmin routes
+	// This must be defined BEFORE routes.Setup() to catch preflight requests
+	router.OPTIONS("/api/v1/superadmin/*path", func(c *gin.Context) {
+		origin := c.GetHeader("Origin")
+		allowedOrigins := []string{
+			"http://localhost:5173",
+			"http://127.0.0.1:5173",
+			"http://localhost:4173",
+			"http://127.0.0.1:4173",
+		}
+
+		originAllowed := false
+		for _, allowed := range allowedOrigins {
+			if origin == allowed {
+				originAllowed = true
+				break
+			}
+		}
+
+		if !originAllowed {
+			origin = "http://localhost:4173" // Default fallback
+		}
+
+		log.Printf("🔧 SuperAdmin OPTIONS request from origin: %s for path: %s", origin, c.Request.URL.Path)
+
+		c.Header("Access-Control-Allow-Origin", origin)
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD")
-		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Entity-ID, X-Tenant-ID")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, Content-Length, X-Requested-With, Cache-Control, Pragma, X-Entity-ID")
 		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition, Cache-Control, Pragma, Expires")
 		c.Header("Access-Control-Allow-Credentials", "true")
+		c.Header("Access-Control-Max-Age", "43200") // 12 hours
 		c.Status(204)
 	})
 
@@ -330,7 +360,7 @@ func main() {
 
 		entityID := c.Param("id")
 		entityDir := filepath.Join(uploadDir, entityID)
-		
+
 		if _, err := os.Stat(entityDir); os.IsNotExist(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "No files found for this entity"})
 			return
@@ -353,7 +383,7 @@ func main() {
 
 		var fileInfos []FileInfo
 		var totalSize int64
-		
+
 		for _, file := range files {
 			if !file.IsDir() {
 				info, err := file.Info()
@@ -395,6 +425,14 @@ func main() {
 	fmt.Printf("🌐 File access: http://localhost:%s/uploads/{entityID}/{filename}\n", cfg.Port)
 	fmt.Printf("📥 Download file: http://localhost:%s/api/v1/entities/{id}/files/{filename}\n", cfg.Port)
 	fmt.Printf("📦 Bulk download: http://localhost:%s/api/v1/entities/{id}/files-all\n", cfg.Port)
+	fmt.Printf("✅ CORS configured for: localhost:4173, localhost:5173\n")
+	fmt.Printf("✅ PATCH method enabled for approvals\n")
+	
+	if utils.IsFCMEnabled() {
+		fmt.Println("✅ Firebase Cloud Messaging enabled")
+	} else {
+		fmt.Println("ℹ️ Firebase Cloud Messaging disabled")
+	}
 
 	if err := router.Run(":" + cfg.Port); err != nil {
 		panic(fmt.Sprintf("Failed to start server: %v", err))
@@ -520,21 +558,21 @@ func migrateIsActiveColumn(db *gorm.DB) error {
 
 	log.Println("🔄 Adding isactive column to entities table...")
 	sql := `ALTER TABLE entities ADD COLUMN isactive BOOLEAN DEFAULT true NOT NULL;`
-	
+
 	if err := db.Exec(sql).Error; err != nil {
 		return fmt.Errorf("failed to add isactive column: %v", err)
 	}
 
 	log.Println("🔄 Creating index on isactive column...")
 	indexSQL := `CREATE INDEX IF NOT EXISTS idx_entities_isactive ON entities(isactive);`
-	
+
 	if err := db.Exec(indexSQL).Error; err != nil {
 		log.Printf("⚠️ Warning: Could not create index: %v", err)
 	}
 
 	log.Println("🔄 Updating existing records with isactive = true...")
 	updateSQL := `UPDATE entities SET isactive = true WHERE isactive IS NULL;`
-	
+
 	result := db.Exec(updateSQL)
 	if result.Error != nil {
 		log.Printf("⚠️ Warning: Could not update existing records: %v", result.Error)

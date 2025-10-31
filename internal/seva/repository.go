@@ -24,7 +24,12 @@ type Repository interface {
 	ListBookingsByEntityID(ctx context.Context, entityID uint) ([]SevaBooking, error)
 	UpdateBookingStatus(ctx context.Context, bookingID uint, newStatus string) error
 
-	// Booking limits - UPDATED
+	// ✅ UPDATED: Slot management methods
+	UpdateSevaSlots(ctx context.Context, sevaID uint, bookedSlots, remainingSlots int) error
+	IncrementBookedSlots(ctx context.Context, sevaID uint) error
+	DecrementBookedSlots(ctx context.Context, sevaID uint) error
+
+	// Booking limits
 	CountBookingsForSlot(ctx context.Context, sevaID uint, date time.Time, slot string) (int64, error)
 	CountApprovedBookingsForSeva(ctx context.Context, sevaID uint) (int64, error)
 	GetApprovedBookingsCountPerSeva(ctx context.Context, entityID uint) (map[uint]int64, error)
@@ -73,7 +78,7 @@ func (r *repository) ListPaginatedSevas(ctx context.Context, entityID uint, seva
 
 	query := r.db.WithContext(ctx).
 		Model(&Seva{}).
-		Where("entity_id = ? AND status IN (?)", entityID, []string{"upcoming", "ongoing"}) // Only show bookable sevas to devotees
+		Where("entity_id = ? AND status IN (?)", entityID, []string{"upcoming", "ongoing"})
 
 	if sevaType != "" {
 		query = query.Where("seva_type = ?", sevaType)
@@ -139,6 +144,43 @@ func (r *repository) DeleteSeva(ctx context.Context, id uint) error {
 }
 
 // -----------------------------------------
+// ✅ NEW: Slot Management Methods
+// -----------------------------------------
+
+// UpdateSevaSlots updates the booked_slots and remaining_slots for a seva
+func (r *repository) UpdateSevaSlots(ctx context.Context, sevaID uint, bookedSlots, remainingSlots int) error {
+	return r.db.WithContext(ctx).
+		Model(&Seva{}).
+		Where("id = ?", sevaID).
+		Updates(map[string]interface{}{
+			"booked_slots":    bookedSlots,
+			"remaining_slots": remainingSlots,
+		}).Error
+}
+
+// IncrementBookedSlots increments booked_slots by 1 and decrements remaining_slots by 1
+func (r *repository) IncrementBookedSlots(ctx context.Context, sevaID uint) error {
+	return r.db.WithContext(ctx).
+		Model(&Seva{}).
+		Where("id = ?", sevaID).
+		Updates(map[string]interface{}{
+			"booked_slots":    gorm.Expr("booked_slots + ?", 1),
+			"remaining_slots": gorm.Expr("remaining_slots - ?", 1),
+		}).Error
+}
+
+// DecrementBookedSlots decrements booked_slots by 1 and increments remaining_slots by 1
+func (r *repository) DecrementBookedSlots(ctx context.Context, sevaID uint) error {
+	return r.db.WithContext(ctx).
+		Model(&Seva{}).
+		Where("id = ?", sevaID).
+		Updates(map[string]interface{}{
+			"booked_slots":    gorm.Expr("booked_slots - ?", 1),
+			"remaining_slots": gorm.Expr("remaining_slots + ?", 1),
+		}).Error
+}
+
+// -----------------------------------------
 // Booking Core
 // -----------------------------------------
 func (r *repository) BookSeva(ctx context.Context, booking *SevaBooking) error {
@@ -165,7 +207,7 @@ func (r *repository) UpdateBookingStatus(ctx context.Context, bookingID uint, ne
 }
 
 // -----------------------------------------
-// Booking Limit Checker - UPDATED
+// Booking Limit Checker
 // -----------------------------------------
 func (r *repository) CountBookingsForSlot(ctx context.Context, sevaID uint, date time.Time, slot string) (int64, error) {
 	var count int64
@@ -174,7 +216,7 @@ func (r *repository) CountBookingsForSlot(ctx context.Context, sevaID uint, date
 	return count, nil
 }
 
-// NEW: Count only approved bookings for a specific seva
+// Count only approved bookings for a specific seva
 func (r *repository) CountApprovedBookingsForSeva(ctx context.Context, sevaID uint) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
@@ -184,7 +226,7 @@ func (r *repository) CountApprovedBookingsForSeva(ctx context.Context, sevaID ui
 	return count, err
 }
 
-// NEW: Get approved bookings count per seva for an entity
+// Get approved bookings count per seva for an entity
 func (r *repository) GetApprovedBookingsCountPerSeva(ctx context.Context, entityID uint) (map[uint]int64, error) {
 	type Result struct {
 		SevaID uint  `gorm:"column:seva_id"`

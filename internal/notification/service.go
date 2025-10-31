@@ -14,7 +14,7 @@ import (
 	"gorm.io/datatypes"
 )
 
-// Service interface - updated with IP parameters for audit logging
+// Service interface - updated with FCM methods
 type Service interface {
 	CreateTemplate(ctx context.Context, template *NotificationTemplate, ip string) error
 	UpdateTemplate(ctx context.Context, template *NotificationTemplate, ip string) error
@@ -32,6 +32,15 @@ type Service interface {
 
 	// Fan-out helpers
 	CreateInAppForEntityRoles(ctx context.Context, entityID uint, roleNames []string, title, message, category string) error
+
+	// ✅ FCM Device Token Management
+	RegisterDeviceToken(ctx context.Context, userID, entityID uint, deviceToken, deviceType, deviceName string) error
+	RemoveDeviceToken(ctx context.Context, userID uint, deviceToken string) error
+	GetUserDeviceTokens(ctx context.Context, userID, entityID uint) ([]string, error)
+
+	// ✅ FCM Push Notifications
+	SendPushNotification(ctx context.Context, senderID, entityID uint, title, body string, userIDs []uint, ip string) error
+	SendPushToRoles(ctx context.Context, senderID, entityID uint, title, body string, roleNames []string, ip string) error
 }
 
 type service struct {
@@ -41,9 +50,10 @@ type service struct {
 	email    Channel
 	sms      Channel
 	whatsapp Channel
+	fcm      Channel // ✅ FCM channel
 }
 
-// ✅ Updated constructor to accept audit service
+// ✅ Updated constructor to initialize FCM
 func NewService(repo Repository, authRepo auth.Repository, cfg *config.Config, auditSvc auditlog.Service) Service {
 	return &service{
 		repo:     repo,
@@ -52,6 +62,7 @@ func NewService(repo Repository, authRepo auth.Repository, cfg *config.Config, a
 		email:    NewEmailSender(cfg),
 		sms:      NewSMSChannel(),
 		whatsapp: NewWhatsAppChannel(),
+		fcm:      NewFCMChannel(cfg), // ✅ Initialize FCM
 	}
 }
 
@@ -59,7 +70,6 @@ func NewService(repo Repository, authRepo auth.Repository, cfg *config.Config, a
 func (s *service) CreateTemplate(ctx context.Context, t *NotificationTemplate, ip string) error {
 	err := s.repo.CreateTemplate(ctx, t)
 
-	// ✅ Audit log the template creation
 	status := "success"
 	if err != nil {
 		status = "failure"
@@ -82,7 +92,6 @@ func (s *service) CreateTemplate(ctx context.Context, t *NotificationTemplate, i
 func (s *service) UpdateTemplate(ctx context.Context, t *NotificationTemplate, ip string) error {
 	err := s.repo.UpdateTemplate(ctx, t)
 
-	// ✅ Audit log the template update
 	status := "success"
 	if err != nil {
 		status = "failure"
@@ -112,7 +121,6 @@ func (s *service) GetTemplateByID(ctx context.Context, id uint, entityID uint) (
 
 // ✅ Updated with audit logging
 func (s *service) DeleteTemplate(ctx context.Context, id uint, entityID uint, userID uint, ip string) error {
-	// Get template details before deletion for audit
 	template, getErr := s.repo.GetTemplateByID(ctx, id, entityID)
 	templateName := "unknown"
 	if getErr == nil && template != nil {
@@ -121,7 +129,6 @@ func (s *service) DeleteTemplate(ctx context.Context, id uint, entityID uint, us
 
 	err := s.repo.DeleteTemplate(ctx, id, entityID)
 
-	// ✅ Audit log the template deletion
 	status := "success"
 	if err != nil {
 		status = "failure"
@@ -140,7 +147,7 @@ func (s *service) DeleteTemplate(ctx context.Context, id uint, entityID uint, us
 	return err
 }
 
-// ✅ COMPLETELY REWRITTEN with batch processing and async support
+// ✅ Updated to support FCM push notifications
 func (s *service) SendNotification(
 	ctx context.Context,
 	senderID, entityID uint,
@@ -153,7 +160,6 @@ func (s *service) SendNotification(
 		return errors.New("no recipients specified")
 	}
 
-	// Create notification log entry first
 	recipientsJSON, _ := json.Marshal(recipients)
 	log := &NotificationLog{
 		UserID:     senderID,
@@ -174,9 +180,8 @@ func (s *service) SendNotification(
 
 	fmt.Printf("📨 Starting notification send: channel=%s, recipients=%d\n", channel, len(recipients))
 
-	// ✅ Process notifications based on channel with batch support
 	var sendErr error
-	batchSize := 50 // Send 50 at a time to avoid overwhelming services
+	batchSize := 50
 	
 	switch channel {
 	case "email":
@@ -185,11 +190,12 @@ func (s *service) SendNotification(
 		sendErr = s.sendSMSInBatches(recipients, subject, body, batchSize)
 	case "whatsapp":
 		sendErr = s.sendWhatsAppInBatches(recipients, subject, body, batchSize)
+	case "push": // ✅ NEW: FCM push notifications
+		sendErr = s.sendPushInBatches(recipients, subject, body, 500) // FCM supports 500 per batch
 	default:
 		sendErr = fmt.Errorf("unsupported channel: %s", channel)
 	}
 
-	// Update notification log status
 	if sendErr != nil {
 		errMsg := sendErr.Error()
 		log.Status = "failed"
@@ -203,7 +209,6 @@ func (s *service) SendNotification(
 	log.UpdatedAt = time.Now()
 	updateErr := s.repo.UpdateNotificationLog(ctx, log)
 
-	// ✅ Audit log the notification send action
 	auditAction := ""
 	switch channel {
 	case "email":
@@ -212,6 +217,8 @@ func (s *service) SendNotification(
 		auditAction = "SMS_SENT"
 	case "whatsapp":
 		auditAction = "WHATSAPP_SENT"
+	case "push":
+		auditAction = "PUSH_NOTIFICATION_SENT" // ✅ NEW
 	default:
 		auditAction = "NOTIFICATION_SENT"
 	}
@@ -233,14 +240,13 @@ func (s *service) SendNotification(
 		fmt.Printf("❌ Audit log error: %v\n", auditErr)
 	}
 
-	// Return the original send error if any, otherwise return update error
 	if sendErr != nil {
 		return sendErr
 	}
 	return updateErr
 }
 
-// ✅ NEW: Helper function to send emails in batches
+// ✅ Helper function to send emails in batches
 func (s *service) sendEmailInBatches(recipients []string, subject, body string, batchSize int) error {
 	totalRecipients := len(recipients)
 	var lastErr error
@@ -266,13 +272,11 @@ func (s *service) sendEmailInBatches(recipients []string, subject, body string, 
 			fmt.Printf("❌ Batch %d/%d failed: %v\n", batchNum, totalBatches, err)
 			lastErr = err
 			failedCount += len(batch)
-			// Continue with next batch instead of stopping
 		} else {
 			successCount += len(batch)
 			fmt.Printf("✅ Batch %d/%d sent successfully\n", batchNum, totalBatches)
 		}
 		
-		// Small delay between batches to avoid rate limiting
 		if end < totalRecipients {
 			time.Sleep(200 * time.Millisecond)
 		}
@@ -281,13 +285,11 @@ func (s *service) sendEmailInBatches(recipients []string, subject, body string, 
 	fmt.Printf("📊 Email send complete: %d succeeded, %d failed out of %d total\n", 
 		successCount, failedCount, totalRecipients)
 	
-	// If some emails succeeded, consider it a partial success
 	if successCount > 0 && failedCount > 0 {
 		return fmt.Errorf("partial success: %d/%d emails sent, last error: %v", 
 			successCount, totalRecipients, lastErr)
 	}
 	
-	// If all failed, return the last error
 	if failedCount == totalRecipients && lastErr != nil {
 		return fmt.Errorf("all batches failed: %v", lastErr)
 	}
@@ -295,7 +297,7 @@ func (s *service) sendEmailInBatches(recipients []string, subject, body string, 
 	return nil
 }
 
-// ✅ NEW: Helper function to send SMS in batches
+// ✅ Helper function to send SMS in batches
 func (s *service) sendSMSInBatches(recipients []string, subject, body string, batchSize int) error {
 	totalRecipients := len(recipients)
 	var lastErr error
@@ -346,7 +348,7 @@ func (s *service) sendSMSInBatches(recipients []string, subject, body string, ba
 	return nil
 }
 
-// ✅ NEW: Helper function to send WhatsApp in batches
+// ✅ Helper function to send WhatsApp in batches
 func (s *service) sendWhatsAppInBatches(recipients []string, subject, body string, batchSize int) error {
 	totalRecipients := len(recipients)
 	var lastErr error
@@ -397,6 +399,57 @@ func (s *service) sendWhatsAppInBatches(recipients []string, subject, body strin
 	return nil
 }
 
+// ✅ NEW: Helper function to send FCM push notifications in batches
+func (s *service) sendPushInBatches(deviceTokens []string, title, body string, batchSize int) error {
+	totalTokens := len(deviceTokens)
+	var lastErr error
+	successCount := 0
+	failedCount := 0
+	
+	fmt.Printf("🔔 Sending push notifications in batches of %d (total: %d)\n", batchSize, totalTokens)
+	
+	for i := 0; i < totalTokens; i += batchSize {
+		end := i + batchSize
+		if end > totalTokens {
+			end = totalTokens
+		}
+		
+		batch := deviceTokens[i:end]
+		batchNum := (i / batchSize) + 1
+		totalBatches := (totalTokens + batchSize - 1) / batchSize
+		
+		fmt.Printf("📤 Processing push batch %d/%d: sending to %d devices\n", 
+			batchNum, totalBatches, len(batch))
+		
+		if err := s.fcm.Send(batch, title, body); err != nil {
+			fmt.Printf("❌ Push Batch %d/%d failed: %v\n", batchNum, totalBatches, err)
+			lastErr = err
+			failedCount += len(batch)
+		} else {
+			successCount += len(batch)
+			fmt.Printf("✅ Push Batch %d/%d sent successfully\n", batchNum, totalBatches)
+		}
+		
+		if end < totalTokens {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	
+	fmt.Printf("📊 Push notification send complete: %d succeeded, %d failed out of %d total\n", 
+		successCount, failedCount, totalTokens)
+	
+	if successCount > 0 && failedCount > 0 {
+		return fmt.Errorf("partial success: %d/%d push notifications sent, last error: %v", 
+			successCount, totalTokens, lastErr)
+	}
+	
+	if failedCount == totalTokens && lastErr != nil {
+		return fmt.Errorf("all push batches failed: %v", lastErr)
+	}
+	
+	return nil
+}
+
 // CreateInAppNotification stores a bell notification for a specific user
 func (s *service) CreateInAppNotification(ctx context.Context, userID, entityID uint, title, message, category string) error {
 	item := &InAppNotification{
@@ -412,7 +465,6 @@ func (s *service) CreateInAppNotification(ctx context.Context, userID, entityID 
 		return err
 	}
 
-	// Publish to Redis channel for realtime SSE subscribers
 	payload, _ := json.Marshal(map[string]interface{}{
 		"id":         item.ID,
 		"user_id":    item.UserID,
@@ -436,9 +488,7 @@ func (s *service) MarkInAppAsRead(ctx context.Context, id uint, userID uint) err
 	return s.repo.MarkInAppAsRead(ctx, id, userID)
 }
 
-// CreateInAppForEntityRoles sends an in-app notification to all users of given roles within an entity
 func (s *service) CreateInAppForEntityRoles(ctx context.Context, entityID uint, roleNames []string, title, message, category string) error {
-	// Collect unique user IDs
 	unique := make(map[uint]struct{})
 	for _, role := range roleNames {
 		ids, err := s.authRepo.GetUserIDsByRole(role, entityID)
@@ -449,10 +499,8 @@ func (s *service) CreateInAppForEntityRoles(ctx context.Context, entityID uint, 
 			unique[id] = struct{}{}
 		}
 	}
-	// Create notifications for each
 	for uid := range unique {
 		if err := s.CreateInAppNotification(ctx, uid, entityID, title, message, category); err != nil {
-			// continue on error to avoid blocking others
 			fmt.Printf("in-app fanout error for user %d: %v\n", uid, err)
 		}
 	}
@@ -463,7 +511,6 @@ func (s *service) GetNotificationsByUser(ctx context.Context, userID uint) ([]No
 	return s.repo.GetNotificationsByUser(ctx, userID)
 }
 
-// ✅ Get Emails by audience using authRepo
 func (s *service) GetEmailsByAudience(entityID uint, audience string) ([]string, error) {
 	switch audience {
 	case "devotees":
@@ -488,4 +535,67 @@ func (s *service) GetEmailsByAudience(entityID uint, audience string) ([]string,
 	default:
 		return nil, fmt.Errorf("invalid audience: %s", audience)
 	}
+}
+
+// ✅ NEW: Register FCM device token for a user
+func (s *service) RegisterDeviceToken(ctx context.Context, userID, entityID uint, deviceToken, deviceType, deviceName string) error {
+	token := &FCMDeviceToken{
+		UserID:      userID,
+		EntityID:    entityID,
+		DeviceToken: deviceToken,
+		DeviceType:  deviceType,
+		DeviceName:  deviceName,
+		IsActive:    true,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	return s.repo.SaveDeviceToken(ctx, token)
+}
+
+// ✅ NEW: Remove FCM device token
+func (s *service) RemoveDeviceToken(ctx context.Context, userID uint, deviceToken string) error {
+	return s.repo.RemoveDeviceToken(ctx, userID, deviceToken)
+}
+
+// ✅ NEW: Get user's device tokens
+func (s *service) GetUserDeviceTokens(ctx context.Context, userID, entityID uint) ([]string, error) {
+	return s.repo.GetUserDeviceTokens(ctx, userID, entityID)
+}
+
+// ✅ NEW: Send push notification to specific users
+func (s *service) SendPushNotification(ctx context.Context, senderID, entityID uint, title, body string, userIDs []uint, ip string) error {
+	var allTokens []string
+
+	// Collect device tokens for all specified users
+	for _, userID := range userIDs {
+		tokens, err := s.repo.GetUserDeviceTokens(ctx, userID, entityID)
+		if err != nil {
+			fmt.Printf("⚠️  Failed to get tokens for user %d: %v\n", userID, err)
+			continue
+		}
+		allTokens = append(allTokens, tokens...)
+	}
+
+	if len(allTokens) == 0 {
+		return errors.New("no device tokens found for specified users")
+	}
+
+	// Use the existing SendNotification method with push channel
+	return s.SendNotification(ctx, senderID, entityID, nil, "push", title, body, allTokens, ip)
+}
+
+// ✅ NEW: Send push notification to users with specific roles
+func (s *service) SendPushToRoles(ctx context.Context, senderID, entityID uint, title, body string, roleNames []string, ip string) error {
+	tokens, err := s.repo.GetDeviceTokensByEntityAndRole(ctx, entityID, roleNames)
+	if err != nil {
+		return fmt.Errorf("failed to get device tokens for roles: %v", err)
+	}
+
+	if len(tokens) == 0 {
+		return errors.New("no device tokens found for specified roles")
+	}
+
+	// Use the existing SendNotification method with push channel
+	return s.SendNotification(ctx, senderID, entityID, nil, "push", title, body, tokens, ip)
 }

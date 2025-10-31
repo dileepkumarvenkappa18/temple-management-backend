@@ -6,12 +6,15 @@ services:
       dockerfile: Dockerfile
     container_name: temple_app
     ports:
-      - "8080:8080"            # Exposes your Go server on localhost:8080
+      - "8080:8080"
     env_file:
-      - .env                   # Picks up DB_HOST, DB_USER, JWT_SECRET, etc.
+      - .env
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/serviceAccountKey.json
     volumes:
-      - ./uploads:/app/uploads # Mount uploads folder to host machine
-      - ./logs:/app/logs       # Optional: mount logs folder too
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+      - ./serviceAccountKey.json:/app/serviceAccountKey.json:ro
     depends_on:
       - postgres
       - redis
@@ -50,7 +53,6 @@ services:
     image: apache/kafka:3.9.1
     container_name: temple_kafka
     environment:
-      # Broker settings—refer to the service name "kafka" for intra‑network comms
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093

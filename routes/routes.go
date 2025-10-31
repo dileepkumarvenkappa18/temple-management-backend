@@ -540,44 +540,53 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 				donationHandler.GetRecentDonations)
 		}
 	}
+// ========== Notifications (UPDATED WITH FCM) ==========
+{
+	notificationRepo := notification.NewRepository(database.DB)
+	notifSvc = notification.NewService(notificationRepo, authRepo, cfg, auditSvc)
+	notificationHandler := notification.NewHandler(notifSvc, auditSvc)
 
-	// ========== Notifications ==========
+	// Updated to use new middleware system
+	notificationRoutes := protected.Group("/notifications")
+	notificationRoutes.Use(middleware.RequireTempleAccess()) // Allow templeadmin, standarduser, monitoringuser
 	{
-		notificationRepo := notification.NewRepository(database.DB)
-		notifSvc = notification.NewService(notificationRepo, authRepo, cfg, auditSvc)
-		notificationHandler := notification.NewHandler(notifSvc, auditSvc)
-
-		// Updated to use new middleware system
-		notificationRoutes := protected.Group("/notifications")
-		notificationRoutes.Use(middleware.RequireTempleAccess()) // Allow templeadmin, standarduser, monitoringuser
+		// Write operations - only templeadmin and standarduser can access
+		writeRoutes := notificationRoutes.Group("")
+		writeRoutes.Use(middleware.RequireWriteAccess())
 		{
-			// Write operations - only templeadmin and standarduser can access
-			writeRoutes := notificationRoutes.Group("")
-			writeRoutes.Use(middleware.RequireWriteAccess())
-			{
-				// Templates
-				writeRoutes.POST("/templates", notificationHandler.CreateTemplate)
-				writeRoutes.PUT("/templates/:id", notificationHandler.UpdateTemplate)
-				writeRoutes.DELETE("/templates/:id", notificationHandler.DeleteTemplate)
+			// Templates
+			writeRoutes.POST("/templates", notificationHandler.CreateTemplate)
+			writeRoutes.PUT("/templates/:id", notificationHandler.UpdateTemplate)
+			writeRoutes.DELETE("/templates/:id", notificationHandler.DeleteTemplate)
 
-				// Send Notification
-				writeRoutes.POST("/send", notificationHandler.SendNotification)
-			}
+			// Send Notification (Email, SMS, WhatsApp, Push)
+			writeRoutes.POST("/send", notificationHandler.SendNotification)
 
-			// Read operations - all three roles can access
-			notificationRoutes.GET("/templates", notificationHandler.GetTemplates)
-			notificationRoutes.GET("/templates/:id", notificationHandler.GetTemplateByID)
-
-			// View Logs
-			notificationRoutes.GET("/logs", notificationHandler.GetMyNotifications)
-
-			// In-app
-			notificationRoutes.GET("/inapp", notificationHandler.GetMyInApp)
-			notificationRoutes.PUT("/inapp/:id/read", notificationHandler.MarkInAppRead)
-			notificationRoutes.GET("/stream", notificationHandler.StreamInApp)
+			// ✅ NEW: FCM Push Notifications (Write Access Required)
+			writeRoutes.POST("/fcm/send", notificationHandler.SendFCMNotification)
 		}
+
+		// Read operations - all three roles can access
+		notificationRoutes.GET("/templates", notificationHandler.GetTemplates)
+		notificationRoutes.GET("/templates/:id", notificationHandler.GetTemplateByID)
+
+		// View Logs
+		notificationRoutes.GET("/logs", notificationHandler.GetMyNotifications)
+
+		// In-app
+		notificationRoutes.GET("/inapp", notificationHandler.GetMyInApp)
+		notificationRoutes.PUT("/inapp/:id/read", notificationHandler.MarkInAppRead)
+		notificationRoutes.GET("/stream", notificationHandler.StreamInApp)
 	}
 
+	// ✅ NEW: FCM Device Token Management (All authenticated users can register their devices)
+	fcmRoutes := protected.Group("/notifications/fcm")
+	{
+		// Any authenticated user can register/unregister their own device
+		fcmRoutes.POST("/register", notificationHandler.RegisterFCMToken)
+		fcmRoutes.DELETE("/unregister", notificationHandler.UnregisterFCMToken)
+	}
+}
 	// Public token-based SSE stream (no auth middleware required)
 	api.GET("/notifications/stream-token", func(c *gin.Context) {
 		notificationRepo := notification.NewRepository(database.DB)
