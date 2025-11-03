@@ -38,11 +38,15 @@ func main() {
 	// Init Kafka
 	utils.InitializeKafka()
 
-	// 🔥 Init Firebase
+	// 🔥 Init Firebase - SINGLE INITIALIZATION POINT
 	log.Println("🔄 Initializing Firebase...")
 	if err := utils.InitFirebase(); err != nil {
 		log.Printf("⚠️ Firebase initialization failed: %v", err)
-		log.Println("ℹ️ Continuing without Firebase features")
+		log.Println("ℹ️ Continuing without Firebase (push notifications will be disabled)")
+	} else if utils.IsFCMEnabled() {
+		log.Println("✅ Firebase and FCM initialized successfully")
+	} else {
+		log.Println("⚠️ Firebase initialized but FCM client unavailable")
 	}
 
 	// Init repositories & services
@@ -70,6 +74,7 @@ func main() {
 		&event.Event{},
 		&eventrsvp.RSVP{},
 		&notification.InAppNotification{},
+		&notification.FCMDeviceToken{}, // ✅ Add FCM device token migration
 	); err != nil {
 		panic(fmt.Sprintf("❌ DB AutoMigrate failed: %v", err))
 	}
@@ -106,7 +111,6 @@ func main() {
 	}))
 
 	// ✅ CRITICAL FIX: Explicit preflight handler for SuperAdmin routes
-	// This must be defined BEFORE routes.Setup() to catch preflight requests
 	router.OPTIONS("/api/v1/superadmin/*path", func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
 		allowedOrigins := []string{
@@ -125,7 +129,7 @@ func main() {
 		}
 
 		if !originAllowed {
-			origin = "http://localhost:4173" // Default fallback
+			origin = "http://localhost:4173"
 		}
 
 		log.Printf("🔧 SuperAdmin OPTIONS request from origin: %s for path: %s", origin, c.Request.URL.Path)
@@ -135,7 +139,7 @@ func main() {
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, Content-Length, X-Requested-With, Cache-Control, Pragma, X-Entity-ID")
 		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition, Cache-Control, Pragma, Expires")
 		c.Header("Access-Control-Allow-Credentials", "true")
-		c.Header("Access-Control-Max-Age", "43200") // 12 hours
+		c.Header("Access-Control-Max-Age", "43200")
 		c.Status(204)
 	})
 
@@ -195,9 +199,7 @@ func main() {
 			return
 		}
 
-		// Set content type
 		setContentType(c, filename)
-
 		c.Header("Content-Description", "File Transfer")
 		c.Header("Content-Transfer-Encoding", "binary")
 		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
@@ -432,6 +434,9 @@ func main() {
 		fmt.Println("✅ Firebase Cloud Messaging enabled")
 	} else {
 		fmt.Println("ℹ️ Firebase Cloud Messaging disabled")
+		if err := utils.GetInitError(); err != nil {
+			fmt.Printf("   Reason: %v\n", err)
+		}
 	}
 
 	if err := router.Run(":" + cfg.Port); err != nil {
@@ -456,7 +461,6 @@ func serveEntityFile(c *gin.Context, uploadDir string) {
 	filePath := filepath.Join(uploadDir, entityID, filename)
 	cleanPath := filepath.Clean(filePath)
 
-	// Security check
 	if !strings.HasPrefix(cleanPath, filepath.Clean(uploadDir)) {
 		c.JSON(http.StatusForbidden, gin.H{
 			"error":   "Access denied",
@@ -465,7 +469,6 @@ func serveEntityFile(c *gin.Context, uploadDir string) {
 		return
 	}
 
-	// Check if file exists
 	fileInfo, err := os.Stat(cleanPath)
 	if os.IsNotExist(err) {
 		c.JSON(http.StatusNotFound, gin.H{
@@ -484,13 +487,10 @@ func serveEntityFile(c *gin.Context, uploadDir string) {
 		return
 	}
 
-	// Set content type
 	contentType := setContentType(c, filename)
-
 	c.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
 	c.Header("Cache-Control", "public, max-age=3600")
 
-	// Inline for images/PDFs, attachment for others
 	if strings.HasPrefix(contentType, "image/") || contentType == "application/pdf" {
 		c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
 	} else {
@@ -501,7 +501,6 @@ func serveEntityFile(c *gin.Context, uploadDir string) {
 	log.Printf("✅ File served: %s/%s", entityID, filename)
 }
 
-// setContentType determines and sets the content type based on file extension
 func setContentType(c *gin.Context, filename string) string {
 	ext := strings.ToLower(filepath.Ext(filename))
 	contentType := "application/octet-stream"
@@ -537,7 +536,6 @@ func setContentType(c *gin.Context, filename string) string {
 	return contentType
 }
 
-// migrateIsActiveColumn adds the isactive column to the entities table if it doesn't exist
 func migrateIsActiveColumn(db *gorm.DB) error {
 	var count int64
 	err := db.Raw(`

@@ -11,16 +11,23 @@ services:
       - .env
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/app/serviceAccountKey.json
+      - FIREBASE_PROJECT_ID=tms-app-38fc7
+      - FCM_CREDENTIALS_PATH=/app/serviceAccountKey.json
+      - FCM_PROJECT_ID=tms-app-38fc7
     volumes:
       - ./uploads:/app/uploads
       - ./logs:/app/logs
       - ./serviceAccountKey.json:/app/serviceAccountKey.json:ro
     depends_on:
-      - postgres
-      - redis
-      - kafka
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
     networks:
       - temple_network
+    restart: unless-stopped
   
   # ─── Postgres Database ───────────────────────────────────────────────────────
   postgres:
@@ -36,6 +43,12 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - temple_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temple_user -d temple_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   
   # ─── Redis Cache ─────────────────────────────────────────────────────────────
   redis:
@@ -47,6 +60,12 @@ services:
       - redis_data:/data
     networks:
       - temple_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
   
   # ─── Kafka Broker ───────────────────────────────────────────────────────────
   kafka:
@@ -73,6 +92,12 @@ services:
       - kafka_meta:/var/lib/kafka/meta
     networks:
       - temple_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
 volumes:
   postgres_data:

@@ -1,6 +1,6 @@
 module github.com/sharath018/temple-management-backend
 
-go 1.24.2
+go 1.24.0
 
 require (
 	firebase.google.com/go/v4 v4.18.0
@@ -25,8 +25,6 @@ require (
 	gorm.io/gorm v1.30.0
 )
 
-require google.golang.org/appengine v1.6.8 // indirect
-
 require (
 	cel.dev/expr v0.24.0 // indirect
 	cloud.google.com/go v0.121.0 // indirect
@@ -39,7 +37,6 @@ require (
 	cloud.google.com/go/monitoring v1.24.2 // indirect
 	cloud.google.com/go/storage v1.53.0 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
-	firebase.google.com/go v3.13.0+incompatible
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.29.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.51.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.51.0 // indirect
