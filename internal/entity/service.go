@@ -179,7 +179,8 @@ func (s *Service) GetEntityByID(id int) (Entity, error) {
 }
 
 // UpdateEntity - Temple Admin → Update own temple
-func (s *Service) UpdateEntity(e Entity, userID uint, ip string) error {
+// UpdateEntity - Temple Admin → Update temple with re-approval logic for rejected temples
+func (s *Service) UpdateEntity(e Entity, userID uint, userRoleID uint, ip string, wasRejected bool) error {
 	existingEntity, err := s.Repo.GetEntityByID(int(e.ID))
 	if err != nil {
 		auditDetails := map[string]interface{}{
@@ -187,12 +188,12 @@ func (s *Service) UpdateEntity(e Entity, userID uint, ip string) error {
 			"error":     "Temple not found",
 		}
 		s.AuditService.LogAction(context.Background(), &userID, &e.ID, "TEMPLE_UPDATE_FAILED", auditDetails, ip, "failure")
-
 		return err
 	}
 
 	e.UpdatedAt = time.Now()
 
+	// Update the entity in database
 	if err := s.Repo.UpdateEntity(e); err != nil {
 		auditDetails := map[string]interface{}{
 			"temple_id":   e.ID,
@@ -200,24 +201,77 @@ func (s *Service) UpdateEntity(e Entity, userID uint, ip string) error {
 			"error":       err.Error(),
 		}
 		s.AuditService.LogAction(context.Background(), &userID, &e.ID, "TEMPLE_UPDATE_FAILED", auditDetails, ip, "failure")
-
 		return err
 	}
 
-	auditDetails := map[string]interface{}{
-		"temple_id":      e.ID,
-		"temple_name":    e.Name,
-		"previous_name":  existingEntity.Name,
-		"temple_type":    e.TempleType,
-		"email":          e.Email,
-		"phone":          e.Phone,
-		"city":           e.City,
-		"state":          e.State,
-		"main_deity":     e.MainDeity,
-		"description":    e.Description,
-		"updated_fields": getUpdatedFields(existingEntity, e),
+	// 🆕 CREATE NEW APPROVAL REQUEST IF TEMPLE WAS REJECTED AND NOW PENDING
+	if wasRejected && e.Status == "pending" {
+		now := time.Now()
+		
+		// First, close any old approval requests for this entity
+		if err := s.Repo.CloseOldApprovalRequests(e.ID, "temple_approval"); err != nil {
+			log.Printf("⚠️ Failed to close old approval requests for temple ID %d: %v", e.ID, err)
+		}
+		
+		// Create new approval request for superadmin review
+		req := &auth.ApprovalRequest{
+			UserID:      userID,
+			EntityID:    &e.ID,
+			RequestType: "temple_reapproval", // Different type to indicate it's a re-approval
+			Status:      "pending",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+
+		if err := s.Repo.CreateApprovalRequest(req); err != nil {
+			auditDetails := map[string]interface{}{
+				"temple_id":   e.ID,
+				"temple_name": e.Name,
+				"error":       err.Error(),
+				"action":      "Failed to create re-approval request",
+			}
+			s.AuditService.LogAction(context.Background(), &userID, &e.ID, "TEMPLE_REAPPROVAL_REQUEST_FAILED", auditDetails, ip, "failure")
+			
+			// Don't fail the entire update, just log the error
+			log.Printf("⚠️ Failed to create re-approval request for temple ID %d: %v", e.ID, err)
+		} else {
+			log.Printf("✅ Re-approval request created for previously rejected temple ID: %d", e.ID)
+			
+			// Log successful re-approval request creation
+			auditDetails := map[string]interface{}{
+				"temple_id":       e.ID,
+				"temple_name":     e.Name,
+				"previous_status": "rejected",
+				"new_status":      "pending",
+				"action":          "Re-submitted for approval",
+			}
+			s.AuditService.LogAction(context.Background(), &userID, &e.ID, "TEMPLE_REAPPROVAL_REQUESTED", auditDetails, ip, "success")
+		}
 	}
-	s.AuditService.LogAction(context.Background(), &userID, &e.ID, "TEMPLE_UPDATED", auditDetails, ip, "success")
+
+	// Log successful temple update
+	auditDetails := map[string]interface{}{
+		"temple_id":       e.ID,
+		"temple_name":     e.Name,
+		"previous_name":   existingEntity.Name,
+		"temple_type":     e.TempleType,
+		"email":           e.Email,
+		"phone":           e.Phone,
+		"city":            e.City,
+		"state":           e.State,
+		"main_deity":      e.MainDeity,
+		"description":     e.Description,
+		"updated_fields":  getUpdatedFields(existingEntity, e),
+		"was_rejected":    wasRejected,
+		"status":          e.Status,
+	}
+	
+	actionType := "TEMPLE_UPDATED"
+	if wasRejected && e.Status == "pending" {
+		actionType = "TEMPLE_UPDATED_RESUBMITTED"
+	}
+	
+	s.AuditService.LogAction(context.Background(), &userID, &e.ID, actionType, auditDetails, ip, "success")
 
 	return nil
 }

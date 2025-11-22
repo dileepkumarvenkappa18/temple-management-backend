@@ -144,7 +144,8 @@ func main() {
 	})
 
 	// Create uploads directory
-	uploadDir := "./uploads"
+	uploadDir := "/data/uploads"
+
 	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
 		panic(fmt.Sprintf("❌ Failed to create upload directory: %v", err))
 	}

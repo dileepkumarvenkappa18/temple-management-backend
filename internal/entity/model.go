@@ -1,5 +1,4 @@
-// ==================== UPDATED ENTITY MODEL ====================
-// entity/models.go
+
 package entity
 
 import (

@@ -146,8 +146,6 @@ func (s *Service) GetPendingTenants(ctx context.Context) ([]auth.User, error) {
 	return s.repo.GetPendingTenants(ctx)
 }
 
-// Add these methods to your Service struct in service.go
-
 // GetAllTenantDetails fetches all tenant details
 func (s *Service) GetAllTenantDetails(ctx context.Context) ([]TenantTempleDetails, error) {
 	return s.repo.GetAllTenantDetails(ctx)
@@ -167,7 +165,7 @@ func (s *Service) GetMultipleTenantDetails(ctx context.Context, tenantIDs []uint
 	return s.repo.GetMultipleTenantDetails(ctx, tenantIDs)
 }
 
-// Update the existing GetTenantDetails to include better error handling
+// GetTenantDetails with better error handling
 func (s *Service) GetTenantDetails(ctx context.Context, tenantID uint) (*TenantTempleDetails, error) {
 	if tenantID == 0 {
 		return nil, errors.New("invalid tenant ID")
@@ -334,7 +332,7 @@ func (s *Service) UpdateEntityApprovalStatus(ctx context.Context, entityID, admi
 
 // Tenant approval counts for SuperAdmin dashboard
 func (s *Service) GetTenantApprovalCounts(ctx context.Context) (*TenantApprovalCount, error) {
-	approved, err := s.repo.CountTenantsByStatus(ctx, "active") // assuming "active" means approved
+	approved, err := s.repo.CountTenantsByStatus(ctx, "active")
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +443,7 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, adminID
 		PasswordHash: string(hash),
 		Phone:        phone,
 		RoleID:       role.ID,
-		Status:       "active", // Admin-created users are active immediately
+		Status:       "active",
 	}
 
 	if err := s.repo.CreateUser(ctx, user); err != nil {
@@ -500,7 +498,7 @@ func (s *Service) GetUserByID(ctx context.Context, userID uint) (*UserResponse, 
 	return s.repo.GetUserWithDetails(ctx, userID)
 }
 
-// Update user - UPDATED: SuperAdmin restrictions removed
+// Update user
 func (s *Service) UpdateUser(ctx context.Context, userID uint, req UpdateUserRequest, adminID uint, ip string) error {
 	// Get existing user to check if it exists
 	existingUser, err := s.repo.GetUserWithDetails(ctx, userID)
@@ -623,7 +621,7 @@ func (s *Service) UpdateUser(ctx context.Context, userID uint, req UpdateUserReq
 	return nil
 }
 
-// Delete user - KEPT: Still prevent SuperAdmin deletion for safety
+// Delete user
 func (s *Service) DeleteUser(ctx context.Context, userID uint, adminID uint, ip string) error {
 	// Get existing user to check role
 	existingUser, err := s.repo.GetUserWithDetails(ctx, userID)
@@ -675,8 +673,7 @@ func (s *Service) DeleteUser(ctx context.Context, userID uint, adminID uint, ip 
 	return nil
 }
 
-// Update user status - UPDATED: SuperAdmin restriction removed
-// Update user status - UPDATED: Simplified after removing SuperAdmin restrictions
+// Update user status
 func (s *Service) UpdateUserStatus(ctx context.Context, userID uint, status string, adminID uint, ip string) error {
 	// Get existing user first
 	existingUser, err := s.repo.GetUserWithDetails(ctx, userID)
@@ -747,7 +744,7 @@ func cleanPhone(raw string) (string, error) {
 
 // ================== USER ROLES ==================
 
-// CreateRole handles the creation of a new user role.
+// CreateRole handles the creation of a new user role
 func (s *Service) CreateRole(ctx context.Context, req *auth.CreateRoleRequest, adminID uint, ip string) error {
 	// 1. Basic validation from the DTO
 	if req.RoleName == "" || req.Description == "" {
@@ -779,7 +776,7 @@ func (s *Service) CreateRole(ctx context.Context, req *auth.CreateRoleRequest, a
 	newRole := &auth.UserRole{
 		RoleName:            req.RoleName,
 		Description:         req.Description,
-		CanRegisterPublicly: false, // Defaulting to false as per UI analysis
+		CanRegisterPublicly: false,
 		Status:              "active",
 	}
 
@@ -803,7 +800,7 @@ func (s *Service) CreateRole(ctx context.Context, req *auth.CreateRoleRequest, a
 	return nil
 }
 
-// GetRoles fetches all active roles for the UI.
+// GetRoles fetches all active roles for the UI
 func (s *Service) GetRoles(ctx context.Context) ([]auth.RoleResponse, error) {
 	// 1. Fetch all active roles from the repository
 	roles, err := s.repo.GetAllUserRoles(ctx)
@@ -826,7 +823,7 @@ func (s *Service) GetRoles(ctx context.Context) ([]auth.RoleResponse, error) {
 	return roleResponses, nil
 }
 
-// UpdateRole updates an existing user role's details.
+// UpdateRole updates an existing user role's details
 func (s *Service) UpdateRole(ctx context.Context, roleID uint, req *auth.UpdateRoleRequest, adminID uint, ip string) error {
 	role, err := s.repo.GetUserRoleByID(ctx, roleID)
 	if err != nil {
@@ -899,7 +896,7 @@ func (s *Service) UpdateRole(ctx context.Context, roleID uint, req *auth.UpdateR
 	return nil
 }
 
-// ToggleRoleStatus specifically handles updating only the status.
+// ToggleRoleStatus specifically handles updating only the status
 func (s *Service) ToggleRoleStatus(ctx context.Context, roleID uint, status string, adminID uint, ip string) error {
 	role, err := s.repo.GetUserRoleByID(ctx, roleID)
 	if err != nil {
@@ -1006,7 +1003,6 @@ func (s *Service) ResetUserPassword(ctx context.Context, userID uint, newPasswor
 	admin, err := s.repo.GetUserByID(ctx, adminID)
 	if err != nil {
 		// Don't fail the password reset if we can't get admin details
-		// Just proceed without admin info in the notification
 		utils.SendPasswordResetNotification(user.Email, user.FullName, "Admin", newPassword)
 	} else {
 		utils.SendPasswordResetNotification(user.Email, user.FullName, admin.FullName, newPassword)
@@ -1015,34 +1011,27 @@ func (s *Service) ResetUserPassword(ctx context.Context, userID uint, newPasswor
 	return nil
 }
 
-// ================== NEW: USER ASSIGNMENT ==================
+// ================== USER ASSIGNMENT ==================
 
-// GetTenantsForAssignment fetches a list of approved temple admins and their temple details
-// suitable for displaying in the "Assign" feature's tenant selection.
+// GetTenantsForAssignment fetches a list of approved temple admins
 func (s *Service) GetTenantsForAssignment(ctx context.Context, limit, page int) ([]AssignableTenant, int64, error) {
 	// Check for valid pagination parameters
 	if limit <= 0 {
-		limit = 10 // Default limit if not provided or invalid
+		limit = 10
 	}
 	if page <= 0 {
-		page = 1 // Default page if not provided or invalid
+		page = 1
 	}
 
-	// Call the repository with the new parameters.
-	// The repository should now handle the actual pagination query.
 	tenants, total, err := s.repo.GetAssignableTenants(ctx, limit, page)
 	if err != nil {
-		// Return a generic error to the handler for security and consistency
 		return nil, 0, errors.New("failed to fetch assignable tenants")
 	}
 
 	return tenants, total, nil
 }
 
-// AssignUsersToTenant assigns a batch of users (Standard/Monitoring) to a specific temple (entity).
-// This operation is wrapped in a database transaction to ensure atomicity.
-// This operation is wrapped in a database transaction to ensure atomicity.
-// (Note: This function assumes the handler now passes `userID`, `tenantID`, and `adminID`.)
+// AssignUsersToTenant assigns a user to a specific tenant
 func (s *Service) AssignUsersToTenant(ctx context.Context, userID uint, tenantID uint, adminID uint) error {
 	tx := s.repo.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
@@ -1071,14 +1060,13 @@ func (s *Service) AssignUsersToTenant(ctx context.Context, userID uint, tenantID
 		return fmt.Errorf("user with ID %d has an unassignable role ('%s')", userID, userToAssign.Role.RoleName)
 	}
 
-	// 2. Clear all existing assignments for the user.
+	// 2. Clear all existing assignments for the user
 	if err := tx.WithContext(ctx).Where("user_id = ?", userID).Delete(&auth.TenantUserAssignment{}).Error; err != nil {
 		tx.Rollback()
 		return fmt.Errorf("failed to delete existing assignments for user %d: %w", userID, err)
 	}
 
-	// 3. Validate the selected tenant (which is now the temple admin user).
-	// We still need to confirm the provided tenantID belongs to an active 'templeadmin' role.
+	// 3. Validate the selected tenant
 	var tenantUser auth.User
 	err = tx.WithContext(ctx).Model(&auth.User{}).Preload("Role").Where("id = ?", tenantID).First(&tenantUser).Error
 	if err != nil {
@@ -1093,17 +1081,14 @@ func (s *Service) AssignUsersToTenant(ctx context.Context, userID uint, tenantID
 		return errors.New("the selected user (temple admin) is not an active temple admin and cannot be a tenant")
 	}
 
-	// ⚠️ MAJOR CHANGE: Removed the 'entity' lookup.
-	// The TenantID in tenant_user_assignments will now directly be the User ID of the temple admin.
+	// 4. Create new assignment
 	newAssignment := auth.TenantUserAssignment{
 		UserID:    userID,
-		TenantID:  tenantID, // This now explicitly uses the User ID of the temple admin as the TenantID
-		CreatedBy: adminID,  // The admin who performed this assignment
+		TenantID:  tenantID,
+		CreatedBy: adminID,
 	}
 
-	// 4. Create and insert a new record into the tenant_user_assignments table.
 	if err := tx.WithContext(ctx).Create(&newAssignment).Error; err != nil {
-		// Log the specific database error to diagnose unique constraint violations or other issues.
 		fmt.Printf("Database error during CREATE tenant assignment: %v\n", err)
 		tx.Rollback()
 		return fmt.Errorf("failed to create user assignment: %w", err)
@@ -1113,9 +1098,7 @@ func (s *Service) AssignUsersToTenant(ctx context.Context, userID uint, tenantID
 	return tx.Commit().Error
 }
 
-// Add these methods to the existing service.go file
-
-// NEW: Get tenants for selection based on user role
+// GetTenantsForSelection - Get tenants based on user role
 func (s *Service) GetTenantsForSelection(ctx context.Context, userID uint, userRole string) ([]TenantSelectionResponse, error) {
 	roleNameLower := strings.ToLower(userRole)
 
@@ -1133,14 +1116,16 @@ func (s *Service) GetTenantsForSelection(ctx context.Context, userID uint, userR
 	}
 }
 
-// GetTenantsWithTempleDetails fetches tenants with their temple details based on role and status
-// GetTenantsWithTempleDetails fetches tenants with their temple details based on role and status
+// GetTenantsWithTempleDetails fetches tenants with their temple details
 func (s *Service) GetTenantsWithTempleDetails(ctx context.Context, role, status string) ([]TenantResponse, error) {
 	return s.repo.GetTenantsWithTempleDetails(ctx, role, status)
 }
 
+// ================== BULK UPLOAD ==================
+
 // BulkUploadUsers parses CSV and inserts users
 func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, adminID uint, ip string) (*BulkUploadResult, error) {
+	fmt.Println("In BulkUploadUsers function")
 	reader := csv.NewReader(file)
 	reader.TrimLeadingSpace = true
 
@@ -1155,7 +1140,7 @@ func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, admi
 
 	removeInvisible := func(str string) string {
 		return strings.Map(func(r rune) rune {
-			if r == '\u200B' || r == '\uFEFF' { // Zero width space, BOM
+			if r == '\u200B' || r == '\uFEFF' {
 				return -1
 			}
 			return r
@@ -1164,7 +1149,7 @@ func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, admi
 
 	for {
 		record, err := reader.Read()
-		fmt.Println("record", record)
+		fmt.Println("record:", record)
 		if err == io.EOF {
 			break
 		}
@@ -1249,10 +1234,9 @@ func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, admi
 			continue
 		}
 
+		// Handle temple details for templeadmin
 		if strings.ToLower(role.RoleName) == "templeadmin" {
-
 			if len(record) < 11 {
-
 				failCount++
 				errorsList = append(errorsList, fmt.Sprintf("missing temple details for %s", email))
 				continue
@@ -1269,9 +1253,20 @@ func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, admi
 
 			if td.TempleName == "" || td.TemplePlace == "" || td.TempleAddress == "" ||
 				td.TemplePhoneNo == "" || td.TempleDescription == "" {
-
 				failCount++
 				errorsList = append(errorsList, fmt.Sprintf("missing temple details for %s", email))
+				continue
+			}
+
+			fmt.Println("td.TempleName: ", td.TempleName)
+			fmt.Println("td.TemplePlace: ", td.TemplePlace)
+			fmt.Println("td.TempleAddress: ", td.TempleAddress)
+			fmt.Println("td.TemplePhone: ", td.TemplePhoneNo)
+			fmt.Println("td.TempleDescription: ", td.TempleDescription)
+
+			if err := s.repo.CreateApprovalRequest(user.ID, "tenant_approval", adminID); err != nil {
+				failCount++
+				errorsList = append(errorsList, fmt.Sprintf("failed to create temple approval request for %s", email))
 				continue
 			}
 

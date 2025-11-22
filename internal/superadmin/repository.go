@@ -2,15 +2,14 @@ package superadmin
 
 import (
 	"context"
-	"time"
+	"database/sql"
 	"errors"
 	"fmt"
-	
+	"time"
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/internal/entity"
 	"gorm.io/gorm"
-	"database/sql"
 )
 
 type Repository struct {
@@ -20,7 +19,6 @@ type Repository struct {
 func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
-
 
 // =========================== TENANT ===========================
 
@@ -149,6 +147,19 @@ func (r *Repository) GetTenantsWithFilters(ctx context.Context, status string, l
 	return tenants, total, nil
 }
 
+// Create approval request for templeadmin
+func (r *Repository) CreateApprovalRequest(userID uint, requestType string, adminID uint) error {
+	t := time.Now()
+	req := ApprovalRequest{
+		UserID:      userID,
+		ApprovedBy:  &adminID,
+		ApprovedAt:  &t,
+		RequestType: requestType,
+		Status:      "approved",
+	}
+	return r.db.Create(&req).Error
+}
+
 func (r *Repository) ApproveTenant(ctx context.Context, userID uint, adminID uint) error {
 	return r.db.WithContext(ctx).
 		Model(&auth.User{}).
@@ -223,7 +234,7 @@ func (r *Repository) GetEntitiesWithFilters(ctx context.Context, status string, 
 
 func (r *Repository) ApproveEntity(ctx context.Context, entityID uint, adminID uint) error {
 	approvedAt := time.Now()
-	
+
 	// Update entity with approval timestamp
 	if err := r.db.WithContext(ctx).
 		Model(&entity.Entity{}).
@@ -277,7 +288,7 @@ func (r *Repository) RejectEntity(ctx context.Context, entityID uint, adminID ui
 
 func (r *Repository) GetEntityByID(ctx context.Context, entityID uint) (entity.Entity, error) {
 	var ent entity.Entity
-	
+
 	// Query to get entity with approval/rejection details from approval_requests
 	err := r.db.WithContext(ctx).
 		Table("entities").
@@ -290,9 +301,10 @@ func (r *Repository) GetEntityByID(ctx context.Context, entityID uint) (entity.E
 		Joins("LEFT JOIN approval_requests ON entities.id = approval_requests.entity_id AND approval_requests.request_type = 'entity'").
 		Where("entities.id = ?", entityID).
 		First(&ent).Error
-		
+
 	return ent, err
 }
+
 func (r *Repository) LinkEntityToUser(ctx context.Context, userID uint, entityID uint) error {
 	return r.db.WithContext(ctx).
 		Model(&auth.User{}).
@@ -308,7 +320,6 @@ func (r *Repository) MarkApprovalApproved(ctx context.Context, userID uint, admi
 			"status":      "approved",
 			"approved_by": adminID,
 			"approved_at": time.Now(),
-			//"entity_id":   entityID,
 			"updated_at":  time.Now(),
 		}).Error
 }
@@ -368,7 +379,7 @@ func (r *Repository) GetUsers(
 
 	offset := (page - 1) * limit
 
-	
+	// Build base query for COUNT
 	base := r.db.WithContext(ctx).
 		Table("users").
 		Joins("JOIN user_roles ON users.role_id = user_roles.id")
@@ -404,7 +415,7 @@ func (r *Repository) GetUsers(
 		return nil, 0, err
 	}
 
-	
+	// Data Query
 	query := r.db.WithContext(ctx).
 		Table("users").
 		Select(`
@@ -479,7 +490,6 @@ func (r *Repository) GetUsers(
 
 	return users, total, nil
 }
-
 
 // Get all users with optional tenant assignment details
 func (r *Repository) GetUsersWithDetails(ctx context.Context) ([]UserResponse, int64, error) {
@@ -744,141 +754,139 @@ func (r *Repository) UserExistsByEmail(ctx context.Context, email string) (bool,
 	return count > 0, err
 }
 
-
 // =========================== USER ROLES ===========================
 
 // Get all user roles (filtered by active status)
 func (r *Repository) GetAllUserRoles(ctx context.Context) ([]auth.UserRole, error) {
-    var roles []auth.UserRole
-    err := r.db.WithContext(ctx).
-        Where("status = ?", "active").
-        Find(&roles).Error
-    return roles, err
+	var roles []auth.UserRole
+	err := r.db.WithContext(ctx).
+		Where("status = ?", "active").
+		Find(&roles).Error
+	return roles, err
 }
 
 // GetUserRoleByID fetches a single role by its ID
 func (r *Repository) GetUserRoleByID(ctx context.Context, roleID uint) (*auth.UserRole, error) {
-    var role auth.UserRole
-    err := r.db.WithContext(ctx).Where("id = ?", roleID).First(&role).Error
-    if err != nil {
-        if errors.Is(err, gorm.ErrRecordNotFound) {
-            return nil, nil // Return nil if not found, not an error
-        }
-        return nil, err
-    }
-    return &role, nil
+	var role auth.UserRole
+	err := r.db.WithContext(ctx).Where("id = ?", roleID).First(&role).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &role, nil
 }
 
 // Create a new user role
 func (r *Repository) CreateUserRole(ctx context.Context, role *auth.UserRole) error {
-    return r.db.WithContext(ctx).Create(role).Error
+	return r.db.WithContext(ctx).Create(role).Error
 }
 
 // CheckIfRoleNameExists checks if a role with the given name already exists
 func (r *Repository) CheckIfRoleNameExists(ctx context.Context, roleName string) (bool, error) {
-    var count int64
-    err := r.db.WithContext(ctx).
-        Model(&auth.UserRole{}).
-        Where("role_name = ?", roleName).
-        Count(&count).Error
-    if err != nil {
-        return false, err
-    }
-    return count > 0, nil
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&auth.UserRole{}).
+		Where("role_name = ?", roleName).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 // UpdateUserRole saves the provided role object to the database
 func (r *Repository) UpdateUserRole(ctx context.Context, role *auth.UserRole) error {
-    return r.db.WithContext(ctx).Save(role).Error
+	return r.db.WithContext(ctx).Save(role).Error
 }
 
 // DeactivateUserRole updates the status of a role to 'inactive'
 func (r *Repository) DeactivateUserRole(ctx context.Context, roleID uint) error {
-    return r.db.WithContext(ctx).
-        Model(&auth.UserRole{}).
-        Where("id = ?", roleID).
-        Update("status", "inactive").Error
+	return r.db.WithContext(ctx).
+		Model(&auth.UserRole{}).
+		Where("id = ?", roleID).
+		Update("status", "inactive").Error
 }
 
 // =========================== PASSWORD RESET ===========================
 
 // GetUserByEmail retrieves a user by their email address
 func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*auth.User, error) {
-    var user auth.User
-    result := r.db.WithContext(ctx).Where("email = ?", email).First(&user)
-    if result.Error != nil {
-        return nil, result.Error
-    }
-    return &user, nil
+	var user auth.User
+	result := r.db.WithContext(ctx).Where("email = ?", email).First(&user)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &user, nil
 }
 
 // UpdateUserPassword updates a user's password
 func (r *Repository) UpdateUserPassword(ctx context.Context, userID uint, newPasswordHash string) error {
-    result := r.db.WithContext(ctx).Model(&auth.User{}).Where("id = ?", userID).
-        Update("password_hash", newPasswordHash)
-    
-    if result.Error != nil {
-        return result.Error
-    }
-    
-    if result.RowsAffected == 0 {
-        return errors.New("user not found")
-    }
-    
-    return nil
+	result := r.db.WithContext(ctx).Model(&auth.User{}).Where("id = ?", userID).
+		Update("password_hash", newPasswordHash)
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return errors.New("user not found")
+	}
+
+	return nil
 }
 
-
 func (r *Repository) GetAssignableTenants(ctx context.Context, limit, page int) ([]AssignableTenant, int64, error) {
-    var tenants []AssignableTenant
-    var total int64
+	var tenants []AssignableTenant
+	var total int64
 
-    // Calculate the offset based on the requested page and limit
-    offset := (page - 1) * limit
+	// Calculate the offset based on the requested page and limit
+	offset := (page - 1) * limit
 
-    // First, count the total number of records that match the WHERE clause.
-    // This is done without applying limit or offset.
-    countQuery := r.db.WithContext(ctx).
-        Table("users").
-        Joins("JOIN user_roles ON users.role_id = user_roles.id").
-        Where("user_roles.role_name = ? AND users.status = ?", "templeadmin", "active").
-        Count(&total)
+	// First, count the total number of records that match the WHERE clause.
+	// This is done without applying limit or offset.
+	countQuery := r.db.WithContext(ctx).
+		Table("users").
+		Joins("JOIN user_roles ON users.role_id = user_roles.id").
+		Where("user_roles.role_name = ? AND users.status = ?", "templeadmin", "active").
+		Count(&total)
 
-    if countQuery.Error != nil {
-        return nil, 0, countQuery.Error
-    }
+	if countQuery.Error != nil {
+		return nil, 0, countQuery.Error
+	}
 
-    // Now, fetch the paginated data.
-    // The same query is used, but with Select, Joins, Limit, and Offset.
-    err := r.db.WithContext(ctx).
-        Table("users").
-        Select("users.id as user_id, users.full_name as tenant_name, users.email, COALESCE(entities.name, tenant_details.temple_name) AS temple_name, COALESCE(entities.street_address, tenant_details.temple_address) AS temple_address, COALESCE(entities.phone, tenant_details.temple_phone_no) AS temple_phone, COALESCE(entities.description, tenant_details.temple_description) AS temple_description").
-        Joins("JOIN user_roles ON users.role_id = user_roles.id").
-        Joins("LEFT JOIN entities ON users.id = entities.created_by").
-        Joins("LEFT JOIN tenant_details ON users.id = tenant_details.user_id").
-        Where("user_roles.role_name = ? AND users.status = ?", "templeadmin", "active").
-        Limit(limit).
-        Offset(offset).
-        Scan(&tenants).Error
+	// Now, fetch the paginated data.
+	// The same query is used, but with Select, Joins, Limit, and Offset.
+	err := r.db.WithContext(ctx).
+		Table("users").
+		Select("users.id as user_id, users.full_name as tenant_name, users.email, COALESCE(entities.name, tenant_details.temple_name) AS temple_name, COALESCE(entities.street_address, tenant_details.temple_address) AS temple_address, COALESCE(entities.phone, tenant_details.temple_phone_no) AS temple_phone, COALESCE(entities.description, tenant_details.temple_description) AS temple_description").
+		Joins("JOIN user_roles ON users.role_id = user_roles.id").
+		Joins("LEFT JOIN entities ON users.id = entities.created_by").
+		Joins("LEFT JOIN tenant_details ON users.id = tenant_details.user_id").
+		Where("user_roles.role_name = ? AND users.status = ?", "templeadmin", "active").
+		Limit(limit).
+		Offset(offset).
+		Scan(&tenants).Error
 
-    if err != nil {
-        return nil, 0, err
-    }
+	if err != nil {
+		return nil, 0, err
+	}
 
-    return tenants, total, nil
+	return tenants, total, nil
 }
 
 func (r *Repository) GetTenantsForSelection(ctx context.Context) ([]TenantSelectionResponse, error) {
-    var tenants []TenantSelectionResponse
+	var tenants []TenantSelectionResponse
 
-    // Modified query to explicitly join with tenant_details table and select fields directly
-    query := `
+	// Modified query to explicitly join with tenant_details table and select fields directly
+	query := `
         SELECT 
             u.id,
             u.full_name as name,
             u.email,
-            td.temple_name,  -- Explicitly select temple_name
-            td.temple_place, -- Explicitly select temple_place
+            td.temple_name,
+            td.temple_place,
             u.status,
             COALESCE(entity_count.count, 0) as temples_count
         FROM users u
@@ -895,38 +903,38 @@ func (r *Repository) GetTenantsForSelection(ctx context.Context) ([]TenantSelect
         ORDER BY u.full_name ASC
     `
 
-    rows, err := r.db.WithContext(ctx).Raw(query).Rows()
-    if err != nil {
-        return nil, err
-    }
-    defer rows.Close()
+	rows, err := r.db.WithContext(ctx).Raw(query).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-    for rows.Next() {
-        var tenant TenantSelectionResponse
-        var templeName sql.NullString
-        var location sql.NullString
-        
-        err := rows.Scan(
-            &tenant.ID,
-            &tenant.Name,
-            &tenant.Email,
-            &templeName,
-            &location,
-            &tenant.Status,
-            &tenant.TemplesCount,
-        )
-        if err != nil {
-            return nil, err
-        }
-        
-        // Directly assign these fields to match the expected frontend field names
-        tenant.TempleName = templeName.String
-        tenant.Location = location.String
-        
-        tenants = append(tenants, tenant)
-    }
+	for rows.Next() {
+		var tenant TenantSelectionResponse
+		var templeName sql.NullString
+		var location sql.NullString
 
-    return tenants, nil
+		err := rows.Scan(
+			&tenant.ID,
+			&tenant.Name,
+			&tenant.Email,
+			&templeName,
+			&location,
+			&tenant.Status,
+			&tenant.TemplesCount,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Directly assign these fields to match the expected frontend field names
+		tenant.TempleName = templeName.String
+		tenant.Location = location.String
+
+		tenants = append(tenants, tenant)
+	}
+
+	return tenants, nil
 }
 
 // Get assigned tenants for StandardUser / MonitoringUser
@@ -983,14 +991,12 @@ func (r *Repository) GetAssignedTenantsForUser(ctx context.Context, userID uint)
 	return tenants, nil
 }
 
-
-
 // Get tenants with temple details
 func (r *Repository) GetTenantsWithTempleDetails(ctx context.Context, role, status string) ([]TenantResponse, error) {
-    var responses []TenantResponse
-    
-    // Updated query with explicit JOIN to tenant_details table
-    query := `
+	var responses []TenantResponse
+
+	// Updated query with explicit JOIN to tenant_details table
+	query := `
         SELECT 
             u.id, 
             u.full_name as "fullName",
@@ -1011,67 +1017,65 @@ func (r *Repository) GetTenantsWithTempleDetails(ctx context.Context, role, stat
             entities e ON u.id = e.created_by
         WHERE 1=1
     `
-    
-    // Build dynamic query params
-    params := []interface{}{}
-    
-    if role != "" {
-        query += " AND ur.role_name = ?"
-        params = append(params, role)
-    }
-    
-    if status != "" {
-        query += " AND u.status = ?"
-        params = append(params, status)
-    }
-    
-    rows, err := r.db.WithContext(ctx).Raw(query, params...).Rows()
-    if err != nil {
-        return nil, err
-    }
-    defer rows.Close()
-    
-    for rows.Next() {
-        var tr TenantResponse
-        var templeID sql.NullInt64
-        var templeName, templeCity, templeState sql.NullString
-        
-        err := rows.Scan(
-            &tr.ID,
-            &tr.FullName,
-            &tr.Email,
-            &tr.Role,
-            &tr.Status,
-            &templeID,
-            &templeName,
-            &templeCity,
-            &templeState,
-        )
-        
-        if err != nil {
-            return nil, err
-        }
-        
-        // Always create a Temple object with available data
-        tr.Temple = &TempleDetails{
-            ID:    uint(templeID.Int64),
-            Name:  templeName.String,
-            City:  templeCity.String,
-            State: templeState.String,
-        }
-        
-        responses = append(responses, tr)
-    }
-    
-    return responses, nil
-}
 
-// Add these methods to your Repository struct in repository.go
+	// Build dynamic query params
+	params := []interface{}{}
+
+	if role != "" {
+		query += " AND ur.role_name = ?"
+		params = append(params, role)
+	}
+
+	if status != "" {
+		query += " AND u.status = ?"
+		params = append(params, status)
+	}
+
+	rows, err := r.db.WithContext(ctx).Raw(query, params...).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tr TenantResponse
+		var templeID sql.NullInt64
+		var templeName, templeCity, templeState sql.NullString
+
+		err := rows.Scan(
+			&tr.ID,
+			&tr.FullName,
+			&tr.Email,
+			&tr.Role,
+			&tr.Status,
+			&templeID,
+			&templeName,
+			&templeCity,
+			&templeState,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		// Always create a Temple object with available data
+		tr.Temple = &TempleDetails{
+			ID:    uint(templeID.Int64),
+			Name:  templeName.String,
+			City:  templeCity.String,
+			State: templeState.String,
+		}
+
+		responses = append(responses, tr)
+	}
+
+	return responses, nil
+}
 
 // GetTenantDetails fetches tenant details for a single tenant
 func (r *Repository) GetTenantDetails(ctx context.Context, tenantID uint) (*TenantTempleDetails, error) {
 	var details TenantTempleDetails
-	
+
 	query := `
 		SELECT 
 			u.id,
@@ -1094,24 +1098,24 @@ func (r *Repository) GetTenantDetails(ctx context.Context, tenantID uint) (*Tena
 		LEFT JOIN tenant_details td ON u.id = td.user_id
 		WHERE u.id = ? AND ur.role_name = 'templeadmin'
 	`
-	
+
 	err := r.db.WithContext(ctx).Raw(query, tenantID).Scan(&details).Error
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Check if user was found
 	if details.ID == 0 {
 		return nil, gorm.ErrRecordNotFound
 	}
-	
+
 	return &details, nil
 }
 
 // GetAllTenantDetails fetches all tenant details
 func (r *Repository) GetAllTenantDetails(ctx context.Context) ([]TenantTempleDetails, error) {
 	var tenants []TenantTempleDetails
-	
+
 	query := `
 		SELECT 
 			u.id,
@@ -1135,7 +1139,7 @@ func (r *Repository) GetAllTenantDetails(ctx context.Context) ([]TenantTempleDet
 		WHERE ur.role_name = 'templeadmin'
 		ORDER BY u.created_at DESC
 	`
-	
+
 	err := r.db.WithContext(ctx).Raw(query).Scan(&tenants).Error
 	return tenants, err
 }
@@ -1145,9 +1149,9 @@ func (r *Repository) GetMultipleTenantDetails(ctx context.Context, tenantIDs []u
 	if len(tenantIDs) == 0 {
 		return []TenantTempleDetails{}, nil
 	}
-	
+
 	var tenants []TenantTempleDetails
-	
+
 	query := `
 		SELECT 
 			u.id,
@@ -1171,10 +1175,11 @@ func (r *Repository) GetMultipleTenantDetails(ctx context.Context, tenantIDs []u
 		WHERE u.id IN ? AND ur.role_name = 'templeadmin'
 		ORDER BY u.created_at DESC
 	`
-	
+
 	err := r.db.WithContext(ctx).Raw(query, tenantIDs).Scan(&tenants).Error
 	return tenants, err
 }
+
 // BulkCreateUsers inserts multiple users safely with better error handling
 func (r *Repository) BulkCreateUsers(ctx context.Context, users []auth.User) error {
 	if len(users) == 0 {
@@ -1183,7 +1188,7 @@ func (r *Repository) BulkCreateUsers(ctx context.Context, users []auth.User) err
 
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var createdCount int
-		
+
 		for i, user := range users {
 			// Check if email already exists
 			var existingUser auth.User
@@ -1201,11 +1206,11 @@ func (r *Repository) BulkCreateUsers(ctx context.Context, users []auth.User) err
 			if err := tx.Create(&user).Error; err != nil {
 				return fmt.Errorf("error creating user %d (%s): %v", i+1, user.Email, err)
 			}
-			
+
 			createdCount++
 			fmt.Printf("Successfully created user: %s\n", user.Email)
 		}
-		
+
 		fmt.Printf("Transaction completed. Created %d users out of %d\n", createdCount, len(users))
 		return nil
 	})

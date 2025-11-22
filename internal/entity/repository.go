@@ -65,6 +65,56 @@ func (r *Repository) GetUserRoleID(userID uint) (uint, error) {
 	return roleID, nil
 }
 
+// Add these methods to your Repository struct in repository.go
+
+// CloseOldApprovalRequests marks old approval requests as closed when a new one is created
+func (r *Repository) CloseOldApprovalRequests(entityID uint, requestType string) error {
+	return r.DB.
+		Table("approval_requests").
+		Where("entity_id = ? AND request_type IN (?, ?) AND status IN (?, ?)", 
+			entityID, "temple_approval", "temple_reapproval", "pending", "rejected").
+		Updates(map[string]interface{}{
+			"status":     "superseded",
+			"updated_at": time.Now(),
+		}).Error
+}
+
+// GetLatestApprovalRequest gets the most recent approval request for an entity
+func (r *Repository) GetLatestApprovalRequest(entityID uint) (*auth.ApprovalRequest, error) {
+	var req auth.ApprovalRequest
+	err := r.DB.
+		Where("entity_id = ? AND request_type IN (?, ?)", entityID, "temple_approval", "temple_reapproval").
+		Order("created_at DESC").
+		First(&req).Error
+	
+	if err != nil {
+		return nil, err
+	}
+	
+	return &req, nil
+}
+
+// UpdateApprovalRequestStatus updates the status of an approval request
+func (r *Repository) UpdateApprovalRequestStatus(requestID uint, status string, adminNotes string) error {
+	updates := map[string]interface{}{
+		"status":      status,
+		"admin_notes": adminNotes,
+		"updated_at":  time.Now(),
+	}
+	
+	if status == "approved" {
+		now := time.Now()
+		updates["approved_at"] = &now
+	} else if status == "rejected" {
+		now := time.Now()
+		updates["rejected_at"] = &now
+	}
+	
+	return r.DB.
+		Table("approval_requests").
+		Where("id = ?", requestID).
+		Updates(updates).Error
+}
 // Create an approval request for the temple
 func (r *Repository) CreateApprovalRequest(req *auth.ApprovalRequest) error {
 	return r.DB.Create(req).Error
@@ -156,7 +206,27 @@ func (r *Repository) GetEntityByID(id int) (Entity, error) {
 }
 
 // Update an existing temple entity
+// UpdateEntity - Fixed version that properly saves all fields
 func (r *Repository) UpdateEntity(e Entity) error {
+	e.UpdatedAt = time.Now()
+	
+	// Use Save() instead of Updates() to ensure all fields are updated
+	// Save() will update all fields including zero values
+	result := r.DB.Model(&Entity{}).Where("id = ?", e.ID).Save(&e)
+	
+	if result.Error != nil {
+		return result.Error
+	}
+	
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("no entity found with id %d", e.ID)
+	}
+	
+	return nil
+}
+
+// Alternative approach using Updates with all fields explicitly
+func (r *Repository) UpdateEntityAlternative(e Entity) error {
 	e.UpdatedAt = time.Now()
 	
 	updates := map[string]interface{}{
@@ -182,10 +252,23 @@ func (r *Repository) UpdateEntity(e Entity) error {
 		"property_docs_info":      e.PropertyDocsInfo,
 		"additional_docs_urls":    e.AdditionalDocsURLs,
 		"additional_docs_info":    e.AdditionalDocsInfo,
+		"status":                  e.Status,          // 🆕 Add status
+		"isactive":                e.IsActive,        // 🆕 Add isactive
+		"accepted_terms":          e.AcceptedTerms,   // 🆕 Add accepted_terms
 		"updated_at":              e.UpdatedAt,
 	}
 	
-	return r.DB.Model(&Entity{}).Where("id = ?", e.ID).Updates(updates).Error
+	result := r.DB.Model(&Entity{}).Where("id = ?", e.ID).Updates(updates)
+	
+	if result.Error != nil {
+		return result.Error
+	}
+	
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("no entity found with id %d", e.ID)
+	}
+	
+	return nil
 }
 // UpdateEntityStatus updates only the IsActive field of an entity
 func (r *Repository) UpdateEntityStatus(id int, isActive bool) error {

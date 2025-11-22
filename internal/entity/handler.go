@@ -787,7 +787,8 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 	c.JSON(http.StatusOK, entity)
 }
 
-// UpdateEntity handles entity updates with permission checks
+// UpdateEntity handles entity updates with permission checks and proper field preservation
+// UpdateEntity handles entity updates with permission checks and file uploads
 func (h *Handler) UpdateEntity(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -819,49 +820,42 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		return
 	}
 
-	// Get the existing entity to check ownership
+	// Get the existing entity to check ownership and status
 	existingEntity, err := h.Service.GetEntityByID(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Temple not found"})
 		return
 	}
 
-	// **UPDATED PERMISSION LOGIC: Allow SuperAdmin and TempleAdmin**
+	// Permission check
 	hasAccess := false
 	
 	switch user.Role.RoleName {
 	case "superadmin":
-		// SuperAdmin can edit ANY temple
 		hasAccess = true
 		log.Printf("✅ SuperAdmin %d granted access to edit entity %d", user.ID, id)
 		
 	case "templeadmin":
-		// TempleAdmin can edit temples they created
 		hasAccess = (existingEntity.CreatedBy == user.ID)
 		
-		// Also allow if entity ID matches their direct entity
 		if !hasAccess && accessContext.DirectEntityID != nil {
 			hasAccess = (*accessContext.DirectEntityID == uint(id))
 		}
 		
 		if hasAccess {
-			log.Printf("✅ TempleAdmin %d granted access to edit entity %d (createdBy=%d)", 
-				user.ID, id, existingEntity.CreatedBy)
+			log.Printf("✅ TempleAdmin %d granted access to edit entity %d", user.ID, id)
 		} else {
-			log.Printf("❌ TempleAdmin %d DENIED access to entity %d (createdBy=%d, directEntityID=%v)", 
-				user.ID, id, existingEntity.CreatedBy, accessContext.DirectEntityID)
+			log.Printf("❌ TempleAdmin %d DENIED access to entity %d", user.ID, id)
 		}
 		
 	case "standarduser", "monitoringuser":
-		// Standard/monitoring users can only edit their assigned entity
 		entityIDUint := uint(id)
 		hasAccess = (accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityIDUint)
 		
 		if hasAccess {
-			log.Printf("✅ StandardUser %d granted access to edit assigned entity %d", user.ID, id)
+			log.Printf("✅ StandardUser %d granted access to edit entity %d", user.ID, id)
 		} else {
-			log.Printf("❌ StandardUser %d DENIED access to entity %d (assignedEntityID=%v)", 
-				user.ID, id, accessContext.AssignedEntityID)
+			log.Printf("❌ StandardUser %d DENIED access to entity %d", user.ID, id)
 		}
 		
 	default:
@@ -869,58 +863,150 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		hasAccess = false
 	}
 
-	// **DENY ACCESS IF NO PERMISSION**
 	if !hasAccess {
 		c.JSON(http.StatusForbidden, gin.H{
 			"error": "Access denied to update this entity",
-			"details": map[string]interface{}{
-				"user_id":        user.ID,
-				"user_role":      user.Role.RoleName,
-				"entity_id":      id,
-				"entity_creator": existingEntity.CreatedBy,
-				"message":        "Only SuperAdmins and the TempleAdmin who created this temple can update it",
-			},
 		})
 		return
 	}
 
-	// Check write permissions from access context
+	// Check write permissions
 	if !accessContext.CanWrite() {
-		log.Printf("❌ User %d has no write permissions (role: %s)", user.ID, user.Role.RoleName)
+		log.Printf("❌ User %d has no write permissions", user.ID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient write permissions"})
 		return
 	}
 
-	// Parse update input
+	// 🆕 CHECK CONTENT TYPE - Handle both JSON and multipart/form-data
+	contentType := c.GetHeader("Content-Type")
+	isMultipart := strings.Contains(contentType, "multipart/form-data")
+
 	var input Entity
-	if err := c.ShouldBindJSON(&input); err != nil {
-		log.Printf("Update Bind Error: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
-		return
+	var tempFiles []TempFileInfo
+
+	if isMultipart {
+		// Handle multipart form with files
+		log.Printf("📁 Processing multipart form data for entity %d", id)
+		if err := h.handleMultipartFormData(c, &input, &tempFiles); err != nil {
+			log.Printf("Multipart Form Error: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid form data", "details": err.Error()})
+			return
+		}
+	} else {
+		// Handle JSON update (no files)
+		if err := c.ShouldBindJSON(&input); err != nil {
+			log.Printf("Update Bind Error: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
+			return
+		}
 	}
 
-	// Preserve the original creator and important fields
+	// 🔍 DEBUG: Log received input
+	log.Printf("📝 Received update data for temple %d: Name=%s, Email=%s", id, input.Name, input.Email)
+
+	// Check if temple was rejected
+	wasRejected := existingEntity.Status == "rejected"
+	
+	// Preserve critical fields
 	input.ID = uint(id)
-	input.CreatedBy = existingEntity.CreatedBy // Don't change who created it
+	input.CreatedBy = existingEntity.CreatedBy
+	input.CreatedAt = existingEntity.CreatedAt
 	input.UpdatedAt = time.Now()
+	
+	// 🆕 PRESERVE EXISTING FILE URLS IF NO NEW FILES UPLOADED
+	if input.RegistrationCertURL == "" {
+		input.RegistrationCertURL = existingEntity.RegistrationCertURL
+		input.RegistrationCertInfo = existingEntity.RegistrationCertInfo
+	}
+	if input.TrustDeedURL == "" {
+		input.TrustDeedURL = existingEntity.TrustDeedURL
+		input.TrustDeedInfo = existingEntity.TrustDeedInfo
+	}
+	if input.PropertyDocsURL == "" {
+		input.PropertyDocsURL = existingEntity.PropertyDocsURL
+		input.PropertyDocsInfo = existingEntity.PropertyDocsInfo
+	}
+	if input.AdditionalDocsURLs == "" {
+		input.AdditionalDocsURLs = existingEntity.AdditionalDocsURLs
+		input.AdditionalDocsInfo = existingEntity.AdditionalDocsInfo
+	}
+	
+	// Preserve creator role ID
+	if input.CreatorRoleID == nil {
+		input.CreatorRoleID = existingEntity.CreatorRoleID
+	}
+	
+	// Handle status based on role and rejection state
+	if wasRejected && user.Role.RoleName != "superadmin" {
+		input.Status = "pending"
+		log.Printf("🔄 Temple %d was rejected, resetting to pending for re-approval", id)
+	} else if user.Role.RoleName != "superadmin" {
+		input.Status = existingEntity.Status
+	}
+	// Superadmin can set any status
+
+	// Preserve IsActive
+	if !input.IsActive && existingEntity.IsActive {
+		input.IsActive = existingEntity.IsActive
+	}
+
+	// 🆕 PROCESS NEW FILES IF UPLOADED
+	finalFileInfos := make(map[string]FileInfo)
+	if len(tempFiles) > 0 {
+		log.Printf("📁 Processing %d new file uploads for entity %d", len(tempFiles), id)
+		
+		if err := h.moveFilesToFinalLocation(&input, tempFiles, &finalFileInfos); err != nil {
+			log.Printf("Error moving files for entity %d: %v", id, err)
+			h.cleanupTempFiles(tempFiles)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to process uploaded files",
+				"details": err.Error(),
+			})
+			return
+		}
+		
+		log.Printf("✅ Successfully processed %d files for entity %d", len(tempFiles), id)
+	}
 
 	// Get IP address for audit logging
 	ip := middleware.GetIPFromContext(c)
 
+	// 🔍 DEBUG: Log before save
+	log.Printf("💾 Saving entity %d: Status=%s, RegCert=%s", 
+		id, input.Status, input.RegistrationCertURL)
+
 	// Perform the update
-	if err := h.Service.UpdateEntity(input, user.ID, ip); err != nil {
-		log.Printf("❌ Update Error for entity %d by user %d: %v", id, user.ID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update temple", "details": err.Error()})
+	if err := h.Service.UpdateEntity(input, user.ID, user.Role.ID, ip, wasRejected); err != nil {
+		log.Printf("❌ Update Error for entity %d: %v", id, err)
+		h.cleanupTempFiles(tempFiles)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to update temple", 
+			"details": err.Error(),
+		})
 		return
 	}
 
-	log.Printf("✅ Entity %d updated successfully by user %d (role: %s)", id, user.ID, user.Role.RoleName)
+	log.Printf("✅ Entity %d updated successfully by user %d", id, user.ID)
 	
-	c.JSON(http.StatusOK, gin.H{
+	response := gin.H{
 		"message":   "Temple updated successfully",
 		"temple_id": id,
 		"updated_by": user.ID,
-	})
+	}
+	
+	// Add file info if files were uploaded
+	if len(finalFileInfos) > 0 {
+		response["uploaded_files"] = finalFileInfos
+	}
+	
+	// Add status change info if applicable
+	if wasRejected && input.Status == "pending" {
+		response["status_changed"] = true
+		response["new_status"] = "pending"
+		response["message"] = "Temple updated and submitted for re-approval"
+	}
+	
+	c.JSON(http.StatusOK, response)
 }
 // DeleteEntity handles entity deletion (superadmin only)
 func (h *Handler) DeleteEntity(c *gin.Context) {
