@@ -158,12 +158,12 @@ func (s *Service) GetMultipleTenantDetails(ctx context.Context, tenantIDs []uint
 	if len(tenantIDs) == 0 {
 		return []TenantTempleDetails{}, nil
 	}
-	
+
 	// Optional: Add limit to prevent too many IDs at once
 	if len(tenantIDs) > 100 {
 		return nil, errors.New("maximum 100 tenant IDs allowed per request")
 	}
-	
+
 	return s.repo.GetMultipleTenantDetails(ctx, tenantIDs)
 }
 
@@ -172,7 +172,7 @@ func (s *Service) GetTenantDetails(ctx context.Context, tenantID uint) (*TenantT
 	if tenantID == 0 {
 		return nil, errors.New("invalid tenant ID")
 	}
-	
+
 	details, err := s.repo.GetTenantDetails(ctx, tenantID)
 	if err != nil {
 		// Check if it's a record not found error
@@ -181,7 +181,7 @@ func (s *Service) GetTenantDetails(ctx context.Context, tenantID uint) (*TenantT
 		}
 		return nil, errors.New("failed to fetch tenant details")
 	}
-	
+
 	return details, nil
 }
 
@@ -1149,17 +1149,25 @@ func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, admi
 		return nil, errors.New("invalid CSV format or missing header")
 	}
 
-	var users []auth.User
 	var successCount, failCount int
 	var errorsList []string
 	totalRows := 0
 
+	removeInvisible := func(str string) string {
+		return strings.Map(func(r rune) rune {
+			if r == '\u200B' || r == '\uFEFF' { // Zero width space, BOM
+				return -1
+			}
+			return r
+		}, str)
+	}
+
 	for {
 		record, err := reader.Read()
+		fmt.Println("record", record)
 		if err == io.EOF {
 			break
 		}
-
 		totalRows++
 
 		if err != nil {
@@ -1168,20 +1176,25 @@ func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, admi
 			continue
 		}
 
-		// Check for 6 columns
+		// Minimum 6 columns required
 		if len(record) < 6 {
 			failCount++
 			errorsList = append(errorsList, "row missing required fields")
 			continue
 		}
 
-		// Parse CSV columns
-		fullName := strings.TrimSpace(record[0])                  // Full Name
-		email := strings.TrimSpace(record[1])                     // Email
-		phone := strings.TrimSpace(record[2])                     // Phone
-		password := strings.TrimSpace(record[3])                  // Password - FIXED: Actually use this
-		roleName := strings.ToLower(strings.TrimSpace(record[4])) // Role
-		status := strings.ToLower(strings.TrimSpace(record[5]))   // Status
+		// Parse base columns
+		fullName := strings.TrimSpace(record[0])
+		email := strings.TrimSpace(record[1])
+		phone := strings.TrimSpace(record[2])
+		password := strings.TrimSpace(record[3])
+
+		// Clean hidden characters from Role
+		rawRole := record[4]
+		cleanRole := removeInvisible(rawRole)
+		roleName := strings.ToLower(strings.TrimSpace(cleanRole))
+
+		status := strings.ToLower(strings.TrimSpace(record[5]))
 
 		if fullName == "" || email == "" {
 			failCount++
@@ -1189,11 +1202,11 @@ func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, admi
 			continue
 		}
 
-		// Validate role
+		// Validate role (using DB)
 		role, err := s.repo.FindRoleByName(ctx, roleName)
 		if err != nil || role == nil {
 			failCount++
-			errorsList = append(errorsList, fmt.Sprintf("invalid role for email %s", email))
+			errorsList = append(errorsList, fmt.Sprintf("invalid role for email %s (role given: '%s')", email, roleName))
 			continue
 		}
 
@@ -1205,19 +1218,17 @@ func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, admi
 			continue
 		}
 
-		// FIXED: Handle password properly
+		// Handle password hashing
 		var passwordHash string
 		if password != "" {
-			// Use password from CSV
 			hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 			if err != nil {
 				failCount++
-				errorsList = append(errorsList, fmt.Sprintf("error hashing password for email %s", email))
+				errorsList = append(errorsList, fmt.Sprintf("error hashing password for %s", email))
 				continue
 			}
 			passwordHash = string(hash)
 		} else {
-			// Use default password only if CSV password is empty
 			hash, _ := bcrypt.GenerateFromPassword([]byte("Default@123"), bcrypt.DefaultCost)
 			passwordHash = string(hash)
 		}
@@ -1231,29 +1242,48 @@ func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, admi
 			PasswordHash: passwordHash,
 		}
 
-		users = append(users, user)
-		successCount++
-
-		// Debug logging
-		fmt.Printf("Prepared user for creation: %s (Role ID: %d, Status: %s)\n", email, role.ID, status)
-	}
-
-	// Save to DB
-	fmt.Printf("Attempting to save %d users to database\n", len(users))
-	if len(users) > 0 {
-		if err := s.repo.BulkCreateUsers(ctx, users); err != nil {
-			fmt.Printf("Database save error: %v\n", err)
-			errorsList = append(errorsList, fmt.Sprintf("Database error: %v", err))
-			return &BulkUploadResult{
-				TotalRows:    totalRows,
-				SuccessCount: 0,
-				FailedCount:  totalRows,
-				Errors:       errorsList,
-			}, nil
+		// Save user
+		if err := s.repo.CreateUser(ctx, &user); err != nil {
+			failCount++
+			errorsList = append(errorsList, fmt.Sprintf("failed to create user %s", email))
+			continue
 		}
-		fmt.Printf("Successfully saved %d users to database\n", len(users))
-	} else {
-		fmt.Printf("No users to save - all rows failed validation\n")
+
+		if strings.ToLower(role.RoleName) == "templeadmin" {
+
+			if len(record) < 11 {
+
+				failCount++
+				errorsList = append(errorsList, fmt.Sprintf("missing temple details for %s", email))
+				continue
+			}
+
+			td := &auth.TenantDetails{
+				UserID:            user.ID,
+				TempleName:        strings.TrimSpace(record[6]),
+				TemplePlace:       strings.TrimSpace(record[7]),
+				TempleAddress:     strings.TrimSpace(record[8]),
+				TemplePhoneNo:     strings.TrimSpace(record[9]),
+				TempleDescription: strings.TrimSpace(record[10]),
+			}
+
+			if td.TempleName == "" || td.TemplePlace == "" || td.TempleAddress == "" ||
+				td.TemplePhoneNo == "" || td.TempleDescription == "" {
+
+				failCount++
+				errorsList = append(errorsList, fmt.Sprintf("missing temple details for %s", email))
+				continue
+			}
+
+			if err := s.repo.CreateTenantDetails(ctx, td); err != nil {
+				failCount++
+				errorsList = append(errorsList, fmt.Sprintf("failed to save temple details for %s", email))
+				continue
+			}
+		}
+
+		successCount++
+		fmt.Printf("Created user: %s (Role: %s)\n", email, roleName)
 	}
 
 	return &BulkUploadResult{

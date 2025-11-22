@@ -21,6 +21,7 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
+
 // =========================== TENANT ===========================
 
 func (r *Repository) GetUserByID(ctx context.Context, userID uint) (auth.User, error) {
@@ -221,23 +222,47 @@ func (r *Repository) GetEntitiesWithFilters(ctx context.Context, status string, 
 }
 
 func (r *Repository) ApproveEntity(ctx context.Context, entityID uint, adminID uint) error {
-	return r.db.WithContext(ctx).
+	approvedAt := time.Now()
+	
+	// Update entity with approval timestamp
+	if err := r.db.WithContext(ctx).
 		Model(&entity.Entity{}).
 		Where("id = ?", entityID).
 		Updates(map[string]interface{}{
-			"status":     "approved",
-			"updated_at": time.Now(),
+			"status":      "approved",
+			"approved_at": approvedAt,
+			"updated_at":  time.Now(),
+		}).Error; err != nil {
+		return err
+	}
+
+	// Update approval request record
+	return r.db.WithContext(ctx).
+		Model(&auth.ApprovalRequest{}).
+		Where("entity_id = ? AND request_type = ?", entityID, "entity").
+		Updates(map[string]interface{}{
+			"status":      "approved",
+			"approved_by": adminID,
+			"approved_at": approvedAt,
+			"updated_at":  time.Now(),
 		}).Error
 }
 
 func (r *Repository) RejectEntity(ctx context.Context, entityID uint, adminID uint, reason string, rejectedAt time.Time) error {
+	// Update entity with rejection details
 	if err := r.db.WithContext(ctx).
 		Model(&entity.Entity{}).
 		Where("id = ?", entityID).
-		Update("status", "rejected").Error; err != nil {
+		Updates(map[string]interface{}{
+			"status":           "rejected",
+			"rejected_at":      rejectedAt,
+			"rejection_reason": reason,
+			"updated_at":       time.Now(),
+		}).Error; err != nil {
 		return err
 	}
 
+	// Update approval request record
 	return r.db.WithContext(ctx).
 		Model(&auth.ApprovalRequest{}).
 		Where("entity_id = ? AND request_type = ?", entityID, "entity").
@@ -252,12 +277,22 @@ func (r *Repository) RejectEntity(ctx context.Context, entityID uint, adminID ui
 
 func (r *Repository) GetEntityByID(ctx context.Context, entityID uint) (entity.Entity, error) {
 	var ent entity.Entity
+	
+	// Query to get entity with approval/rejection details from approval_requests
 	err := r.db.WithContext(ctx).
-		Where("id = ?", entityID).
+		Table("entities").
+		Select(`
+			entities.*,
+			approval_requests.approved_at,
+			approval_requests.rejected_at,
+			approval_requests.admin_notes as rejection_reason
+		`).
+		Joins("LEFT JOIN approval_requests ON entities.id = approval_requests.entity_id AND approval_requests.request_type = 'entity'").
+		Where("entities.id = ?", entityID).
 		First(&ent).Error
+		
 	return ent, err
 }
-
 func (r *Repository) LinkEntityToUser(ctx context.Context, userID uint, entityID uint) error {
 	return r.db.WithContext(ctx).
 		Model(&auth.User{}).
@@ -322,155 +357,129 @@ func (r *Repository) CreateTenantDetails(ctx context.Context, details *auth.Tena
 	return r.db.WithContext(ctx).Create(details).Error
 }
 
-// Get users with pagination and filters (excluding devotee, volunteer roles and pending status)
-func (r *Repository) GetUsers(ctx context.Context, limit, page int, search, roleFilter, statusFilter string) ([]UserResponse, int64, error) {
+func (r *Repository) GetUsers(
+	ctx context.Context,
+	limit, page int,
+	search, roleFilter, statusFilter string,
+) ([]UserResponse, int64, error) {
+
 	var users []UserResponse
 	var total int64
 
 	offset := (page - 1) * limit
 
-	// Build base query for total count
-	baseQuery := r.db.Debug().WithContext(ctx).
+	
+	base := r.db.WithContext(ctx).
 		Table("users").
-		Joins("JOIN user_roles ON users.role_id = user_roles.id").
-		Joins("LEFT JOIN approval_requests ar ON ar.user_id = users.id and users.role_id = 2 and ar.status = 'approved'").
-		Where("user_roles.role_name NOT IN (?)", []string{"devotee","volunteer"}).
-		Where("LOWER(users.status) != ?", "pending") // exclude pending users
+		Joins("JOIN user_roles ON users.role_id = user_roles.id")
 
-	// Apply search filter
-	if search != "" {
-		searchPattern := "%" + search + "%"
-		baseQuery = baseQuery.Where(
-			"users.full_name ILIKE ? OR users.email ILIKE ? OR users.phone ILIKE ?",
-			searchPattern, searchPattern, searchPattern,
+	// Apply role category filter
+	switch roleFilter {
+	case "internal":
+		base = base.Where("LOWER(user_roles.role_name) IN (?)",
+			[]string{"superadmin", "templeadmin", "standarduser", "monitoringuser"},
 		)
+	case "volunteers":
+		base = base.Where("LOWER(user_roles.role_name) = 'volunteer'")
+	case "devotees":
+		base = base.Where("LOWER(user_roles.role_name) = 'devotee'")
 	}
 
-	// Apply role filter
-	if roleFilter != "" {
-		baseQuery = baseQuery.Where("LOWER(user_roles.role_name) = LOWER(?)", roleFilter)
+	// Search filter
+	if search != "" {
+		s := "%" + search + "%"
+		base = base.Where(`
+			users.full_name ILIKE ? OR 
+			users.email ILIKE ? OR 
+			users.phone ILIKE ?
+		`, s, s, s)
 	}
 
-	// Apply status filter (still allow other status filters)
+	// Status filter
 	if statusFilter != "" {
-		baseQuery = baseQuery.Where("LOWER(users.status) = LOWER(?)", statusFilter)
+		base = base.Where("LOWER(users.status) = LOWER(?)", statusFilter)
 	}
 
-	// Get total count
-	if err := baseQuery.Count(&total).Error; err != nil {
+	if err := base.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	// Build main query with all necessary joins and select fields
+	
 	query := r.db.WithContext(ctx).
 		Table("users").
 		Select(`
-            users.id,
-            users.full_name,
-            users.email,
-            users.phone,
-            users.status,
-            users.created_at,
-            users.updated_at,
-            user_roles.id as role_id,
-            user_roles.role_name,
-            td.id as temple_id,
-            td.temple_name,
-            td.temple_place,
-            td.temple_address,
-            td.temple_phone_no,
-            td.temple_description,
-            td.created_at as temple_created_at,
-            td.updated_at as temple_updated_at,
-            tenant_user.full_name as tenant_name,
-            tua.created_at as assignment_created_at,
-            tua.updated_at as assignment_updated_at
-        `).
+			users.id,
+			users.full_name,
+			users.email,
+			users.phone,
+			users.status,
+			users.created_at,
+			users.updated_at,
+			user_roles.id as role_id,
+			user_roles.role_name
+		`).
 		Joins("JOIN user_roles ON users.role_id = user_roles.id").
-		Joins("LEFT JOIN tenant_details td ON users.id = td.user_id AND user_roles.role_name = 'templeadmin'").
-		Joins("LEFT JOIN tenant_user_assignments tua ON users.id = tua.user_id AND user_roles.role_name IN ('standarduser', 'monitoringuser') AND tua.status = 'active'").
-		Joins("LEFT JOIN users tenant_user ON tua.tenant_id = tenant_user.id").
-		Where("user_roles.role_name NOT IN (?)", []string{"devotee", "volunteer"}).
-		Where("LOWER(users.status) != ?", "pending") 
+		Order("users.created_at DESC").
+		Limit(limit).
+		Offset(offset)
 
-	// Apply same filters to main query
-	if search != "" {
-		searchPattern := "%" + search + "%"
-		query = query.Where(
-			"users.full_name ILIKE ? OR users.email ILIKE ? OR users.phone ILIKE ?",
-			searchPattern, searchPattern, searchPattern,
+	// Same role filters again
+	switch roleFilter {
+	case "internal":
+		query = query.Where("LOWER(user_roles.role_name) IN (?)",
+			[]string{"superadmin", "templeadmin", "standarduser", "monitoringuser"},
 		)
+	case "volunteers":
+		query = query.Where("LOWER(user_roles.role_name) = 'volunteer'")
+	case "devotees":
+		query = query.Where("LOWER(user_roles.role_name) = 'devotee'")
 	}
 
-	if roleFilter != "" {
-		query = query.Where("LOWER(user_roles.role_name) = LOWER(?)", roleFilter)
+	// search
+	if search != "" {
+		s := "%" + search + "%"
+		query = query.Where(`
+			users.full_name ILIKE ? OR 
+			users.email ILIKE ? OR 
+			users.phone ILIKE ?
+		`, s, s, s)
 	}
 
+	// status
 	if statusFilter != "" {
 		query = query.Where("LOWER(users.status) = LOWER(?)", statusFilter)
 	}
 
-	// Execute query with pagination and ordering
-	rows, err := query.Limit(limit).Offset(offset).Order("users.created_at DESC").Rows()
+	rows, err := query.Rows()
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
 
-	// Scan results
 	for rows.Next() {
-		var user UserResponse
-		// Temple details
-		var templeID *uint
-		var templeName, templePlace, templeAddress, templePhoneNo, templeDescription *string
-		var templeCreatedAt, templeUpdatedAt *time.Time
-		// Tenant assignment details
-		var tenantName *string
-		var assignmentCreatedAt, assignmentUpdatedAt *time.Time
+		var u UserResponse
 
 		err := rows.Scan(
-			&user.ID, &user.FullName, &user.Email, &user.Phone, &user.Status, &user.CreatedAt, &user.UpdatedAt,
-			&user.Role.ID, &user.Role.RoleName,
-			&templeID, &templeName, &templePlace, &templeAddress, &templePhoneNo, &templeDescription, &templeCreatedAt, &templeUpdatedAt,
-			&tenantName, &assignmentCreatedAt, &assignmentUpdatedAt,
+			&u.ID,
+			&u.FullName,
+			&u.Email,
+			&u.Phone,
+			&u.Status,
+			&u.CreatedAt,
+			&u.UpdatedAt,
+			&u.Role.ID,
+			&u.Role.RoleName,
 		)
 		if err != nil {
 			return nil, 0, err
 		}
 
-		// Conditionally populate TempleDetails
-		if templeID != nil {
-			user.TempleDetails = &TenantTempleDetails{
-				ID:                *templeID,
-				TempleName:        *templeName,
-				TemplePlace:       *templePlace,
-				TempleAddress:     *templeAddress,
-				TemplePhoneNo:     *templePhoneNo,
-				TempleDescription: *templeDescription,
-				CreatedAt:         *templeCreatedAt,
-				UpdatedAt:         *templeUpdatedAt,
-			}
-		}
-
-		// Conditionally populate TenantAssignmentDetails and TenantAssigned string
-		if tenantName != nil {
-			user.TenantAssignmentDetails = &TenantAssignmentDetails{
-				TenantName: *tenantName,
-				AssignedOn: *assignmentCreatedAt,
-				UpdatedOn:  *assignmentUpdatedAt,
-			}
-			user.TenantAssigned = *tenantName
-			user.AssignedDate = assignmentCreatedAt
-			user.ReassignmentDate = assignmentUpdatedAt
-		} else {
-			user.TenantAssigned = "" // no tenant assigned
-		}
-
-		users = append(users, user)
+		users = append(users, u)
 	}
 
 	return users, total, nil
 }
+
 
 // Get all users with optional tenant assignment details
 func (r *Repository) GetUsersWithDetails(ctx context.Context) ([]UserResponse, int64, error) {

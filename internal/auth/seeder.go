@@ -10,10 +10,12 @@ import (
 
 func SeedUserRoles(db *gorm.DB) error {
 	roles := []UserRole{
-		{RoleName: "superadmin", Description: "Super Admin", CanRegisterPublicly: false},
-		{RoleName: "templeadmin", Description: "Temple Admin", CanRegisterPublicly: false},
-		{RoleName: "devotee", Description: "Devotee", CanRegisterPublicly: true},
-		{RoleName: "volunteer", Description: "Volunteer", CanRegisterPublicly: true},
+		{RoleName: "superadmin", Description: "Super Admin", CanRegisterPublicly: false, Status: "active"},
+		{RoleName: "templeadmin", Description: "Temple Admin", CanRegisterPublicly: false, Status: "active"},
+		{RoleName: "devotee", Description: "Devotee", CanRegisterPublicly: true, Status: "active"},
+		{RoleName: "volunteer", Description: "Volunteer", CanRegisterPublicly: true, Status: "active"},
+		{RoleName: "standarduser", Description: "Standard User", CanRegisterPublicly: false, Status: "active"},
+		{RoleName: "monitoringuser", Description: "Monitoring User", CanRegisterPublicly: false, Status: "active"},
 	}
 
 	for _, role := range roles {

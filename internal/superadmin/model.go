@@ -68,8 +68,6 @@ type UpdateUserRequest struct {
 	FullName          string `json:"fullName"`
 	Email             string `json:"email" binding:"email"`
 	Phone             string `json:"phone"`
-
-	// Temple admin specific fields (only for templeadmin role)
 	TempleName        string `json:"templeName"`
 	TemplePlace       string `json:"templePlace"`
 	TempleAddress     string `json:"templeAddress"`
@@ -116,7 +114,6 @@ type UserRole struct {
 	CanRegisterPublicly bool   `json:"can_register_publicly"`
 }
 
-// AssignableTenant represents a single tenant for the assignment list.
 type AssignableTenant struct {
 	UserID        uint   `json:"userID"`
 	TenantName    string `json:"tenantName"`
@@ -169,7 +166,6 @@ type TenantResponse struct {
 	Temple   *TempleDetails `json:"temple,omitempty"`
 }
 
-// BulkUserCSV maps each row of the uploaded CSV file.
 type BulkUserCSV struct {
 	FullName string `csv:"Full Name" json:"full_name"`
 	Email    string `csv:"Email" json:"email"`
@@ -179,7 +175,6 @@ type BulkUserCSV struct {
 	Status   string `csv:"Status" json:"status"`
 }
 
-// BulkUploadResult represents response after processing bulk upload.
 type BulkUploadResult struct {
 	TotalRows    int      `json:"total_rows"`
 	SuccessCount int      `json:"success_count"`

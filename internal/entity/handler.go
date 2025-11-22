@@ -1174,66 +1174,78 @@ func (h *Handler) GetDevoteeStats(c *gin.Context) {
 	c.JSON(http.StatusOK, stats)
 }
 
-// UpdateDevoteeMembershipStatus updates devotee membership status
 func (h *Handler) UpdateDevoteeMembershipStatus(c *gin.Context) {
-	entityIDUint, err := strconv.ParseUint(c.Param("entityID"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entity ID"})
-		return
-	}
 
-	userID, err := strconv.ParseUint(c.Param("userID"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
-		return
-	}
+    // Debug route params
+    log.Println("PARAMS DEBUG:", c.Params)
 
-	// Get access context
-	accessContextVal, exists := c.Get("access_context")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
-		return
-	}
-	accessContext, ok := accessContextVal.(middleware.AccessContext)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid access context"})
-		return
-	}
+    // Correct route param names
+    entityIDUint, err := strconv.ParseUint(c.Param("id"), 10, 64)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entity ID"})
+        return
+    }
 
-	// Check write permissions
-	if !accessContext.CanWrite() {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient write permissions"})
-		return
-	}
+    // IMPORTANT: Use the correct param name from router → "userID"
+    userIDUint, err := strconv.ParseUint(c.Param("userID"), 10, 64)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+        return
+    }
 
-	// Check entity access
-	entityID := uint(entityIDUint)
-	hasAccess := (accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityID) ||
-		(accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityID)
+    // Get access context
+    accessContextVal, exists := c.Get("access_context")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
+        return
+    }
+    accessContext, ok := accessContextVal.(middleware.AccessContext)
+    if !ok {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid access context"})
+        return
+    }
 
-	if !hasAccess {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied to manage devotees for this entity"})
-		return
-	}
+    // Permission check - write access required
+    if !accessContext.CanWrite() {
+        c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient write permissions"})
+        return
+    }
 
-	var req struct {
-		Status string `json:"status" binding:"required,oneof=active inactive"`
-	}
+    entityID := uint(entityIDUint)
+    userID := uint(userIDUint)
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
-		return
-	}
+    // Entity access check
+    hasAccess := (accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityID) ||
+        (accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityID)
 
-	err = h.Service.MembershipService.UpdateMembershipStatus(uint(userID), entityID, req.Status)
-	if err != nil {
-		log.Printf("Error updating membership status: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update status", "details": err.Error()})
-		return
-	}
+    if !hasAccess {
+        c.JSON(http.StatusForbidden, gin.H{"error": "Access denied to manage devotees for this entity"})
+        return
+    }
 
-	c.JSON(http.StatusOK, gin.H{"message": "Membership status updated successfully"})
+    // Parse status change request
+    var req struct {
+        Status string `json:"status" binding:"required,oneof=active inactive"`
+    }
+
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+        return
+    }
+
+    // Call service to update status
+    if err := h.Service.MembershipService.UpdateMembershipStatus(userID, entityID, req.Status); err != nil {
+        log.Printf("Error updating membership status: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update status", "details": err.Error()})
+        return
+    }
+
+    // Success response
+    c.JSON(http.StatusOK, gin.H{
+        "message": "Membership status updated successfully",
+    })
 }
+
 
 // GetDashboardSummary retrieves dashboard summary for the accessible entity
 func (h *Handler) GetDashboardSummary(c *gin.Context) {

@@ -135,9 +135,23 @@ func (r *Repository) GetApprovalStatsByRole() (map[string]interface{}, error) {
 }
 
 // Fetch a single temple entity by ID
+// Fetch a single temple entity by ID with approval/rejection details
 func (r *Repository) GetEntityByID(id int) (Entity, error) {
 	var entity Entity
-	err := r.DB.First(&entity, id).Error
+	
+	// Query to get entity with approval/rejection details from approval_requests
+	err := r.DB.
+		Table("entities").
+		Select(`
+			entities.*,
+			approval_requests.approved_at,
+			approval_requests.rejected_at,
+			approval_requests.admin_notes as rejection_reason
+		`).
+		Joins("LEFT JOIN approval_requests ON entities.id = approval_requests.entity_id AND approval_requests.request_type = 'entity'").
+		Where("entities.id = ?", id).
+		First(&entity).Error
+	
 	return entity, err
 }
 

@@ -80,36 +80,53 @@ func (r *repository) FindRoleByName(name string) (*UserRole, error) {
 
 // Find user's approved EntityID (either via approval or membership)
 func (r *repository) FindEntityIDByUserID(userID uint) (*uint, error) {
-	// 1. Check templeadmin approval
-	var req ApprovalRequest
-	err := r.db.
-		Where("user_id = ? AND status = ?", userID, "approved").
-		Order("id DESC").
-		First(&req).Error
 
-	if err == nil && req.EntityID != nil {
-		return req.EntityID, nil
-	}
+    // 1. Check templeadmin approval
+    var req ApprovalRequest
+    err := r.db.
+        Where("user_id = ? AND status = ?", userID, "approved").
+        Order("id DESC").
+        First(&req).Error
+    if err == nil && req.EntityID != nil {
+        return req.EntityID, nil
+    }
 
-	// 2. Check devotee/volunteer membership
-	type membership struct {
-		EntityID uint
-	}
+    // 2. Check devotee/volunteer membership
+    type membership struct {
+        EntityID uint
+    }
 
-	var m membership
-	err = r.db.
-		Table("user_entity_memberships").
-		Select("entity_id").
-		Where("user_id = ?", userID).
-		Order("joined_at DESC").
-		First(&m).Error
+    var m membership
+    err = r.db.
+        Table("user_entity_memberships").
+        Select("entity_id").
+        Where("user_id = ?", userID).
+        Order("joined_at DESC").
+        First(&m).Error
+    if err == nil {
+        return &m.EntityID, nil
+    }
 
-	if err == nil {
-		return &m.EntityID, nil
-	}
+    // 3. NEW: Check if the user is the creator of the entity
+    type entity struct {
+        ID        uint
+        CreatedBy uint
+    }
 
-	return nil, gorm.ErrRecordNotFound
+    var e entity
+    err = r.db.
+        Table("entities").
+        Select("id, created_by").
+        Where("created_by = ?", userID).
+        Order("created_at DESC").
+        First(&e).Error
+    if err == nil {
+        return &e.ID, nil
+    }
+
+    return nil, gorm.ErrRecordNotFound
 }
+
 
 // Create approval request for templeadmin
 func (r *repository) CreateApprovalRequest(userID uint, requestType string) error {

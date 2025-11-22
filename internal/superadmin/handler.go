@@ -330,24 +330,27 @@ func (h *Handler) CreateUser(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"message": "User created successfully"})
 }
 
-// GET /superadmin/users - Get all users with pagination (excluding devotee and volunteer)
 func (h *Handler) GetUsers(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "10")
 	pageStr := c.DefaultQuery("page", "1")
 	search := c.DefaultQuery("search", "")
-	roleFilter := c.DefaultQuery("role", "")
+	roleFilter := c.DefaultQuery("role", "") // all, internal, volunteers, devotees
 	statusFilter := c.DefaultQuery("status", "")
 
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
-		limit = 10
-	}
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page <= 0 {
-		page = 1
-	}
+	limit, _ := strconv.Atoi(limitStr)
+	if limit <= 0 { limit = 10 }
 
-	users, total, err := h.service.GetUsers(c.Request.Context(), limit, page, search, roleFilter, statusFilter)
+	page, _ := strconv.Atoi(pageStr)
+	if page <= 0 { page = 1 }
+
+	users, total, err := h.service.GetUsers(
+		c.Request.Context(),
+		limit,
+		page,
+		search,
+		roleFilter,
+		statusFilter,
+	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
 		return
@@ -360,6 +363,7 @@ func (h *Handler) GetUsers(c *gin.Context) {
 		"limit": limit,
 	})
 }
+
 
 // GET /superadmin/users/:id - Get user by ID
 func (h *Handler) GetUserByID(c *gin.Context) {

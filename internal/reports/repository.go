@@ -104,7 +104,6 @@ func (r *repository) GetEvents(entityIDs []uint, start, end time.Time) ([]EventR
 		Scan(&out).Error
 	return out, err
 }
-
 func (r *repository) GetSevas(entityIDs []uint, start, end time.Time) ([]SevaReportRow, error) {
 	var out []SevaReportRow
 	if len(entityIDs) == 0 {
@@ -122,7 +121,6 @@ func (r *repository) GetSevas(entityIDs []uint, start, end time.Time) ([]SevaRep
 			s.start_time,
 			s.end_time,
 			s.duration,
-			s.max_bookings_per_day,
 			s.status,
 			s.is_active,
 			s.created_at,
@@ -133,6 +131,7 @@ func (r *repository) GetSevas(entityIDs []uint, start, end time.Time) ([]SevaRep
 		Where("s.created_at BETWEEN ? AND ?", start, end).
 		Order("s.created_at DESC").
 		Scan(&out).Error
+
 	return out, err
 }
 

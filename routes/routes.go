@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/database"
@@ -310,47 +311,63 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		superadminHandler.GetTenantsForSelection)
 
 	// ========== Seva Routes ==========
-	sevaRepo := seva.NewRepository(database.DB)
-	sevaService := seva.NewService(sevaRepo, auditSvc)
-	sevaHandler := seva.NewHandler(sevaService, auditSvc)
+	// ==================== SEVA ROUTES ====================
 
-	sevaRoutes := protected.Group("/sevas")
+sevaRepo := seva.NewRepository(database.DB)
+sevaService := seva.NewService(sevaRepo, auditSvc)
+sevaHandler := seva.NewHandler(sevaService, auditSvc)
 
-	// Common route accessible to both temple admin and devotees
-	sevaRoutes.GET("/booking-counts", sevaHandler.GetBookingCounts)
+// 🔥 FIX: Ensure protected group has CORS enabled (very important)
+protected.Use(cors.New(cors.Config{
+    AllowOrigins:     []string{"http://localhost:4173", "http://127.0.0.1:4173", "http://localhost:5173"},
+    AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+    AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Tenant-ID"},
+    AllowCredentials: true,
+}))
 
-	// Temple Admin Routes (templeadmin, standarduser, monitoringuser)
-	templeSevaRoutes := sevaRoutes.Group("")
-	templeSevaRoutes.Use(middleware.RequireTempleAccess())
+// All Seva routes under: /api/v1/sevas
+sevaRoutes := protected.Group("sevas")
+
+
+sevaRoutes.GET("/booking-counts", sevaHandler.GetBookingCounts)
+
+
+templeSevaRoutes := sevaRoutes.Group("")
+templeSevaRoutes.Use(middleware.RequireTempleAccess()) // access check
+
+{
+	
+	writeRoutes := templeSevaRoutes.Group("")
+	writeRoutes.Use(middleware.RequireWriteAccess()) // only templeadmin + standarduser
+
 	{
-		// Write operations - only templeadmin and standarduser can access
-		writeRoutes := templeSevaRoutes.Group("")
-		writeRoutes.Use(middleware.RequireWriteAccess())
-		{
-			// Seva CRUD operations
-			writeRoutes.POST("/", sevaHandler.CreateSeva)
-			writeRoutes.PUT("/:id", sevaHandler.UpdateSeva)
-			writeRoutes.DELETE("/:id", sevaHandler.DeleteSeva)
+		// CRUD for Sevas
+		writeRoutes.POST("/", sevaHandler.CreateSeva)
+		writeRoutes.PUT("/:id", sevaHandler.UpdateSeva)
+		writeRoutes.DELETE("/:id", sevaHandler.DeleteSeva)
 
-			// Booking status management
-			writeRoutes.PATCH("/bookings/:id/status", sevaHandler.UpdateBookingStatus)
-		}
-
-		// Read operations - all three roles (templeadmin, standarduser, monitoringuser) can access
-		templeSevaRoutes.GET("/entity-sevas", sevaHandler.ListEntitySevas)
-		templeSevaRoutes.GET("/:id", sevaHandler.GetSevaByID)
-		templeSevaRoutes.GET("/entity-bookings", sevaHandler.GetEntityBookings)
-		templeSevaRoutes.GET("/bookings/:id", sevaHandler.GetBookingByID)
+		// Booking status update
+		writeRoutes.PATCH("/bookings/:id/status", sevaHandler.UpdateBookingStatus)
 	}
 
-	// Devotee Only Routes (keep existing middleware)
-	devoteeSevaRoutes := sevaRoutes.Group("")
-	devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
-	{
-		devoteeSevaRoutes.POST("/bookings", sevaHandler.BookSeva)
-		devoteeSevaRoutes.GET("/my-bookings", sevaHandler.GetMyBookings)
-		devoteeSevaRoutes.GET("/", sevaHandler.GetSevas)
-	}
+	
+	templeSevaRoutes.GET("/entity-sevas", sevaHandler.ListEntitySevas)
+	templeSevaRoutes.GET("/:id", sevaHandler.GetSevaByID)
+	templeSevaRoutes.GET("/entity-bookings", sevaHandler.GetEntityBookings)
+	templeSevaRoutes.GET("/bookings/:id", sevaHandler.GetBookingByID)
+}
+
+
+
+devoteeSevaRoutes := sevaRoutes.Group("")
+devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
+
+{
+	devoteeSevaRoutes.POST("/bookings", sevaHandler.BookSeva)
+	devoteeSevaRoutes.GET("/my-bookings", sevaHandler.GetMyBookings)
+	devoteeSevaRoutes.GET("/", sevaHandler.GetSevas)
+}
+
 // ========== Entity ==========
 {
 	entityRepo := entity.NewRepository(database.DB)

@@ -50,6 +50,10 @@ type Entity struct {
 
 	// 🆕 NEW FIELD: Active/Inactive status
 	IsActive bool `gorm:"default:true" json:"isactive"` // Active/Inactive toggle
+	ApprovedAt      *time.Time `json:"approved_at" gorm:"column:approved_at"`
+    RejectedAt      *time.Time `json:"rejected_at" gorm:"column:rejected_at"`
+    RejectionReason string     `json:"rejection_reason" gorm:"column:rejection_reason;type:text"`
+    
 
 	// Meta
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
