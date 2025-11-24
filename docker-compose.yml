@@ -15,7 +15,7 @@ services:
       - FCM_CREDENTIALS_PATH=/app/serviceAccountKey.json
       - FCM_PROJECT_ID=tms-app-38fc7
     volumes:
-      - ./uploads:/app/uploads
+      - ./uploads:/data/uploads #
       - ./logs:/app/logs
       - ./serviceAccountKey.json:/app/serviceAccountKey.json:ro
     depends_on:

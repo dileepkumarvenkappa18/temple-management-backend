@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-contrib/cors"
+	
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/database"
@@ -95,7 +95,7 @@ func addUploadDebugging(r *gin.Engine) {
 	// Debug route to check specific file - Updated path
 	r.GET("/debug/file/*filepath", func(c *gin.Context) {
 		filePath := c.Param("filepath")
-		fullPath := filepath.Join("/data/uploads", filePath) // Changed from ./uploads
+		fullPath := filepath.Join("/data/uploads", filePath) 
 
 		// Check if file exists
 		info, err := os.Stat(fullPath)
@@ -317,16 +317,10 @@ sevaRepo := seva.NewRepository(database.DB)
 sevaService := seva.NewService(sevaRepo, auditSvc)
 sevaHandler := seva.NewHandler(sevaService, auditSvc)
 
-// 🔥 FIX: Ensure protected group has CORS enabled (very important)
-protected.Use(cors.New(cors.Config{
-    AllowOrigins:     []string{"http://localhost:4173", "http://127.0.0.1:4173", "http://localhost:5173"},
-    AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-    AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Tenant-ID"},
-    AllowCredentials: true,
-}))
+
 
 // All Seva routes under: /api/v1/sevas
-sevaRoutes := protected.Group("sevas")
+sevaRoutes := protected.Group("/sevas")
 
 
 sevaRoutes.GET("/booking-counts", sevaHandler.GetBookingCounts)
