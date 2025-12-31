@@ -1,8 +1,9 @@
 package userprofile
 
 import (
-	"fmt"
+
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auth"
@@ -39,56 +40,80 @@ func (h *Handler) GetMyProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, profile)
 }
 
-// GET /entities/:entityId/devotees/:userId/profile
+// GET /entities/:id/devotees/:userId/profile
 func (h *Handler) GetDevoteeProfileByEntity(c *gin.Context) {
-	entityIDStr := c.Param("id")
-	userIDStr := c.Param("userId")
 
-	var entityID, userID uint
-	if _, err := fmt.Sscanf(entityIDStr, "%d", &entityID); err != nil {
+	// -------- Parse route params --------
+	entityIDUint, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entity ID"})
 		return
 	}
-	if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err != nil {
+
+	userIDUint, err := strconv.ParseUint(c.Param("userId"), 10, 64)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
 
-	// Get the requesting user from context
-	user, ok := c.Get("user")
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+	entityID := uint(entityIDUint)
+	userID := uint(userIDUint)
+
+	// -------- Get authenticated user --------
+	userVal, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-	currentUser := user.(auth.User)
-
-	// Check if requesting user has access to this entity
-	if currentUser.EntityID == nil || *currentUser.EntityID != entityID {
-		// Check if user has membership
-		memberships, err := h.service.ListMemberships(currentUser.ID)
-		if err != nil || len(memberships) == 0 {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied to this entity"})
-			return
-		}
-
-		hasAccess := false
-		for _, m := range memberships {
-			if m.EntityID == entityID {
-				hasAccess = true
-				break
-			}
-		}
-
-		if !hasAccess {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied to this entity"})
-			return
-		}
+	currentUser, ok := userVal.(auth.User)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user object"})
+		return
 	}
 
-	// Verify the devotee belongs to this entity
+	// -------- Get access context --------
+	accessVal, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
+		return
+	}
+	accessCtx, ok := accessVal.(middleware.AccessContext)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid access context"})
+		return
+	}
+
+	// -------- Role-based access check --------
+	hasAccess := false
+
+	switch currentUser.Role.RoleName {
+
+	case "superadmin":
+		hasAccess = true
+
+	case "templeadmin":
+		hasAccess = accessCtx.DirectEntityID != nil &&
+			*accessCtx.DirectEntityID == entityID
+
+	case "standarduser", "monitoringuser":
+		hasAccess = accessCtx.AssignedEntityID != nil &&
+			*accessCtx.AssignedEntityID == entityID
+
+	default:
+		hasAccess = false
+	}
+
+	if !hasAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "Access denied to view devotee profile for this entity",
+		})
+		return
+	}
 	profile, err := h.service.GetByUserIDAndEntity(userID, entityID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Profile not found for this entity"})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Devotee profile not found for this entity",
+		})
 		return
 	}
 
