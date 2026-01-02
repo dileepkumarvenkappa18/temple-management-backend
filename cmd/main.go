@@ -104,7 +104,7 @@ func main() {
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173", "http://127.0.0.1:4173"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Tenant-ID", "Content-Length", "X-Requested-With", "Cache-Control", "Pragma", "X-Entity-ID"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Tenant-ID", "x-force-delete", "Content-Length", "X-Requested-With", "Cache-Control", "Pragma", "X-Entity-ID"},
 		ExposeHeaders:    []string{"Content-Length", "Content-Type", "Content-Disposition", "Cache-Control", "Pragma", "Expires"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,

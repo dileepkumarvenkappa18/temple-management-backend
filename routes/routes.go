@@ -336,7 +336,7 @@ templeSevaRoutes.Use(middleware.RequireTempleAccess()) // access check
 
 	{
 		// CRUD for Sevas
-		writeRoutes.POST("/", sevaHandler.CreateSeva)
+		writeRoutes.POST("", sevaHandler.CreateSeva)
 		writeRoutes.PUT("/:id", sevaHandler.UpdateSeva)
 		writeRoutes.DELETE("/:id", sevaHandler.DeleteSeva)
 
@@ -452,7 +452,7 @@ devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
 		writeRoutes := eventRoutes.Group("")
 		writeRoutes.Use(middleware.RequireWriteAccess())
 		{
-			writeRoutes.POST("/", eventHandler.CreateEvent)
+			//writeRoutes.POST("/", eventHandler.CreateEvent)
 			writeRoutes.POST("", eventHandler.CreateEvent)
 			writeRoutes.PUT("/:id", eventHandler.UpdateEvent)
 			writeRoutes.DELETE("/:id", eventHandler.DeleteEvent)
@@ -485,8 +485,8 @@ devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
 	profileRoutes := protected.Group("/profiles")
 	{
 		profileRoutes.GET("/me", middleware.RBACMiddleware("devotee"), profileHandler.GetMyProfile)
-		profileRoutes.POST("/", middleware.RBACMiddleware("devotee"), profileHandler.CreateOrUpdateProfile)
-		profileRoutes.PUT("/", middleware.RBACMiddleware("devotee"), profileHandler.CreateOrUpdateProfile)
+		profileRoutes.POST("", middleware.RBACMiddleware("devotee"), profileHandler.CreateOrUpdateProfile)
+		profileRoutes.PUT("", middleware.RBACMiddleware("devotee"), profileHandler.CreateOrUpdateProfile)
 	
 	//entityRoutes.GET("/:entityId/devotees/:userId/profile", profileHandler.GetDevoteeProfileByEntity)
 	}
@@ -516,7 +516,7 @@ devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
 			devoteeRoutes := donationRoutes.Group("")
 			devoteeRoutes.Use(middleware.RBACMiddleware("devotee"))
 			{
-				devoteeRoutes.POST("/", donationHandler.CreateDonation)
+				devoteeRoutes.POST("", donationHandler.CreateDonation)
 				devoteeRoutes.POST("/verify", donationHandler.VerifyDonation)
 				devoteeRoutes.GET("/my", donationHandler.GetMyDonations)
 			}
