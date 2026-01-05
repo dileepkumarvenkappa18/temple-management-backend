@@ -377,8 +377,6 @@ func (r *Repository) GetUsers(
 	var users []UserResponse
 	var total int64
 
-	offset := (page - 1) * limit
-
 	// Build base query for COUNT
 	base := r.db.WithContext(ctx).
 		Table("users").
@@ -430,9 +428,7 @@ func (r *Repository) GetUsers(
 			user_roles.role_name
 		`).
 		Joins("JOIN user_roles ON users.role_id = user_roles.id").
-		Order("users.created_at DESC").
-		Limit(limit).
-		Offset(offset)
+		Order("users.created_at DESC")
 
 	// Same role filters again
 	switch roleFilter {
