@@ -39,7 +39,7 @@ func NewHandler(s *Service, uploadDir, baseURL string) *Handler {
 		Service:   s,
 		UploadDir: uploadDir,
 		BaseURL:   baseURL,
-		MaxSize:   10 * 1024 * 1024,
+		MaxSize:   1000 * 1024 * 1024,
 	}
 }
 
@@ -779,45 +779,47 @@ func (h *Handler) GetAllEntities(c *gin.Context) {
 
 // GetEntityByID retrieves a specific entity by ID with permission checks
 func (h *Handler) GetEntityByID(c *gin.Context) {
+	// ================= PARAM =================
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entity ID"})
 		return
 	}
 
-	// Get access context
+	// ================= ACCESS CONTEXT =================
 	accessContextVal, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
 		return
 	}
+
 	accessContext, ok := accessContextVal.(middleware.AccessContext)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid access context"})
 		return
 	}
 
-	// Get user info
+	// ================= USER =================
 	userVal, exists := c.Get("user")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 		return
 	}
+
 	user, ok := userVal.(auth.User)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user object"})
 		return
 	}
 
-	// Try to get the entity first
+	// ================= FETCH ENTITY =================
 	entity, err := h.Service.GetEntityByID(id)
 	if err != nil {
-		// For standard users with matching tenant ID, create mock entity
+		// Allow mock entity only for assigned standard / monitoring users
 		if (user.Role.RoleName == "standarduser" || user.Role.RoleName == "monitoringuser") &&
 			accessContext.AssignedEntityID != nil &&
 			*accessContext.AssignedEntityID == uint(id) {
 
-			// Create mock entity using the ID
 			entity = Entity{
 				ID:          uint(id),
 				Name:        "Temple " + strconv.Itoa(id),
@@ -833,7 +835,7 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 		}
 	}
 
-	// Check permissions based on user role
+	// ================= PERMISSION CHECK =================
 	hasAccess := false
 
 	switch user.Role.RoleName {
@@ -841,17 +843,16 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 		hasAccess = true
 
 	case "templeadmin":
-		hasAccess = (accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == uint(id)) ||
-			entity.CreatedBy == user.ID
+		hasAccess =
+			(accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == uint(id)) ||
+				entity.CreatedBy == user.ID
 
 	case "standarduser", "monitoringuser":
 		if accessContext.AssignedEntityID != nil {
-			hasAccess = (*accessContext.AssignedEntityID == uint(id)) ||
-				entity.CreatedBy == *accessContext.AssignedEntityID
+			hasAccess =
+				*accessContext.AssignedEntityID == uint(id) ||
+					entity.CreatedBy == *accessContext.AssignedEntityID
 		}
-
-	default:
-		hasAccess = false
 	}
 
 	if !hasAccess {
@@ -859,11 +860,49 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, entity)
+	// ================= MEDIA FIX =================
+	mediaObj := map[string]string{
+		"logo":  "",
+		"video": "",
+	}
+
+	if entity.Media != "" {
+		if err := json.Unmarshal([]byte(entity.Media), &mediaObj); err != nil {
+			log.Printf("⚠️ Failed to parse media JSON for entity %d: %v", entity.ID, err)
+		}
+	}
+
+	// ================= RESPONSE =================
+	c.JSON(http.StatusOK, gin.H{
+		"id":               entity.ID,
+		"name":             entity.Name,
+		"main_deity":       entity.MainDeity,
+		"temple_type":      entity.TempleType,
+		"established_year": entity.EstablishedYear,
+		"phone":            entity.Phone,
+		"email":            entity.Email,
+		"description":      entity.Description,
+		"street_address":  entity.StreetAddress,
+		"city":             entity.City,
+		"district":         entity.District,
+		"state":            entity.State,
+		"pincode":          entity.Pincode,
+		"landmark":         entity.Landmark,
+		"map_link":         entity.MapLink,
+		"status":           entity.Status,
+		"isactive":         entity.IsActive,
+
+		// documents
+		"registration_cert_url": entity.RegistrationCertURL,
+		"trust_deed_url":        entity.TrustDeedURL,
+		"property_docs_url":     entity.PropertyDocsURL,
+		"additional_docs_urls":  entity.AdditionalDocsURLs,
+
+		// media (FIXED)
+		"media": mediaObj,
+	})
 }
 
-// COMPLETE UpdateEntity METHOD - Replace your entire UpdateEntity function with this
-// Location: internal/entity/handler.go
 
 func (h *Handler) UpdateEntity(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
@@ -872,88 +911,46 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		return
 	}
 
-	// Get authenticated user
+	// ================= AUTH =================
 	userVal, exists := c.Get("user")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-	user, ok := userVal.(auth.User)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user object"})
-		return
-	}
+	user := userVal.(auth.User)
 
-	// Get access context
-	accessContextVal, exists := c.Get("access_context")
+	accessVal, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
 		return
 	}
-	accessContext, ok := accessContextVal.(middleware.AccessContext)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid access context"})
-		return
-	}
+	accessContext := accessVal.(middleware.AccessContext)
 
-	// Get the existing entity to check ownership and status
 	existingEntity, err := h.Service.GetEntityByID(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Temple not found"})
 		return
 	}
 
-	// Permission check
+	// ================= PERMISSION =================
 	hasAccess := false
-
 	switch user.Role.RoleName {
 	case "superadmin":
 		hasAccess = true
-		log.Printf("✅ SuperAdmin %d granted access to edit entity %d", user.ID, id)
-
 	case "templeadmin":
-		hasAccess = (existingEntity.CreatedBy == user.ID)
-
-		if !hasAccess && accessContext.DirectEntityID != nil {
-			hasAccess = (*accessContext.DirectEntityID == uint(id))
-		}
-
-		if hasAccess {
-			log.Printf("✅ TempleAdmin %d granted access to edit entity %d", user.ID, id)
-		} else {
-			log.Printf("❌ TempleAdmin %d DENIED access to entity %d", user.ID, id)
-		}
-
+		hasAccess = existingEntity.CreatedBy == user.ID ||
+			(accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == uint(id))
 	case "standarduser", "monitoringuser":
-		entityIDUint := uint(id)
-		hasAccess = (accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityIDUint)
-
-		if hasAccess {
-			log.Printf("✅ StandardUser %d granted access to edit entity %d", user.ID, id)
-		} else {
-			log.Printf("❌ StandardUser %d DENIED access to entity %d", user.ID, id)
-		}
-
-	default:
-		log.Printf("❌ Unknown role '%s' for user %d", user.Role.RoleName, user.ID)
-		hasAccess = false
+		hasAccess = accessContext.AssignedEntityID != nil &&
+			*accessContext.AssignedEntityID == uint(id)
 	}
 
-	if !hasAccess {
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": "Access denied to update this entity",
-		})
+	if !hasAccess || !accessContext.CanWrite() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}
 
-	// Check write permissions
-	if !accessContext.CanWrite() {
-		log.Printf("❌ User %d has no write permissions", user.ID)
-		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient write permissions"})
-		return
-	}
-
-	// 🔥 CHECK CONTENT TYPE - Handle both JSON and multipart/form-data
+	// ================= INPUT =================
 	contentType := c.GetHeader("Content-Type")
 	isMultipart := strings.Contains(contentType, "multipart/form-data")
 
@@ -961,36 +958,26 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 	var tempFiles []TempFileInfo
 
 	if isMultipart {
-		// Handle multipart form with files
-		log.Printf("📁 Processing multipart form data for entity %d", id)
 		if err := h.handleMultipartFormData(c, &input, &tempFiles); err != nil {
-			log.Printf("Multipart Form Error: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid form data", "details": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 	} else {
-		// Handle JSON update (no files)
 		if err := c.ShouldBindJSON(&input); err != nil {
-			log.Printf("Update Bind Error: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 			return
 		}
 	}
 
-	// 🔍 DEBUG: Log received input
-	log.Printf("📝 Received update data for temple %d: Name=%s, Email=%s", id, input.Name, input.Email)
-
-	// Check if temple was rejected
-	wasRejected := existingEntity.Status == "rejected"
-
-	// Preserve critical fields
+	// ================= PRESERVE FIELDS =================
 	input.ID = uint(id)
 	input.CreatedBy = existingEntity.CreatedBy
 	input.CreatedAt = existingEntity.CreatedAt
 	input.UpdatedAt = time.Now()
 
-	// 🔥 PRESERVE EXISTING FILE URLS IF NO NEW FILES UPLOADED
-	// This is critical - only update file URLs if new files are provided
+	wasRejected := existingEntity.Status == "rejected"
+
+	// Preserve document URLs if not replaced
 	if input.RegistrationCertURL == "" {
 		input.RegistrationCertURL = existingEntity.RegistrationCertURL
 		input.RegistrationCertInfo = existingEntity.RegistrationCertInfo
@@ -1008,103 +995,70 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		input.AdditionalDocsInfo = existingEntity.AdditionalDocsInfo
 	}
 
-
-	if input.Media == "" {
+	// 🔥 CRITICAL FIX: preserve media ONLY if no new uploads
+	if input.Media == "" && len(tempFiles) == 0 {
 		input.Media = existingEntity.Media
-		log.Printf("📸 Preserving existing media for entity %d", id)
 	}
 
-	// Preserve creator role ID
-	if input.CreatorRoleID == nil {
-		input.CreatorRoleID = existingEntity.CreatorRoleID
-	}
-
-	// Handle status based on role and rejection state
+	// ================= STATUS =================
 	if wasRejected && user.Role.RoleName != "superadmin" {
 		input.Status = "pending"
-		log.Printf("🔄 Temple %d was rejected, resetting to pending for re-approval", id)
 	} else if user.Role.RoleName != "superadmin" {
 		input.Status = existingEntity.Status
 	}
-	// Superadmin can set any status
 
-	// Preserve IsActive
-	if !input.IsActive && existingEntity.IsActive {
+	if !input.IsActive {
 		input.IsActive = existingEntity.IsActive
 	}
 
-	// 🔥 PROCESS NEW FILES IF UPLOADED
+	// ================= FILE HANDLING =================
 	finalFileInfos := make(map[string]FileInfo)
+
 	if len(tempFiles) > 0 {
-		log.Printf("📁 Processing %d new file uploads for entity %d", len(tempFiles), id)
+		// delete old files if replacing
+		_ = h.deleteOldEntityFiles(&existingEntity, tempFiles)
 
-		// 🔥 DELETE OLD FILES BEFORE UPLOADING NEW ONES
-		if err := h.deleteOldEntityFiles(&existingEntity, tempFiles); err != nil {
-			log.Printf("⚠️ Warning: Failed to delete some old files: %v", err)
-			// Continue anyway - don't fail the update
-		}
-
-		// Move new files to final location
 		if err := h.moveFilesToFinalLocation(&input, tempFiles, &finalFileInfos); err != nil {
-			log.Printf("Error moving files for entity %d: %v", id, err)
 			h.cleanupTempFiles(tempFiles)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "Failed to process uploaded files",
-				"details": err.Error(),
+				"error": "Failed to process uploaded files",
 			})
 			return
 		}
-
-		log.Printf("✅ Successfully processed %d files for entity %d", len(tempFiles), id)
 	}
 
-	// Get IP address for audit logging
+	// ================= SAVE =================
 	ip := middleware.GetIPFromContext(c)
 
-	// 🔍 DEBUG: Log before save
-	log.Printf("💾 Saving entity %d: Status=%s, RegCert=%s, Media=%s",
-		id, input.Status, input.RegistrationCertURL, input.Media)
-
-	// Perform the update
 	if err := h.Service.UpdateEntity(input, user.ID, user.Role.ID, ip, wasRejected); err != nil {
-		log.Printf("❌ Update Error for entity %d: %v", id, err)
 		h.cleanupTempFiles(tempFiles)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to update temple",
-			"details": err.Error(),
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	log.Printf("✅ Entity %d updated successfully by user %d", id, user.ID)
-
-	response := gin.H{
-		"message":    "Temple updated successfully",
-		"temple_id":  id,
-		"updated_by": user.ID,
+	// ================= RESPONSE =================
+	resp := gin.H{
+		"message":   "Temple updated successfully",
+		"temple_id": id,
 	}
 
-	// Add file info if files were uploaded
 	if len(finalFileInfos) > 0 {
-		response["uploaded_files"] = finalFileInfos
-		response["files_updated"] = len(finalFileInfos)
+		resp["uploaded_files"] = finalFileInfos
+		resp["files_updated"] = len(finalFileInfos)
 	}
 
-	// 🆕 Add media to response if present
 	if input.Media != "" {
-		response["media"] = input.Media
-		log.Printf("✅ Media included in update response for temple %d", id)
+		resp["media"] = input.Media
 	}
 
-	// Add status change info if applicable
 	if wasRejected && input.Status == "pending" {
-		response["status_changed"] = true
-		response["new_status"] = "pending"
-		response["message"] = "Temple updated and submitted for re-approval"
+		resp["status_changed"] = true
+		resp["new_status"] = "pending"
 	}
 
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, resp)
 }
+
 func (h *Handler) deleteOldEntityFiles(entity *Entity, newFiles []TempFileInfo) error {
 	entityDir := filepath.Join(h.UploadDir, strconv.FormatUint(uint64(entity.ID), 10))
 

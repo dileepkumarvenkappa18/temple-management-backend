@@ -46,15 +46,14 @@ func (TenantUserAssignment) TableName() string {
     return "tenant_user_assignments"
 }
 
-// UserInput represents the data received from the frontend
-// UserInput represents the data received from the frontend
+// UserInput represents the data received from the frontend for user creation/update
 type UserInput struct {
     Name     string `json:"Name" binding:"required"`
     Email    string `json:"Email" binding:"required,email"`
     Phone    string `json:"Phone" binding:"required"`
-    Password string `json:"Password"` // Remove required tag for updates
+    Password string `json:"Password"` // Not required for updates
     Role     string `json:"Role" binding:"required"`
-    Status   string `json:"Status"`   // Add status field
+    Status   string `json:"Status"`   // Optional status field
 }
 
 // UserResponse represents the response sent back to the frontend
@@ -65,5 +64,57 @@ type UserResponse struct {
     Phone     string    `json:"phone"`
     Status    string    `json:"status"`
     CreatedAt time.Time `json:"created_at"`
-    Role      string    `json:"role,omitempty"` // Added for frontend compatibility
+    Role      string    `json:"role,omitempty"` // For frontend compatibility
+}
+// TenantProfileResponse represents the tenant profile data returned to frontend
+type TenantProfileResponse struct {
+    TenantID          uint   `json:"tenant_id"`
+    TempleName        string `json:"temple_name"`
+    TemplePlace       string `json:"temple_place"`
+    TempleAddress     string `json:"temple_address"`
+    TemplePhoneNo     string `json:"temple_phone_no"`
+    TempleDescription string `json:"temple_description"`
+    LogoURL           string `json:"logo_url"`
+    IntroVideoURL     string `json:"intro_video_url"`
+
+    // IMPORTANT: gorm:"-" tells GORM to ignore this field completely
+    User TenantProfileUser `json:"user" gorm:"-"`
+}
+type TenantProfileUser struct {
+    ID       uint   `json:"id"`
+    FullName string `json:"full_name"`
+    Email    string `json:"email"`
+    Phone    string `json:"phone"`
+    Role     string `json:"role"`
+}
+// UpdateTenantProfileRequest represents the data received for updating tenant profile
+type UpdateTenantProfileRequest struct {
+    // User Information
+    FullName string `json:"full_name"`
+    Phone    string `json:"phone"`
+
+    // Temple/Tenant Information
+    TempleName        string `json:"temple_name"`
+    TemplePlace       string `json:"temple_place"`
+    TempleAddress     string `json:"temple_address"`
+    TemplePhoneNo     string `json:"temple_phone_no"`
+    TempleDescription string `json:"temple_description"`
+    LogoURL           string `json:"logo_url"`
+    IntroVideoURL     string `json:"intro_video_url"`
+}
+type tenantProfileRow struct {
+	TenantID          uint
+	TempleName        string
+	TemplePlace       string
+	TempleAddress     string
+	TemplePhoneNo     string
+	TempleDescription string
+	LogoURL           string
+	IntroVideoURL     string
+
+	UserID       uint
+	UserFullName string
+	UserEmail    string
+	UserPhone    string
+	UserRole     string
 }
