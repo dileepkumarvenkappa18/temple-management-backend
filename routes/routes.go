@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/database"
@@ -310,133 +309,129 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		middleware.RBACMiddleware("superadmin", "standarduser", "monitoringuser"),
 		superadminHandler.GetTenantsForSelection)
 
+	protected.GET("/tenantsInfo",
+		middleware.RBACMiddleware("templeadmin", "standarduser", "monitoringuser", "devotee"),
+		superadminHandler.GetTenantsWithFilters)
 	// ========== Seva Routes ==========
 	// ==================== SEVA ROUTES ====================
 
-sevaRepo := seva.NewRepository(database.DB)
-sevaService := seva.NewService(sevaRepo, auditSvc)
-sevaHandler := seva.NewHandler(sevaService, auditSvc)
+	sevaRepo := seva.NewRepository(database.DB)
+	sevaService := seva.NewService(sevaRepo, auditSvc)
+	sevaHandler := seva.NewHandler(sevaService, auditSvc)
 
+	// All Seva routes under: /api/v1/sevas
+	sevaRoutes := protected.Group("/sevas")
 
+	sevaRoutes.GET("/booking-counts", sevaHandler.GetBookingCounts)
 
-// All Seva routes under: /api/v1/sevas
-sevaRoutes := protected.Group("/sevas")
-
-
-sevaRoutes.GET("/booking-counts", sevaHandler.GetBookingCounts)
-
-
-templeSevaRoutes := sevaRoutes.Group("")
-templeSevaRoutes.Use(middleware.RequireTempleAccess()) // access check
-
-{
-	
-	writeRoutes := templeSevaRoutes.Group("")
-	writeRoutes.Use(middleware.RequireWriteAccess()) // only templeadmin + standarduser
+	templeSevaRoutes := sevaRoutes.Group("")
+	templeSevaRoutes.Use(middleware.RequireTempleAccess()) // access check
 
 	{
-		// CRUD for Sevas
-		writeRoutes.POST("", sevaHandler.CreateSeva)
-		writeRoutes.PUT("/:id", sevaHandler.UpdateSeva)
-		writeRoutes.DELETE("/:id", sevaHandler.DeleteSeva)
 
-		// Booking status update
-		writeRoutes.PATCH("/bookings/:id/status", sevaHandler.UpdateBookingStatus)
-	}
+		writeRoutes := templeSevaRoutes.Group("")
+		writeRoutes.Use(middleware.RequireWriteAccess()) // only templeadmin + standarduser
 
-	
-	templeSevaRoutes.GET("/entity-sevas", sevaHandler.ListEntitySevas)
-	templeSevaRoutes.GET("/:id", sevaHandler.GetSevaByID)
-	templeSevaRoutes.GET("/entity-bookings", sevaHandler.GetEntityBookings)
-	templeSevaRoutes.GET("/bookings/:id", sevaHandler.GetBookingByID)
-}
-
-
-
-devoteeSevaRoutes := sevaRoutes.Group("")
-devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
-
-{
-	devoteeSevaRoutes.POST("/bookings", sevaHandler.BookSeva)
-	devoteeSevaRoutes.GET("/my-bookings", sevaHandler.GetMyBookings)
-	devoteeSevaRoutes.GET("/", sevaHandler.GetSevas)
-}
-
-// ========== Entity ==========
-{
-	entityRepo := entity.NewRepository(database.DB)
-	profileRepo := userprofile.NewRepository(database.DB)
-	profileService := userprofile.NewService(profileRepo, authRepo, auditSvc)
-	profileHandler := userprofile.NewHandler(profileService)
-
-	entityService := entity.NewService(entityRepo, profileService, auditSvc)
-	// UPDATED: Use persistent volume path and proper file serving path
-	entityHandler := entity.NewHandler(entityService, "/data/uploads", "/files")
-
-	// Add special endpoint for templeadmins to view their created entities
-	protected.GET("/entities/by-creator", middleware.RBACMiddleware("templeadmin"), func(c *gin.Context) {
-		// Get user ID from context
-		userVal, exists := c.Get("user")
-		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-			return
-		}
-
-		user, ok := userVal.(auth.User)
-		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user object"})
-			return
-		}
-
-		// Call repository to get entities created by this user
-		entities, err := entityRepo.GetEntitiesByCreator(user.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch temples", "details": err.Error()})
-			return
-		}
-
-		c.JSON(http.StatusOK, entities)
-	})
-
-	// Entity routes with proper permission system
-	entityRoutes := protected.Group("/entities")
-	// Allow templeadmin, standarduser, monitoringuser to access entity routes
-	entityRoutes.Use(middleware.RequireTempleAccess())
-	{
-		// Write operations - only templeadmin and standarduser can access
-		writeRoutes := entityRoutes.Group("")
-		writeRoutes.Use(middleware.RequireWriteAccess())
 		{
-			writeRoutes.PUT("/:id", entityHandler.UpdateEntity)
-			writeRoutes.DELETE("/:id", entityHandler.DeleteEntity)
-			writeRoutes.PATCH("/:id/devotees/:userID/status", entityHandler.UpdateDevoteeMembershipStatus)
+			// CRUD for Sevas
+			writeRoutes.POST("", sevaHandler.CreateSeva)
+			writeRoutes.PUT("/:id", sevaHandler.UpdateSeva)
+			writeRoutes.DELETE("/:id", sevaHandler.DeleteSeva)
+
+			// Booking status update
+			writeRoutes.PATCH("/bookings/:id/status", sevaHandler.UpdateBookingStatus)
 		}
 
-		// Read operations - all three roles can access
-		entityRoutes.GET("/:id", entityHandler.GetEntityByID)
-		entityRoutes.GET("/:id/devotees", entityHandler.GetDevoteesByEntity)
-		entityRoutes.GET("/:id/devotee-stats", entityHandler.GetDevoteeStats)
-		entityRoutes.GET("/:id/devotees/:userId/profile", profileHandler.GetDevoteeProfileByEntity) // ✅ UPDATED: Changed :entityId to :id
-		entityRoutes.GET("/dashboard-summary", entityHandler.GetDashboardSummary)
-		
-		// File routes for entity documents
-		entityRoutes.GET("/:id/files", entityHandler.GetEntityFiles)
-		entityRoutes.GET("/directories", entityHandler.GetAllEntityDirectories)
+		templeSevaRoutes.GET("/entity-sevas", sevaHandler.ListEntitySevas)
+		templeSevaRoutes.GET("/:id", sevaHandler.GetSevaByID)
+		templeSevaRoutes.GET("/entity-bookings", sevaHandler.GetEntityBookings)
+		templeSevaRoutes.GET("/bookings/:id", sevaHandler.GetBookingByID)
 	}
 
-	// Special endpoints that bypass temple access check
-	// CreateEntity - allowed for templeadmin, superadmin, standarduser
-	protected.POST("/entities",
-		middleware.RBACMiddleware("templeadmin", "superadmin", "standarduser"),
-		entityHandler.CreateEntity,
-	)
+	devoteeSevaRoutes := sevaRoutes.Group("")
+	devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
 
-	// GetAllEntities - allowed for templeadmin, superadmin, standarduser, monitoringuser
-	protected.GET("/entities",
-		middleware.RBACMiddleware("templeadmin", "superadmin", "standarduser", "monitoringuser"),
-		entityHandler.GetAllEntities,
-	)
-}
+	{
+		devoteeSevaRoutes.POST("/bookings", sevaHandler.BookSeva)
+		devoteeSevaRoutes.GET("/my-bookings", sevaHandler.GetMyBookings)
+		devoteeSevaRoutes.GET("/", sevaHandler.GetSevas)
+	}
+
+	// ========== Entity ==========
+	{
+		entityRepo := entity.NewRepository(database.DB)
+		profileRepo := userprofile.NewRepository(database.DB)
+		profileService := userprofile.NewService(profileRepo, authRepo, auditSvc)
+		profileHandler := userprofile.NewHandler(profileService)
+
+		entityService := entity.NewService(entityRepo, profileService, auditSvc)
+		// UPDATED: Use persistent volume path and proper file serving path
+		entityHandler := entity.NewHandler(entityService, "/data/uploads", "/files")
+
+		// Add special endpoint for templeadmins to view their created entities
+		protected.GET("/entities/by-creator", middleware.RBACMiddleware("templeadmin"), func(c *gin.Context) {
+			// Get user ID from context
+			userVal, exists := c.Get("user")
+			if !exists {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+				return
+			}
+
+			user, ok := userVal.(auth.User)
+			if !ok {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user object"})
+				return
+			}
+
+			// Call repository to get entities created by this user
+			entities, err := entityRepo.GetEntitiesByCreator(user.ID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch temples", "details": err.Error()})
+				return
+			}
+
+			c.JSON(http.StatusOK, entities)
+		})
+
+		// Entity routes with proper permission system
+		entityRoutes := protected.Group("/entities")
+		// Allow templeadmin, standarduser, monitoringuser to access entity routes
+		entityRoutes.Use(middleware.RequireTempleAccess())
+		{
+			// Write operations - only templeadmin and standarduser can access
+			writeRoutes := entityRoutes.Group("")
+			writeRoutes.Use(middleware.RequireWriteAccess())
+			{
+				writeRoutes.PUT("/:id", entityHandler.UpdateEntity)
+				writeRoutes.DELETE("/:id", entityHandler.DeleteEntity)
+				writeRoutes.PATCH("/:id/devotees/:userID/status", entityHandler.UpdateDevoteeMembershipStatus)
+			}
+
+			// Read operations - all three roles can access
+			entityRoutes.GET("/:id", entityHandler.GetEntityByID)
+			entityRoutes.GET("/:id/devotees", entityHandler.GetDevoteesByEntity)
+			entityRoutes.GET("/:id/devotee-stats", entityHandler.GetDevoteeStats)
+			entityRoutes.GET("/:id/devotees/:userId/profile", profileHandler.GetDevoteeProfileByEntity) // ✅ UPDATED: Changed :entityId to :id
+			entityRoutes.GET("/dashboard-summary", entityHandler.GetDashboardSummary)
+
+			// File routes for entity documents
+			entityRoutes.GET("/:id/files", entityHandler.GetEntityFiles)
+			entityRoutes.GET("/directories", entityHandler.GetAllEntityDirectories)
+		}
+
+		// Special endpoints that bypass temple access check
+		// CreateEntity - allowed for templeadmin, superadmin, standarduser
+		protected.POST("/entities",
+			middleware.RBACMiddleware("templeadmin", "superadmin", "standarduser"),
+			entityHandler.CreateEntity,
+		)
+
+		// GetAllEntities - allowed for templeadmin, superadmin, standarduser, monitoringuser
+		protected.GET("/entities",
+			middleware.RBACMiddleware("templeadmin", "superadmin", "standarduser", "monitoringuser"),
+			entityHandler.GetAllEntities,
+		)
+	}
 
 	// ========== Event & RSVP ==========
 	eventRepo := event.NewRepository(database.DB)
@@ -487,8 +482,8 @@ devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
 		profileRoutes.GET("/me", middleware.RBACMiddleware("devotee"), profileHandler.GetMyProfile)
 		profileRoutes.POST("", middleware.RBACMiddleware("devotee"), profileHandler.CreateOrUpdateProfile)
 		profileRoutes.PUT("", middleware.RBACMiddleware("devotee"), profileHandler.CreateOrUpdateProfile)
-	
-	//entityRoutes.GET("/:entityId/devotees/:userId/profile", profileHandler.GetDevoteeProfileByEntity)
+
+		//entityRoutes.GET("/:entityId/devotees/:userId/profile", profileHandler.GetDevoteeProfileByEntity)
 	}
 	// ========== Membership (Join Temples) ==========
 	membershipRoutes := protected.Group("/memberships")
@@ -551,53 +546,53 @@ devoteeSevaRoutes.Use(middleware.RBACMiddleware("devotee"))
 				donationHandler.GetRecentDonations)
 		}
 	}
-// ========== Notifications (UPDATED WITH FCM) ==========
-{
-	notificationRepo := notification.NewRepository(database.DB)
-	notifSvc = notification.NewService(notificationRepo, authRepo, cfg, auditSvc)
-	notificationHandler := notification.NewHandler(notifSvc, auditSvc)
-
-	// Updated to use new middleware system
-	notificationRoutes := protected.Group("/notifications")
-	notificationRoutes.Use(middleware.RequireTempleAccess()) // Allow templeadmin, standarduser, monitoringuser
+	// ========== Notifications (UPDATED WITH FCM) ==========
 	{
-		// Write operations - only templeadmin and standarduser can access
-		writeRoutes := notificationRoutes.Group("")
-		writeRoutes.Use(middleware.RequireWriteAccess())
+		notificationRepo := notification.NewRepository(database.DB)
+		notifSvc = notification.NewService(notificationRepo, authRepo, cfg, auditSvc)
+		notificationHandler := notification.NewHandler(notifSvc, auditSvc)
+
+		// Updated to use new middleware system
+		notificationRoutes := protected.Group("/notifications")
+		notificationRoutes.Use(middleware.RequireTempleAccess()) // Allow templeadmin, standarduser, monitoringuser
 		{
-			// Templates
-			writeRoutes.POST("/templates", notificationHandler.CreateTemplate)
-			writeRoutes.PUT("/templates/:id", notificationHandler.UpdateTemplate)
-			writeRoutes.DELETE("/templates/:id", notificationHandler.DeleteTemplate)
+			// Write operations - only templeadmin and standarduser can access
+			writeRoutes := notificationRoutes.Group("")
+			writeRoutes.Use(middleware.RequireWriteAccess())
+			{
+				// Templates
+				writeRoutes.POST("/templates", notificationHandler.CreateTemplate)
+				writeRoutes.PUT("/templates/:id", notificationHandler.UpdateTemplate)
+				writeRoutes.DELETE("/templates/:id", notificationHandler.DeleteTemplate)
 
-			// Send Notification (Email, SMS, WhatsApp, Push)
-			writeRoutes.POST("/send", notificationHandler.SendNotification)
+				// Send Notification (Email, SMS, WhatsApp, Push)
+				writeRoutes.POST("/send", notificationHandler.SendNotification)
 
-			// ✅ NEW: FCM Push Notifications (Write Access Required)
-			writeRoutes.POST("/fcm/send", notificationHandler.SendFCMNotification)
+				// ✅ NEW: FCM Push Notifications (Write Access Required)
+				writeRoutes.POST("/fcm/send", notificationHandler.SendFCMNotification)
+			}
+
+			// Read operations - all three roles can access
+			notificationRoutes.GET("/templates", notificationHandler.GetTemplates)
+			notificationRoutes.GET("/templates/:id", notificationHandler.GetTemplateByID)
+
+			// View Logs
+			notificationRoutes.GET("/logs", notificationHandler.GetMyNotifications)
+
+			// In-app
+			notificationRoutes.GET("/inapp", notificationHandler.GetMyInApp)
+			notificationRoutes.PUT("/inapp/:id/read", notificationHandler.MarkInAppRead)
+			notificationRoutes.GET("/stream", notificationHandler.StreamInApp)
 		}
 
-		// Read operations - all three roles can access
-		notificationRoutes.GET("/templates", notificationHandler.GetTemplates)
-		notificationRoutes.GET("/templates/:id", notificationHandler.GetTemplateByID)
-
-		// View Logs
-		notificationRoutes.GET("/logs", notificationHandler.GetMyNotifications)
-
-		// In-app
-		notificationRoutes.GET("/inapp", notificationHandler.GetMyInApp)
-		notificationRoutes.PUT("/inapp/:id/read", notificationHandler.MarkInAppRead)
-		notificationRoutes.GET("/stream", notificationHandler.StreamInApp)
+		// ✅ NEW: FCM Device Token Management (All authenticated users can register their devices)
+		fcmRoutes := protected.Group("/notifications/fcm")
+		{
+			// Any authenticated user can register/unregister their own device
+			fcmRoutes.POST("/register", notificationHandler.RegisterFCMToken)
+			fcmRoutes.DELETE("/unregister", notificationHandler.UnregisterFCMToken)
+		}
 	}
-
-	// ✅ NEW: FCM Device Token Management (All authenticated users can register their devices)
-	fcmRoutes := protected.Group("/notifications/fcm")
-	{
-		// Any authenticated user can register/unregister their own device
-		fcmRoutes.POST("/register", notificationHandler.RegisterFCMToken)
-		fcmRoutes.DELETE("/unregister", notificationHandler.UnregisterFCMToken)
-	}
-}
 	// Public token-based SSE stream (no auth middleware required)
 	api.GET("/notifications/stream-token", func(c *gin.Context) {
 		notificationRepo := notification.NewRepository(database.DB)

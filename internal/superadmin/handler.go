@@ -24,12 +24,12 @@ func NewHandler(service *Service) *Handler {
 // GET /superadmin/tenants?status=pending&limit=10&page=1
 func (h *Handler) GetTenantsWithFilters(c *gin.Context) {
 	status := strings.ToLower(c.DefaultQuery("status", "pending"))
-	limitStr := c.DefaultQuery("limit", "10")
+	limitStr := c.DefaultQuery("limit", "1000")
 	pageStr := c.DefaultQuery("page", "1")
 
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit <= 0 {
-		limit = 10
+		limit = 1000
 	}
 	page, err := strconv.Atoi(pageStr)
 	if err != nil || page <= 0 {
@@ -338,10 +338,14 @@ func (h *Handler) GetUsers(c *gin.Context) {
 	statusFilter := c.DefaultQuery("status", "")
 
 	limit, _ := strconv.Atoi(limitStr)
-	if limit <= 0 { limit = 10 }
+	if limit <= 0 {
+		limit = 10
+	}
 
 	page, _ := strconv.Atoi(pageStr)
-	if page <= 0 { page = 1 }
+	if page <= 0 {
+		page = 1
+	}
 
 	users, total, err := h.service.GetUsers(
 		c.Request.Context(),
@@ -363,7 +367,6 @@ func (h *Handler) GetUsers(c *gin.Context) {
 		"limit": limit,
 	})
 }
-
 
 // GET /superadmin/users/:id - Get user by ID
 func (h *Handler) GetUserByID(c *gin.Context) {
@@ -488,36 +491,36 @@ func (h *Handler) GetUserRoles(c *gin.Context) {
 
 // CreateRole handles the creation of a new user role.
 func (h *Handler) CreateRole(c *gin.Context) {
-    var req auth.CreateRoleRequest
-    if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload. Role name and description are required."})
-        return
-    }
+	var req auth.CreateRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload. Role name and description are required."})
+		return
+	}
 
-    adminID := c.GetUint("userID")
-    ip := middleware.GetIPFromContext(c)
+	adminID := c.GetUint("userID")
+	ip := middleware.GetIPFromContext(c)
 	err := h.service.CreateRole(c.Request.Context(), &req, adminID, ip)
-    if err != nil {
-        if strings.Contains(err.Error(), "already exists") {
-            c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-            return
-        }
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create role."})
-        return
-    }
+	if err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create role."})
+		return
+	}
 
-    c.JSON(http.StatusCreated, gin.H{"message": "Role created successfully"})
+	c.JSON(http.StatusCreated, gin.H{"message": "Role created successfully"})
 }
 
 // GetRoles retrieves a list of all active user roles.
 func (h *Handler) GetRoles(c *gin.Context) {
-    roles, err := h.service.GetRoles(c.Request.Context())
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve roles."})
-        return
-    }
+	roles, err := h.service.GetRoles(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve roles."})
+		return
+	}
 
-    c.JSON(http.StatusOK, roles)
+	c.JSON(http.StatusOK, roles)
 }
 
 // UpdateRole handles updating a user role.
@@ -634,70 +637,70 @@ func (h *Handler) ResetUserPassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully"})
 }
 
-
 // GET /superadmin/tenants/assignable
 func (h *Handler) GetTenantsForAssignment(c *gin.Context) {
-    // 🎯 Add these lines to parse pagination parameters
-    limitStr := c.DefaultQuery("limit", "10")
-    pageStr := c.DefaultQuery("page", "1")
+	// 🎯 Add these lines to parse pagination parameters
+	limitStr := c.DefaultQuery("limit", "10")
+	pageStr := c.DefaultQuery("page", "1")
 
-    limit, err := strconv.Atoi(limitStr)
-    if err != nil || limit <= 0 {
-        limit = 10
-    }
-    page, err := strconv.Atoi(pageStr)
-    if err != nil || page <= 0 {
-        page = 1
-    }
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 10
+	}
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page <= 0 {
+		page = 1
+	}
 
-    // 🎯 Pass the pagination parameters to the service layer
-    tenants, total, err := h.service.GetTenantsForAssignment(c.Request.Context(), limit, page)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch assignable tenants"})
-        return
-    }
+	// 🎯 Pass the pagination parameters to the service layer
+	tenants, total, err := h.service.GetTenantsForAssignment(c.Request.Context(), limit, page)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch assignable tenants"})
+		return
+	}
 
-    // 🎯 Return pagination metadata in the response
-    c.JSON(http.StatusOK, gin.H{
-        "data": tenants,
-        "total": total,
-        "page": page,
-        "limit": limit,
-    })
+	// 🎯 Return pagination metadata in the response
+	c.JSON(http.StatusOK, gin.H{
+		"data":  tenants,
+		"total": total,
+		"page":  page,
+		"limit": limit,
+	})
 }
+
 // POST /superadmin/users/assign
 func (h *Handler) AssignUsersToTenant(c *gin.Context) {
-    var req AssignRequest
-    if err := c.ShouldBindJSON(&req); err != nil {
-        // Corrected error message to reflect the JSON struct fields.
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload. 'userId' and 'tenantId' are required"})
-        return
-    }
+	var req AssignRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Corrected error message to reflect the JSON struct fields.
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload. 'userId' and 'tenantId' are required"})
+		return
+	}
 
-    // 🎯 Step 1: Get the user object from the context using the correct key "user".
-    user, exists := c.Get("user")
-    if !exists {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
-        return
-    }
+	// 🎯 Step 1: Get the user object from the context using the correct key "user".
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
+	}
 
-    // 🎯 Step 2: Type-assert the user object to your `auth.User` struct.
-    authenticatedUser, ok := user.(auth.User)
-    if !ok {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error: user context type mismatch"})
-        return
-    }
+	// 🎯 Step 2: Type-assert the user object to your `auth.User` struct.
+	authenticatedUser, ok := user.(auth.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error: user context type mismatch"})
+		return
+	}
 
-    // 🎯 Step 3: Use the ID from the authenticated user object.
-    adminID := authenticatedUser.ID
+	// 🎯 Step 3: Use the ID from the authenticated user object.
+	adminID := authenticatedUser.ID
 
-    err := h.service.AssignUsersToTenant(c.Request.Context(), req.UserID, req.TenantID, adminID)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-        return
-    }
+	err := h.service.AssignUsersToTenant(c.Request.Context(), req.UserID, req.TenantID, adminID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-    c.JSON(http.StatusOK, gin.H{"message": "User assigned successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "User assigned successfully"})
 }
 
 // Alternative handler implementation if userRole is not available in context
@@ -733,7 +736,7 @@ func (h *Handler) GetTenantsForSelection(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": tenants,
+		"data":  tenants,
 		"total": len(tenants),
 	})
 }
@@ -741,49 +744,42 @@ func (h *Handler) GetTenantsForSelection(c *gin.Context) {
 // GET /superadmin/tenants
 // GET /superadmin/tenants
 func (h *Handler) GetTenants(c *gin.Context) {
-    role := c.Query("role")
-    status := c.Query("status")
-    
-    // Always use the enhanced method to include temple details
-    tenants, err := h.service.GetTenantsWithTempleDetails(c.Request.Context(), role, status)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-        return
-    }
-    
-    c.JSON(http.StatusOK, gin.H{"data": tenants})
-}
+	role := c.Query("role")
+	status := c.Query("status")
 
+	// Always use the enhanced method to include temple details
+	tenants, err := h.service.GetTenantsWithTempleDetails(c.Request.Context(), role, status)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": tenants})
+}
 
 // POST /superadmin/users/bulk-upload
 func (h *Handler) BulkUploadUsers(c *gin.Context) {
-    file, err := c.FormFile("file")
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "CSV file is required"})
-        return
-    }
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "CSV file is required"})
+		return
+	}
 
-    f, err := file.Open()
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open file"})
-        return
-    }
-    defer f.Close()
+	f, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open file"})
+		return
+	}
+	defer f.Close()
 
-    adminID := c.GetUint("userID")
-    ip := middleware.GetIPFromContext(c)
+	adminID := c.GetUint("userID")
+	ip := middleware.GetIPFromContext(c)
 
-    result, err := h.service.BulkUploadUsers(c.Request.Context(), f, adminID, ip)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-        return
-    }
+	result, err := h.service.BulkUploadUsers(c.Request.Context(), f, adminID, ip)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-    c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, result)
 }
-
-
-
-
-
-
