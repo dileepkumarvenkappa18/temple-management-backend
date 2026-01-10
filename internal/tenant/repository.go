@@ -2,144 +2,147 @@ package tenant
 
 import (
     "errors"
-	"time"
-    "gorm.io/gorm"
     "log"
+    "gorm.io/gorm"
 )
 
-// Repository handles database operations
+// Repository handles database operations for tenant users
 type Repository struct {
     db *gorm.DB
 }
 
 // NewRepository creates a new repository instance
 func NewRepository(db *gorm.DB) *Repository {
-    // Debug check for table existence
-    var tableExists bool
-    db.Raw("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'tenant_user_assignments')").Scan(&tableExists)
-    log.Printf("tenant_user_assignments table exists: %v", tableExists)
-    
-    // Debug count of records
-    var count int64
-    db.Table("tenant_user_assignments").Count(&count)
-    log.Printf("Found %d records in tenant_user_assignments table", count)
-    
     return &Repository{db: db}
 }
+func (r *Repository) GetTenantProfileByUserID(userID uint) (*TenantProfileResponse, error) {
+	log.Printf("🔍 REPO: Fetching tenant profile for user ID: %d", userID)
 
-// GetUserByEmail fetches a user by email
-func (r *Repository) GetUserByEmail(email string) (*User, error) {
-    var user User
-    err := r.db.Where("email = ?", email).First(&user).Error
-    if errors.Is(err, gorm.ErrRecordNotFound) {
-        return nil, nil // User not found, but not an error
-    }
-    return &user, err
+	var row tenantProfileRow
+
+	err := r.db.Table("users").
+		Select(`
+			tenant_details.id AS tenant_id,
+			tenant_details.temple_name,
+			tenant_details.temple_place,
+			tenant_details.temple_address,
+			tenant_details.temple_phone_no,
+			tenant_details.temple_description,
+			tenant_details.logo_url,
+			tenant_details.intro_video_url,
+			users.id AS user_id,
+			users.full_name AS user_full_name,
+			users.email AS user_email,
+			users.phone AS user_phone,
+			user_roles.role_name AS user_role
+		`).
+		Joins("INNER JOIN tenant_user_assignments ON users.id = tenant_user_assignments.user_id").
+		Joins("INNER JOIN tenant_details ON tenant_user_assignments.tenant_id = tenant_details.id").
+		Joins("LEFT JOIN user_roles ON users.role_id = user_roles.id").
+		Where("users.id = ?", userID).
+		Where("tenant_user_assignments.status = ?", "active").
+		Scan(&row).Error
+
+	if err != nil {
+		log.Printf("❌ REPO: Database error: %v", err)
+		return nil, err
+	}
+
+	if row.TenantID == 0 {
+		log.Printf("⚠️ REPO: No active tenant assignment found for user ID: %d", userID)
+		return nil, errors.New("no active tenant assignment found")
+	}
+
+	// ✅ Map flat row → response DTO
+	profile := TenantProfileResponse{
+		TenantID:          row.TenantID,
+		TempleName:        row.TempleName,
+		TemplePlace:       row.TemplePlace,
+		TempleAddress:     row.TempleAddress,
+		TemplePhoneNo:     row.TemplePhoneNo,
+		TempleDescription: row.TempleDescription,
+		LogoURL:           row.LogoURL,
+		IntroVideoURL:     row.IntroVideoURL,
+	}
+
+	profile.User.ID = row.UserID
+	profile.User.FullName = row.UserFullName
+	profile.User.Email = row.UserEmail
+	profile.User.Phone = row.UserPhone
+	profile.User.Role = row.UserRole
+
+	log.Printf("✅ REPO: Tenant profile fetched successfully for user %d", userID)
+	return &profile, nil
 }
 
-// GetTenantUsers fetches all users assigned to a tenant (both active and inactive)
-// GetTenantUsers fetches all users assigned to a tenant (both active and inactive)
-func (r *Repository) GetTenantUsers(tenantID uint, role string) ([]UserResponse, error) {
-    log.Printf("REPOSITORY: Fetching users for tenant ID: %d", tenantID)
-    var userResponses []UserResponse
-    
-    // Build the query - now including the role information
-    query := r.db.Table("users u").
-        Select("u.id, u.full_name as name, u.email, u.phone, u.status, u.created_at, ur.role_name as role").
-        Joins("JOIN tenant_user_assignments tua ON u.id = tua.user_id").
-        Joins("LEFT JOIN user_roles ur ON u.role_id = ur.id"). // Join with the roles table
-        Where("tua.tenant_id = ?", tenantID)
-    
-    // Execute the query
-    err := query.Scan(&userResponses).Error
-    if err != nil {
-        log.Printf("Error fetching tenant users: %v", err)
-        return nil, err
-    }
-    
-    // Initialize empty array if nil
-    if userResponses == nil {
-        log.Printf("No users found, returning empty array")
-        userResponses = []UserResponse{}
-    } else {
-        log.Printf("Found %d users for tenant ID %d", len(userResponses), tenantID)
-    }
-    
-    return userResponses, nil
+// UpdateTenantProfile updates tenant and user information
+func (r *Repository) UpdateTenantProfile(tenantID, userID uint, input UpdateTenantProfileRequest) error {
+	log.Printf("🔄 REPO: Updating tenant profile - Tenant ID: %d, User ID: %d", tenantID, userID)
+
+	tx := r.db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Update user info
+	userUpdates := map[string]interface{}{}
+	if input.FullName != "" {
+		userUpdates["full_name"] = input.FullName
+	}
+	if input.Phone != "" {
+		userUpdates["phone"] = input.Phone
+	}
+
+	if len(userUpdates) > 0 {
+		if err := tx.Table("users").Where("id = ?", userID).Updates(userUpdates).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	// Update tenant info
+	tenantUpdates := map[string]interface{}{}
+	if input.TempleName != "" {
+		tenantUpdates["temple_name"] = input.TempleName
+	}
+	if input.TemplePlace != "" {
+		tenantUpdates["temple_place"] = input.TemplePlace
+	}
+	if input.TempleAddress != "" {
+		tenantUpdates["temple_address"] = input.TempleAddress
+	}
+	if input.TemplePhoneNo != "" {
+		tenantUpdates["temple_phone_no"] = input.TemplePhoneNo
+	}
+	if input.TempleDescription != "" {
+		tenantUpdates["temple_description"] = input.TempleDescription
+	}
+	if input.LogoURL != "" {
+		tenantUpdates["logo_url"] = input.LogoURL
+	}
+	if input.IntroVideoURL != "" {
+		tenantUpdates["intro_video_url"] = input.IntroVideoURL
+	}
+
+	if len(tenantUpdates) > 0 {
+		if err := tx.Table("tenant_details").
+			Where("id = ?", tenantID).
+			Updates(tenantUpdates).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	return tx.Commit().Error
 }
 
-// CreateUser creates a new user
-func (r *Repository) CreateUser(user *User) error {
-    log.Printf("Creating new user: %s (%s)", user.FullName, user.Email)
-    return r.db.Create(user).Error
-}
-
-// UpdateTenantUserAssignment updates an existing tenant-user assignment or creates a new one
-func (r *Repository) UpdateTenantUserAssignment(userID, tenantID, createdBy uint) error {
-    log.Printf("🚨 REPOSITORY - Received tenant ID: %d for user ID: %d", tenantID, userID)
-    
-    // First check if record exists
-    var count int64
-    r.db.Model(&TenantUserAssignment{}).Where("user_id = ? AND tenant_id = ?", userID, tenantID).Count(&count)
-    
-    if count == 0 {
-        // Create new assignment using GORM with explicit values
-        assignment := TenantUserAssignment{
-            UserID:    userID,
-            TenantID:  tenantID,  // Explicitly set the tenant ID
-            CreatedBy: createdBy,
-            Status:    "active",
-        }
-        
-        log.Printf("Creating new assignment with tenant_id=%d", tenantID)
-        if err := r.db.Create(&assignment).Error; err != nil {
-            log.Printf("Error creating assignment: %v", err)
-            return err
-        }
-        
-        // Verify the assignment was created with correct tenant_id
-        var result struct {
-            TenantID uint
-        }
-        err := r.db.Table("tenant_user_assignments").
-            Select("tenant_id").
-            Where("user_id = ? AND created_by = ?", userID, createdBy).
-            Order("created_at DESC").
-            Limit(1).
-            Scan(&result).Error
-            
-        if err != nil {
-            log.Printf("Warning: Could not verify assignment: %v", err)
-        } else {
-            log.Printf("Verified assignment - tenant_id in database: %d", result.TenantID)
-            if result.TenantID != tenantID {
-                log.Printf("WARNING: Expected tenant_id %d but found %d", tenantID, result.TenantID)
-            }
-        }
-        
-        return nil
-    } else {
-        // Update existing record
-        log.Printf("Record exists, updating status for tenant_id=%d", tenantID)
-        return r.db.Model(&TenantUserAssignment{}).
-            Where("user_id = ? AND tenant_id = ?", userID, tenantID).
-            Update("status", "active").
-            Update("updated_at", gorm.Expr("NOW()")).
-            Error
-    }
-}
-
-// CheckUserBelongsToTenant checks if a user is assigned to a tenant
-func (r *Repository) CheckUserBelongsToTenant(userID, tenantID uint) (bool, error) {
-    var count int64
-    err := r.db.Model(&TenantUserAssignment{}).
-        Where("user_id = ? AND tenant_id = ?", userID, tenantID).
-        Count(&count).Error
-    
-    return count > 0, err
-}
-
-// GetUserByID gets a user by their ID
+// GetUserByID retrieves a user by ID
 func (r *Repository) GetUserByID(userID uint) (*User, error) {
     var user User
     err := r.db.Where("id = ?", userID).First(&user).Error
@@ -149,112 +152,154 @@ func (r *Repository) GetUserByID(userID uint) (*User, error) {
     return &user, nil
 }
 
-// UpdateUserDetails updates a user's details in the users table
-// UpdateUserDetails updates a user's details in the users table
-func (r *Repository) UpdateUserDetails(userID uint, input UserInput) error {
-    // Get role ID from role name if provided
-    var roleID uint
-    var err error
-    if input.Role != "" {
-        roleID, err = r.GetRoleIDByName(input.Role)
-        if err != nil {
-            log.Printf("Error getting role ID: %v", err)
-            // Continue with update even if role lookup fails
+// GetUserByEmail retrieves a user by email
+func (r *Repository) GetUserByEmail(email string) (*User, error) {
+    var user User
+    err := r.db.Where("email = ?", email).First(&user).Error
+    if err != nil {
+        if errors.Is(err, gorm.ErrRecordNotFound) {
+            return nil, nil
         }
+        return nil, err
     }
-
-    // Prepare updates map
-    updates := map[string]interface{}{
-        "full_name": input.Name,
-        "email":     input.Email,
-        "phone":     input.Phone,
-        "updated_at": time.Now(),
-    }
-    
-    // Add role_id if we got a valid one
-    if roleID > 0 {
-        updates["role_id"] = roleID
-    }
-
-    // Debug the update operation
-    log.Printf("🔵 Updating user %d with details: %+v", userID, updates)
-    
-    return r.db.Model(&User{}).Where("id = ?", userID).Updates(updates).Error
+    return &user, nil
 }
 
-// UpdateUserStatus updates a user's status in both tenant_user_assignments and users tables
+// CheckUserBelongsToTenant checks if a user belongs to a tenant
+func (r *Repository) CheckUserBelongsToTenant(userID, tenantID uint) (bool, error) {
+    var count int64
+    err := r.db.Table("tenant_user_assignments").
+        Where("user_id = ? AND tenant_id = ? AND status = ?", userID, tenantID, "active").
+        Count(&count).Error
+    if err != nil {
+        return false, err
+    }
+    return count > 0, nil
+}
+
+// UpdateUserStatus updates user status in both users and tenant_user_assignments tables
 func (r *Repository) UpdateUserStatus(userID, tenantID uint, status string) error {
-    // Start a transaction
     tx := r.db.Begin()
-    
-    // Update tenant_user_assignments table
-    if err := tx.Model(&TenantUserAssignment{}).
+    if tx.Error != nil {
+        return tx.Error
+    }
+
+    // Update in users table
+    err := tx.Table("users").Where("id = ?", userID).Update("status", status).Error
+    if err != nil {
+        tx.Rollback()
+        return err
+    }
+
+    // Update in tenant_user_assignments table
+    err = tx.Table("tenant_user_assignments").
         Where("user_id = ? AND tenant_id = ?", userID, tenantID).
-        Update("status", status).
-        Update("updated_at", time.Now()).Error; err != nil {
+        Update("status", status).Error
+    if err != nil {
         tx.Rollback()
         return err
     }
-    
-    // Update users table
-    if err := tx.Model(&User{}).
-        Where("id = ?", userID).
-        Update("status", status).
-        Update("updated_at", time.Now()).Error; err != nil {
-        tx.Rollback()
-        return err
-    }
-    
-    // Commit the transaction
+
     return tx.Commit().Error
 }
 
-// GetRoleIDByName gets role ID by name
-func (r *Repository) GetRoleIDByName(roleName string) (uint, error) {
-    // Convert frontend roles to database role names
-    var dbRoleName string
-    switch roleName {
-    case "StandardUser":
-        dbRoleName = "standarduser"
-    case "MonitoringUser":
-        dbRoleName = "monitoringuser"
-    default:
-        dbRoleName = roleName
+// UpdateUserDetails updates user details
+func (r *Repository) UpdateUserDetails(userID uint, input UserInput) error {
+    updates := make(map[string]interface{})
+    
+    if input.Name != "" {
+        updates["full_name"] = input.Name
+    }
+    if input.Email != "" {
+        updates["email"] = input.Email
+    }
+    if input.Phone != "" {
+        updates["phone"] = input.Phone
     }
     
-    // Mapping of role names to IDs based on your database
-    roleIDs := map[string]uint{
-        "superadmin":     1,
-        "templeadmin":    2,
-        "devotee":        3,
-        "volunteer":      4,
-        "standarduser":   5,
-        "monitoringuser": 6,
+    if len(updates) == 0 {
+        return nil
     }
     
-    log.Printf("Looking up role ID for '%s' (converted to '%s')", roleName, dbRoleName)
+    return r.db.Table("users").Where("id = ?", userID).Updates(updates).Error
+}
+
+// GetTenantUsers retrieves all users for a tenant
+func (r *Repository) GetTenantUsers(tenantID uint, role string) ([]UserResponse, error) {
+    var users []UserResponse
     
-    // Check if role exists in our mapping
-    if roleID, exists := roleIDs[dbRoleName]; exists {
-        log.Printf("Found role ID %d for '%s'", roleID, dbRoleName)
-        return roleID, nil
+    query := r.db.Table("users").
+        Select(`
+            users.id,
+            users.full_name as name,
+            users.email,
+            users.phone,
+            users.status,
+            users.created_at,
+            roles.role_name as role
+        `).
+        Joins("INNER JOIN tenant_user_assignments ON users.id = tenant_user_assignments.user_id").
+        Joins("LEFT JOIN roles ON users.role_id = roles.id").
+        Where("tenant_user_assignments.tenant_id = ?", tenantID).
+        Where("tenant_user_assignments.status = ?", "active")
+    
+    if role != "" {
+        query = query.Where("roles.role_name = ?", role)
     }
     
-    // If not in our mapping, try database lookup
-    var role struct {
-        ID uint
-    }
-    
-    err := r.db.Table("user_roles").
-        Select("id").
-        Where("role_name = ?", dbRoleName).
-        First(&role).Error
-    
+    err := query.Scan(&users).Error
     if err != nil {
-        log.Printf("Role '%s' not found in DB", dbRoleName)
-        return 0, errors.New("invalid role name")
+        return nil, err
     }
     
-    log.Printf("Found role ID %d for '%s' from database", role.ID, dbRoleName)
-    return role.ID, nil
+    return users, nil
+}
+
+// GetRoleIDByName retrieves role ID by role name
+func (r *Repository) GetRoleIDByName(roleName string) (uint, error) {
+    var roleID uint
+    err := r.db.Table("roles").
+        Select("id").
+        Where("role_name = ?", roleName).
+        Scan(&roleID).Error
+    if err != nil {
+        return 0, err
+    }
+    return roleID, nil
+}
+
+// CreateUser creates a new user
+func (r *Repository) CreateUser(user *User) error {
+    return r.db.Create(user).Error
+}
+
+// UpdateTenantUserAssignment updates or creates tenant user assignment
+func (r *Repository) UpdateTenantUserAssignment(userID, tenantID, creatorID uint) error {
+    // Check if assignment exists
+    var existing TenantUserAssignment
+    err := r.db.Where("user_id = ? AND tenant_id = ?", userID, tenantID).
+        First(&existing).Error
+    
+    if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+        return err
+    }
+    
+    if existing.ID > 0 {
+        // Update existing assignment
+        return r.db.Model(&existing).
+            Updates(map[string]interface{}{
+                "status": "active",
+                "created_by": creatorID,
+            }).Error
+    }
+    
+    // Create new assignment
+    assignment := TenantUserAssignment{
+        UserID:    userID,
+        TenantID:  tenantID,
+        CreatedBy: creatorID,
+        Status:    "active",
+    }
+    
+    return r.db.Create(&assignment).Error
 }

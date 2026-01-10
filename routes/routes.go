@@ -609,6 +609,26 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	tenantRepo := tenant.NewRepository(database.DB)
 	tenantService := tenant.NewService(tenantRepo)
 	tenantHandler := tenant.NewHandler(tenantService)
+	tenantProfileRoutes := protected.Group("/tenant/profile")
+tenantProfileRoutes.Use(middleware.RequireTempleAccess()) // Allow templeadmin, standarduser, monitoringuser
+{
+    // Get tenant profile - all roles can view
+    tenantProfileRoutes.GET("", tenantHandler.GetTenantProfile)
+    
+    // Update tenant profile - only templeadmin and standarduser can edit
+    writeRoutes := tenantProfileRoutes.Group("")
+    writeRoutes.Use(middleware.RequireWriteAccess())
+    {
+        writeRoutes.PUT("", tenantHandler.UpdateTenantProfile)
+    }
+}
+// Add upload route
+tenantUploadRoutes := protected.Group("/tenant")
+tenantUploadRoutes.Use(middleware.RequireTempleAccess())
+tenantUploadRoutes.Use(middleware.RequireWriteAccess())
+{
+    tenantUploadRoutes.POST("/upload", tenantHandler.UploadFile)
+}
 
 	// Tenant user routes (templeadmin + standarduser manage, monitoringuser read-only)
 	tenantRoutes := protected.Group("/tenants/:id/user")
@@ -627,6 +647,7 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 			writeRoutes.PUT("/:userId", tenantHandler.UpdateUser)
 		}
 	}
+	
 
 	// ========== Reports ==========
 	{
@@ -662,6 +683,7 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 			*/
 		}
 	}
+
 
 	// Serve the SPA (Single Page Application) for any other route
 	r.NoRoute(func(c *gin.Context) {
