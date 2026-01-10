@@ -1,4 +1,3 @@
-
 package entity
 
 import (
@@ -37,22 +36,23 @@ type Entity struct {
 	TrustDeedInfo        string `json:"trust_deed_info"`        // JSON metadata
 	PropertyDocsInfo     string `json:"property_docs_info"`     // JSON metadata
 	AdditionalDocsInfo   string `json:"additional_docs_info"`   // JSON metadata
+	
+	// Stores JSON: {"logo": "url/to/logo.jpg", "video": "url/to/video.mp4"}
+	Media string `json:"media" gorm:"type:text"` // JSON string containing logo and video URLs
 
 	// Terms and Verification
 	AcceptedTerms bool   `gorm:"default:false" json:"accepted_terms"`
 	Status        string `gorm:"default:'pending'" json:"status"`
 	CreatedBy     uint   `gorm:"not null" json:"created_by"`
 	
-	// 🆕 NEW FIELD: Track the role_id of the user who created this temple
-	// This is used for auto-approval logic (role_id = 1 for superadmin)
+	// Track the role_id of the user who created this temple
 	CreatorRoleID *uint  `json:"creator_role_id" gorm:"index"` // Role ID of creator (1=superadmin for auto-approval)
 
-	// 🆕 NEW FIELD: Active/Inactive status
+	// Active/Inactive status
 	IsActive bool `gorm:"default:true" json:"isactive"` // Active/Inactive toggle
 	ApprovedAt      *time.Time `json:"approved_at" gorm:"column:approved_at"`
-    RejectedAt      *time.Time `json:"rejected_at" gorm:"column:rejected_at"`
-    RejectionReason string     `json:"rejection_reason" gorm:"column:rejection_reason;type:text"`
-    
+	RejectedAt      *time.Time `json:"rejected_at" gorm:"column:rejected_at"`
+	RejectionReason string     `json:"rejection_reason" gorm:"column:rejection_reason;type:text"`
 
 	// Meta
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
@@ -69,15 +69,12 @@ type FileInfo struct {
 	OriginalName string    `json:"original_name"`
 }
 
-/*
-type UserEntityMembership struct {
-	ID       uint      `gorm:"primaryKey"`
-	UserID   uint      `gorm:"not null;index" json:"user_id"`
-	EntityID uint      `gorm:"not null;index" json:"entity_id"`
-	JoinedAt time.Time `gorm:"autoCreateTime" json:"joined_at"`
-	Status   string    `gorm:"default:'active'" json:"status"`
-	CreatedAt time.Time `json:"created_at"`
-}*/
+// 🆕 MediaInfo represents temple logo and video
+type MediaInfo struct {
+	Logo  string `json:"logo,omitempty"`  // URL to logo image
+	Video string `json:"video,omitempty"` // URL to video file
+}
+
 // TableName specifies the table name for the Entity model
 func (Entity) TableName() string {
 	return "entities"

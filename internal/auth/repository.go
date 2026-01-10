@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -17,6 +19,7 @@ type Repository interface {
 	UpdateEntityID(userID uint, entityID uint) error
 	GetUserEmailsByRole(roleName string, entityID uint) ([]string, error)
 	GetUserIDsByRole(roleName string, entityID uint) ([]uint, error)
+	UpdateTenantMedia(tenantID uint, updates map[string]interface{}) error
 
 	// Password reset methods
 	SetForgotPasswordToken(userID uint, token string, expiry time.Time) error
@@ -28,10 +31,11 @@ type Repository interface {
 	// NEW: Public roles method
 	GetPublicRoles() ([]UserRole, error)
 
-		// New methods for tenant assignment
+	// New methods for tenant assignment
 	GetAssignedTenantID(userID uint) (*uint, error)
 	GetUserPermissionType(userID uint) (string, error)
 }
+
 
 type repository struct{ db *gorm.DB }
 
@@ -69,6 +73,62 @@ func (r *repository) FindByID(userID uint) (User, error) {
 	}
 
 	return user, nil
+}
+
+func (r *repository) UpdateTenantDetails(tenantID uint, updates map[string]interface{}) error {
+	return r.db.
+		Model(&TenantDetails{}).
+		Where("user_id = ?", tenantID).
+		Updates(updates).Error
+}
+
+// UpdateTenantMedia - FIXED VERSION with better error handling and logging
+func (r *repository) UpdateTenantMedia(tenantID uint, updates map[string]interface{}) error {
+	log.Printf("🔍 UpdateTenantMedia called - TenantID: %d, Updates: %+v", tenantID, updates)
+	
+	// First, check if tenant_details record exists
+	var existingTenant TenantDetails
+	err := r.db.Where("user_id = ?", tenantID).First(&existingTenant).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			log.Printf("❌ No tenant_details found for user_id %d", tenantID)
+			return fmt.Errorf("no tenant_details record found for user_id %d", tenantID)
+		}
+		log.Printf("❌ Error checking tenant_details: %v", err)
+		return err
+	}
+	
+	log.Printf("✅ Found existing tenant_details - ID: %d, Current Logo: %s, Current Video: %s", 
+		existingTenant.ID, existingTenant.LogoURL, existingTenant.IntroVideoURL)
+	
+	// Perform the update
+	result := r.db.
+		Model(&TenantDetails{}).
+		Where("user_id = ?", tenantID).
+		Updates(updates)
+	
+	if result.Error != nil {
+		log.Printf("❌ Database update failed: %v", result.Error)
+		return result.Error
+	}
+	
+	if result.RowsAffected == 0 {
+		log.Printf("⚠️ Update executed but 0 rows affected for user_id %d", tenantID)
+		return fmt.Errorf("no rows updated for user_id %d", tenantID)
+	}
+	
+	// Verify the update
+	var updatedTenant TenantDetails
+	err = r.db.Where("user_id = ?", tenantID).First(&updatedTenant).Error
+	if err != nil {
+		log.Printf("❌ Error verifying update: %v", err)
+		return err
+	}
+	
+	log.Printf("✅ Update successful - Rows affected: %d, New Logo: %s, New Video: %s", 
+		result.RowsAffected, updatedTenant.LogoURL, updatedTenant.IntroVideoURL)
+	
+	return nil
 }
 
 // Find user role by name
@@ -207,7 +267,14 @@ func (r *repository) ClearResetToken(userID uint) error {
 	}).Error
 }
 func (r *repository) CreateTenantDetails(t *TenantDetails) error {
-	return r.db.Create(t).Error
+	log.Printf("📝 Creating tenant_details - UserID: %d, Temple: %s", t.UserID, t.TempleName)
+	err := r.db.Create(t).Error
+	if err != nil {
+		log.Printf("❌ Failed to create tenant_details: %v", err)
+	} else {
+		log.Printf("✅ Created tenant_details - ID: %d", t.ID)
+	}
+	return err
 }
 
 func (r *repository) Update(user *User) error {

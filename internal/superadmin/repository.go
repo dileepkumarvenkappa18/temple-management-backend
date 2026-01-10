@@ -80,6 +80,8 @@ func (r *Repository) GetTenantsWithFilters(ctx context.Context, status string, l
 			td.temple_address,
 			td.temple_phone_no,
 			td.temple_description,
+			td.logo_url,
+			td.intro_video_url,
 			td.created_at as temple_created_at,
 			td.updated_at as temple_updated_at
 		`).
@@ -99,10 +101,11 @@ func (r *Repository) GetTenantsWithFilters(ctx context.Context, status string, l
 	defer rows.Close()
 
 	// Scan results into our custom struct
-	for rows.Next() {
+		for rows.Next() {
 		var tenant TenantWithDetails
 		var templeID *uint
 		var templeName, templePlace, templeAddress, templePhoneNo, templeDescription *string
+		var logoURL, introVideoURL *string
 		var templeCreatedAt, templeUpdatedAt *time.Time
 
 		err := rows.Scan(
@@ -120,6 +123,8 @@ func (r *Repository) GetTenantsWithFilters(ctx context.Context, status string, l
 			&templeAddress,
 			&templePhoneNo,
 			&templeDescription,
+			&logoURL,          
+			&introVideoURL,    
 			&templeCreatedAt,
 			&templeUpdatedAt,
 		)
@@ -136,6 +141,8 @@ func (r *Repository) GetTenantsWithFilters(ctx context.Context, status string, l
 				TempleAddress:     *templeAddress,
 				TemplePhoneNo:     *templePhoneNo,
 				TempleDescription: *templeDescription,
+				LogoURL:           safeString(logoURL),           
+				IntroVideoURL:     safeString(introVideoURL),    
 				CreatedAt:         *templeCreatedAt,
 				UpdatedAt:         *templeUpdatedAt,
 			}
@@ -988,33 +995,33 @@ func (r *Repository) GetAssignedTenantsForUser(ctx context.Context, userID uint)
 }
 
 // Get tenants with temple details
-func (r *Repository) GetTenantsWithTempleDetails(ctx context.Context, role, status string) ([]TenantResponse, error) {
+func (r *Repository) GetTenantsWithTempleDetails(
+	ctx context.Context,
+	role, status string,
+) ([]TenantResponse, error) {
+
 	var responses []TenantResponse
 
-	// Updated query with explicit JOIN to tenant_details table
 	query := `
-        SELECT 
-            u.id, 
-            u.full_name as "fullName",
-            u.email,
-            ur.role_name as "role",
-            u.status,
-            e.id as temple_id, 
-            COALESCE(td.temple_name, e.name) as temple_name, 
-            COALESCE(td.temple_place, e.city) as temple_city, 
-            COALESCE(e.state, '') as temple_state
-        FROM 
-            users u
-        JOIN 
-            user_roles ur ON u.role_id = ur.id
-        LEFT JOIN 
-            tenant_details td ON u.id = td.user_id
-        LEFT JOIN 
-            entities e ON u.id = e.created_by
-        WHERE 1=1
-    `
+		SELECT 
+			u.id,
+			u.full_name,
+			u.email,
+			ur.role_name,
+			u.status,
+			COALESCE(td.id, 0) as temple_id,
+			COALESCE(td.temple_name, e.name, '') as temple_name,
+			COALESCE(td.temple_place, e.city, '') as temple_city,
+			COALESCE(e.state, '') as temple_state,
+			COALESCE(td.logo_url, '') as logo_url,
+			COALESCE(td.intro_video_url, '') as intro_video_url
+		FROM users u
+		JOIN user_roles ur ON u.role_id = ur.id
+		LEFT JOIN tenant_details td ON u.id = td.user_id
+		LEFT JOIN entities e ON u.id = e.created_by
+		WHERE 1 = 1
+	`
 
-	// Build dynamic query params
 	params := []interface{}{}
 
 	if role != "" {
@@ -1034,9 +1041,13 @@ func (r *Repository) GetTenantsWithTempleDetails(ctx context.Context, role, stat
 	defer rows.Close()
 
 	for rows.Next() {
+
 		var tr TenantResponse
-		var templeID sql.NullInt64
-		var templeName, templeCity, templeState sql.NullString
+
+		// 👉 scan targets
+		var templeID uint
+		var templeName, templeCity, templeState string
+		var logoURL, introVideoURL string
 
 		err := rows.Scan(
 			&tr.ID,
@@ -1048,18 +1059,21 @@ func (r *Repository) GetTenantsWithTempleDetails(ctx context.Context, role, stat
 			&templeName,
 			&templeCity,
 			&templeState,
+			&logoURL,
+			&introVideoURL,
 		)
-
 		if err != nil {
 			return nil, err
 		}
 
-		// Always create a Temple object with available data
+		// 👉 create Temple struct AFTER scan
 		tr.Temple = &TempleDetails{
-			ID:    uint(templeID.Int64),
-			Name:  templeName.String,
-			City:  templeCity.String,
-			State: templeState.String,
+			ID:             templeID,
+			Name:           templeName,
+			City:           templeCity,
+			State:          templeState,
+			LogoURL:        logoURL,
+			IntroVideoURL:  introVideoURL,
 		}
 
 		responses = append(responses, tr)
@@ -1068,8 +1082,11 @@ func (r *Repository) GetTenantsWithTempleDetails(ctx context.Context, role, stat
 	return responses, nil
 }
 
-// GetTenantDetails fetches tenant details for a single tenant
-func (r *Repository) GetTenantDetails(ctx context.Context, tenantID uint) (*TenantTempleDetails, error) {
+func (r *Repository) GetTenantDetails(
+	ctx context.Context,
+	tenantID uint,
+) (*TenantTempleDetails, error) {
+
 	var details TenantTempleDetails
 
 	query := `
@@ -1087,6 +1104,8 @@ func (r *Repository) GetTenantDetails(ctx context.Context, tenantID uint) (*Tena
 			COALESCE(td.temple_address, '') as temple_address,
 			COALESCE(td.temple_phone_no, '') as temple_phone_no,
 			COALESCE(td.temple_description, '') as temple_description,
+			COALESCE(td.logo_url, '') as logo_url,
+			COALESCE(td.intro_video_url, '') as intro_video_url,
 			COALESCE(td.created_at, '1970-01-01'::timestamp) as temple_created_at,
 			COALESCE(td.updated_at, '1970-01-01'::timestamp) as temple_updated_at
 		FROM users u
@@ -1100,7 +1119,6 @@ func (r *Repository) GetTenantDetails(ctx context.Context, tenantID uint) (*Tena
 		return nil, err
 	}
 
-	// Check if user was found
 	if details.ID == 0 {
 		return nil, gorm.ErrRecordNotFound
 	}

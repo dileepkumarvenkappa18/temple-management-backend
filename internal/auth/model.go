@@ -81,6 +81,8 @@ type TenantDetails struct {
 	TempleAddress     string    `gorm:"type:text;not null" json:"temple_address"`
 	TemplePhoneNo     string    `gorm:"size:20;not null" json:"temple_phone_no"`
 	TempleDescription string    `gorm:"type:text;not null" json:"temple_description"`
+	LogoURL           string    `gorm:"type:text" json:"logo_url"`
+	IntroVideoURL     string    `gorm:"type:text" json:"intro_video_url"`
 	CreatedAt         time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt         time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }

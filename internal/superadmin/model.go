@@ -44,6 +44,8 @@ type TenantTempleDetails struct {
 	TempleAddress     string    `json:"temple_address"`
 	TemplePhoneNo     string    `json:"temple_phone_no"`
 	TempleDescription string    `json:"temple_description"`
+	LogoURL           string    `json:"logo_url"`          
+	IntroVideoURL     string    `json:"intro_video_url"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 }
@@ -155,6 +157,8 @@ type TempleDetails struct {
 	Name  string `json:"name"`
 	City  string `json:"city"`
 	State string `json:"state"`
+	LogoURL        string `json:"logo_url"`
+	IntroVideoURL  string `json:"intro_video_url"`
 }
 
 // TenantResponse represents a tenant with their temple details for API response

@@ -2,7 +2,11 @@ package auth
 
 import (
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -17,62 +21,178 @@ func NewHandler(s Service) *Handler { return &Handler{s} }
 // ===============================
 
 type RegisterRequest struct {
-	FullName string `json:"fullName" binding:"required" example:"Sharath Kumar"`
-	Email    string `json:"email" binding:"required,email" example:"example@gmail.com"`
-	Password string `json:"password" binding:"required,min=6" example:"secret123"`
-	Role     string `json:"role" binding:"required" example:"templeadmin"`
-	Phone    string `json:"phone" binding:"required" example:"+919876543210"`
-	// ✅ Temple admin specific fields
-	TempleName        string `json:"templeName" example:"Sri Venkateswara Temple"`
-	TemplePlace       string `json:"templePlace" example:"Tirupati"`
-	TempleAddress     string `json:"templeAddress" example:"Main Road, Tirupati, Andhra Pradesh"`
-	TemplePhoneNo     string `json:"templePhoneNo" example:"+918765432100"`
-	TempleDescription string `json:"templeDescription" example:"Historic temple dedicated to Lord Venkateswara."`
+	FullName string `form:"fullName" json:"fullName" binding:"required"`
+	Email    string `form:"email" json:"email" binding:"required,email"`
+	Password string `form:"password" json:"password" binding:"required,min=6"`
+	Role     string `form:"role" json:"role" binding:"required"`
+	Phone    string `form:"phone" json:"phone" binding:"required"`
+
+	TempleName        string `form:"templeName" json:"templeName"`
+	TemplePlace       string `form:"templePlace" json:"templePlace"`
+	TempleAddress     string `form:"templeAddress" json:"templeAddress"`
+	TemplePhoneNo     string `form:"templePhoneNo" json:"templePhoneNo"`
+	TempleDescription string `form:"templeDescription" json:"templeDescription"`
+
+	LogoURL       string `json:"logo_url"`
+	IntroVideoURL string `json:"intro_video_url"`
 }
 
 func (h *Handler) Register(c *gin.Context) {
 	var req RegisterRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBind(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// ❌ Block superadmin registration
+	// ❌ Block superadmin
 	if strings.ToLower(req.Role) == "superadmin" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Super Admin registration is not allowed"})
 		return
 	}
 
-	// ✅ Validate Gmail only
+	// ✅ Gmail only
 	if !isGmail(req.Email) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Only @gmail.com emails are allowed for registration"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only @gmail.com emails are allowed"})
 		return
 	}
 
-	// ✅ Validate templeadmin details early
+	// ✅ Temple admin validation
 	if strings.ToLower(req.Role) == "templeadmin" {
-		if req.TempleName == "" || req.TemplePlace == "" || req.TempleAddress == "" ||
-			req.TemplePhoneNo == "" || req.TempleDescription == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "All temple details are required for Temple Admin registration"})
+		if req.TempleName == "" ||
+			req.TemplePlace == "" ||
+			req.TempleAddress == "" ||
+			req.TemplePhoneNo == "" ||
+			req.TempleDescription == "" {
+
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "All temple details are required for Temple Admin registration",
+			})
+			return
+		}
+
+		// Check for logo file
+		if _, err := c.FormFile("logo"); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Temple logo is required for Temple Admin registration",
+			})
+			return
+		}
+
+		// Check for video file
+		if _, err := c.FormFile("video"); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Temple intro video is required for Temple Admin registration",
+			})
 			return
 		}
 	}
 
-	// ✅ Map to input and pass to service
-	input := RegisterInput(req)
-
-	if err := h.service.Register(input); err != nil {
+	// 1️⃣ Create user + tenant FIRST
+	user, err := h.service.RegisterAndReturnUser(RegisterInput{
+		FullName:          req.FullName,
+		Email:             req.Email,
+		Password:          req.Password,
+		Role:              req.Role,
+		Phone:             req.Phone,
+		TempleName:        req.TempleName,
+		TemplePlace:       req.TemplePlace,
+		TempleAddress:     req.TempleAddress,
+		TemplePhoneNo:     req.TemplePhoneNo,
+		TempleDescription: req.TempleDescription,
+	})
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	// 2️⃣ Only process files for temple admin
 	if strings.ToLower(req.Role) == "templeadmin" {
-		c.JSON(http.StatusCreated, gin.H{"message": "Temple Admin registered. Awaiting approval."})
-		return
+		// Create tenant directory - use /data/uploads to match main.go
+		tenantDir := filepath.Join("/data/uploads", "tenants", fmt.Sprint(user.ID))
+		if err := os.MkdirAll(tenantDir, os.ModePerm); err != nil {
+			log.Printf("⚠️ Failed to create tenant directory: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to create storage directory",
+			})
+			return
+		}
+
+		var publicLogoURL, publicVideoURL string
+
+		// 3️⃣ Save LOGO
+		logoFile, err := c.FormFile("logo")
+		if err == nil {
+			logoFilename := "logo" + filepath.Ext(logoFile.Filename)
+			logoPath := filepath.Join(tenantDir, logoFilename)
+			
+			if err := c.SaveUploadedFile(logoFile, logoPath); err != nil {
+				log.Printf("❌ Failed to save logo: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Failed to save temple logo",
+				})
+				return
+			}
+			
+			// Make URL: /uploads/tenants/{userID}/logo.ext
+			publicLogoURL = fmt.Sprintf("/uploads/tenants/%d/%s", user.ID, logoFilename)
+			log.Printf("✅ Logo saved to: %s (Public URL: %s)", logoPath, publicLogoURL)
+		} else {
+			log.Printf("❌ Logo file error: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Temple logo is required",
+			})
+			return
+		}
+
+		// 4️⃣ Save VIDEO
+		videoFile, err := c.FormFile("video")
+		if err == nil {
+			videoFilename := "intro" + filepath.Ext(videoFile.Filename)
+			videoPath := filepath.Join(tenantDir, videoFilename)
+			
+			if err := c.SaveUploadedFile(videoFile, videoPath); err != nil {
+				log.Printf("❌ Failed to save video: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Failed to save temple video",
+				})
+				return
+			}
+			
+			// Make URL: /uploads/tenants/{userID}/intro.ext
+			publicVideoURL = fmt.Sprintf("/uploads/tenants/%d/%s", user.ID, videoFilename)
+			log.Printf("✅ Video saved to: %s (Public URL: %s)", videoPath, publicVideoURL)
+		} else {
+			log.Printf("❌ Video file error: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Temple intro video is required",
+			})
+			return
+		}
+
+		// 5️⃣ Update tenant_details with public URLs - THIS IS THE CRITICAL FIX
+		if publicLogoURL != "" || publicVideoURL != "" {
+			log.Printf("🔄 Updating database - UserID: %d, Logo: %s, Video: %s", 
+				user.ID, publicLogoURL, publicVideoURL)
+			
+			if err := h.service.UpdateTenantMedia(user.ID, publicLogoURL, publicVideoURL); err != nil {
+				log.Printf("❌ Failed to update tenant media URLs in database: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Failed to update media information in database",
+				})
+				return
+			}
+			
+			log.Printf("✅ Database updated successfully - Logo: %s, Video: %s", 
+				publicLogoURL, publicVideoURL)
+		}
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "Registration successful"})
+	c.JSON(http.StatusCreated, gin.H{
+		"message":  "Temple Admin registered. Awaiting approval.",
+		"tenantId": user.ID,
+	})
 }
+
 
 // 🔍 Email helper
 func isGmail(email string) bool {

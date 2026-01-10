@@ -52,6 +52,7 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 	var input Entity
 	var tempFiles []TempFileInfo
 
+	// -------------------- Parse Input --------------------
 	if isMultipart {
 		if err := h.handleMultipartFormData(c, &input, &tempFiles); err != nil {
 			log.Printf("Multipart Form Error: %v", err)
@@ -66,7 +67,7 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 		}
 	}
 
-	// Required fields
+	// -------------------- Validation --------------------
 	if input.TempleType == "" || input.State == "" || input.EstablishedYear == nil {
 		h.cleanupTempFiles(tempFiles)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Temple Type, State, and Established Year are required"})
@@ -78,24 +79,25 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 		return
 	}
 
-	// Auth and access
+	// -------------------- Auth --------------------
 	userVal, exists := c.Get("user")
 	if !exists {
 		h.cleanupTempFiles(tempFiles)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-	userObj := userVal.(auth.User)
-	userID := userObj.ID
-	userRole := userObj.Role.RoleName
-	userRoleID := userObj.Role.ID // 🆕 GET ROLE ID
+	user := userVal.(auth.User)
+
+	userID := user.ID
+	userRole := user.Role.RoleName
+	userRoleID := user.Role.ID
 
 	var accessContext middleware.AccessContext
 	if v, ok := c.Get("access_context"); ok {
 		accessContext, _ = v.(middleware.AccessContext)
 	}
 
-	// Decide CreatedBy
+	// -------------------- CreatedBy Logic --------------------
 	switch userRole {
 	case "superadmin":
 		if accessContext.AssignedEntityID != nil {
@@ -109,8 +111,10 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 			}
 			input.CreatedBy = tenantID
 		}
+
 	case "templeadmin":
 		input.CreatedBy = userID
+
 	case "standarduser", "monitoringuser":
 		if accessContext.AssignedEntityID != nil {
 			input.CreatedBy = *accessContext.AssignedEntityID
@@ -123,67 +127,81 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 			}
 			input.CreatedBy = tenantID
 		}
+
 	default:
 		h.cleanupTempFiles(tempFiles)
-		c.JSON(http.StatusForbidden, gin.H{"error": "Invalid user role for temple creation"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "Invalid user role"})
 		return
 	}
 
-	// 🆕 AUTO-APPROVE FOR SUPERADMIN (role_id = 1)
+	// -------------------- Status --------------------
 	if input.Status == "" {
-		if userRoleID == 1 { // Superadmin role_id
+		if userRoleID == 1 {
 			input.Status = "approved"
-			log.Printf("Temple auto-approved: created by superadmin (role_id: %d)", userRoleID)
 		} else {
 			input.Status = "pending"
-			log.Printf("Temple pending approval: created by role_id: %d", userRoleID)
 		}
 	}
 
 	ip := middleware.GetIPFromContext(c)
 
-	// Create entity with role_id passed to service
+	// -------------------- CREATE ENTITY (DB INSERT) --------------------
 	if err := h.Service.CreateEntity(&input, userID, userRoleID, ip); err != nil {
-		log.Printf("Service Error: %v", err)
+		log.Printf("CreateEntity Error: %v", err)
 		h.cleanupTempFiles(tempFiles)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create entity", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create entity"})
 		return
 	}
-	log.Printf("Entity created successfully with ID: %d, Status: %s", input.ID, input.Status)
 
-	// Move files and update URLs
+	log.Printf("✅ Entity created: ID=%d Status=%s", input.ID, input.Status)
+
+	// -------------------- FILE PROCESSING --------------------
 	finalFileInfos := make(map[string]FileInfo)
+
 	if len(tempFiles) > 0 {
+		// Move files + build Media JSON
 		if err := h.moveFilesToFinalLocation(&input, tempFiles, &finalFileInfos); err != nil {
-			log.Printf("Error moving files for entity %d: %v", input.ID, err)
-			c.JSON(http.StatusCreated, gin.H{
-				"message":    "Temple created but some files could not be processed",
-				"temple_id":  input.ID,
-				"status":     input.Status,
-				"file_error": err.Error(),
+			log.Printf("File move error for entity %d: %v", input.ID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":     "Temple created but file processing failed",
+				"temple_id": input.ID,
 			})
 			return
 		}
+
+		// 🔥 CRITICAL FIX: DO NOT IGNORE THIS ERROR
 		if err := h.updateEntityWithFileInfo(&input); err != nil {
-			log.Printf("Error updating entity %d with file info: %v", input.ID, err)
+			log.Printf("❌ MEDIA SAVE FAILED for entity %d: %v", input.ID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Temple created but media could not be saved",
+			})
+			return
 		}
-		log.Printf("Files processed successfully for entity %d", input.ID)
+
+		log.Printf("✅ Files + media saved for entity %d", input.ID)
 	}
 
-	// 🆕 DIFFERENT RESPONSE MESSAGES BASED ON STATUS
-	responseMessage := "Temple registration request submitted successfully"
+	// -------------------- RESPONSE --------------------
+	message := "Temple registration request submitted successfully"
 	if input.Status == "approved" {
-		responseMessage = "Temple created and approved successfully"
+		message = "Temple created and approved successfully"
 	}
 
-	c.JSON(http.StatusAccepted, gin.H{
-		"message":        responseMessage,
+	response := gin.H{
+		"message":        message,
 		"temple_id":      input.ID,
 		"status":         input.Status,
 		"auto_approved":  input.Status == "approved",
 		"uploaded_files": finalFileInfos,
-	})
+	}
+
+	if input.Media != "" {
+		response["media"] = input.Media
+	}
+
+	c.JSON(http.StatusCreated, response)
 }
+
 
 type TempFileInfo struct {
 	TempPath     string
@@ -272,6 +290,29 @@ func (h *Handler) processFileUploadsToTemp(form *multipart.Form, tempFiles *[]Te
 			*tempFiles = append(*tempFiles, info)
 		}
 	}
+
+	// 🆕 Process temple logo
+	if logoFiles := form.File["temple_logo"]; len(logoFiles) > 0 {
+		info, err := h.uploadFileToTemp(logoFiles[0], tempSessionDir, "temple_logo")
+		if err != nil {
+			log.Printf("Warning: Failed to upload temple logo: %v", err)
+		} else {
+			*tempFiles = append(*tempFiles, info)
+			log.Printf("✅ Temple logo uploaded to temp: %s", info.FileName)
+		}
+	}
+
+	// 🆕 Process temple video
+	if videoFiles := form.File["temple_video"]; len(videoFiles) > 0 {
+		info, err := h.uploadFileToTemp(videoFiles[0], tempSessionDir, "temple_video")
+		if err != nil {
+			log.Printf("Warning: Failed to upload temple video: %v", err)
+		} else {
+			*tempFiles = append(*tempFiles, info)
+			log.Printf("✅ Temple video uploaded to temp: %s", info.FileName)
+		}
+	}
+
 	log.Printf("Total temp files processed: %d", len(*tempFiles))
 	return nil
 }
@@ -324,6 +365,9 @@ func (h *Handler) moveFilesToFinalLocation(entity *Entity, tempFiles []TempFileI
 
 	*finalFileInfos = make(map[string]FileInfo)
 	var additionalFiles []FileInfo
+	
+	// 🆕 Media info to build JSON
+	mediaInfo := MediaInfo{}
 
 	for _, tf := range tempFiles {
 		finalFileName := tf.FileName
@@ -371,6 +415,18 @@ func (h *Handler) moveFilesToFinalLocation(entity *Entity, tempFiles []TempFileI
 			}
 		case "additional_docs":
 			additionalFiles = append(additionalFiles, fi)
+		
+		// 🆕 Handle temple logo
+		case "temple_logo":
+			(*finalFileInfos)["temple_logo"] = fi
+			mediaInfo.Logo = fileURL
+			log.Printf("✅ Temple logo URL set: %s", fileURL)
+		
+		// 🆕 Handle temple video
+		case "temple_video":
+			(*finalFileInfos)["temple_video"] = fi
+			mediaInfo.Video = fileURL
+			log.Printf("✅ Temple video URL set: %s", fileURL)
 		}
 	}
 
@@ -392,6 +448,16 @@ func (h *Handler) moveFilesToFinalLocation(entity *Entity, tempFiles []TempFileI
 		}
 	}
 
+	// 🆕 Save media info as JSON in the Media column
+	if mediaInfo.Logo != "" || mediaInfo.Video != "" {
+		if mediaJSON, err := json.Marshal(mediaInfo); err == nil {
+			entity.Media = string(mediaJSON)
+			log.Printf("✅ Media JSON created: %s", entity.Media)
+		} else {
+			log.Printf("⚠️ Failed to marshal media info: %v", err)
+		}
+	}
+
 	// Clean temp
 	h.cleanupTempFiles(tempFiles)
 
@@ -409,7 +475,16 @@ func (h *Handler) validateFile(file *multipart.FileHeader) error {
 	}
 	ext := strings.ToLower(filepath.Ext(file.Filename))
 	allowed := map[string]bool{
-		".pdf": true, ".jpg": true, ".jpeg": true, ".png": true, ".doc": true, ".docx": true,
+		".pdf":  true,
+		".jpg":  true,
+		".jpeg": true,
+		".png":  true,
+		".doc":  true,
+		".docx": true,
+		// 🆕 Video formats for temple video
+		".mp4": true,
+		".mov": true,
+		".avi": true,
 	}
 	if !allowed[ext] {
 		return fmt.Errorf("file type %s not allowed", ext)
@@ -933,6 +1008,12 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		input.AdditionalDocsInfo = existingEntity.AdditionalDocsInfo
 	}
 
+
+	if input.Media == "" {
+		input.Media = existingEntity.Media
+		log.Printf("📸 Preserving existing media for entity %d", id)
+	}
+
 	// Preserve creator role ID
 	if input.CreatorRoleID == nil {
 		input.CreatorRoleID = existingEntity.CreatorRoleID
@@ -981,8 +1062,8 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 	ip := middleware.GetIPFromContext(c)
 
 	// 🔍 DEBUG: Log before save
-	log.Printf("💾 Saving entity %d: Status=%s, RegCert=%s",
-		id, input.Status, input.RegistrationCertURL)
+	log.Printf("💾 Saving entity %d: Status=%s, RegCert=%s, Media=%s",
+		id, input.Status, input.RegistrationCertURL, input.Media)
 
 	// Perform the update
 	if err := h.Service.UpdateEntity(input, user.ID, user.Role.ID, ip, wasRejected); err != nil {
@@ -1007,6 +1088,12 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 	if len(finalFileInfos) > 0 {
 		response["uploaded_files"] = finalFileInfos
 		response["files_updated"] = len(finalFileInfos)
+	}
+
+	// 🆕 Add media to response if present
+	if input.Media != "" {
+		response["media"] = input.Media
+		log.Printf("✅ Media included in update response for temple %d", id)
 	}
 
 	// Add status change info if applicable
@@ -1078,6 +1165,39 @@ func (h *Handler) deleteOldEntityFiles(entity *Entity, newFiles []TempFileInfo) 
 					log.Printf("🗑️ Deleted old additional doc: %s", oldFile.FileName)
 				}
 			}
+		}
+	}
+
+	// 🆕 Delete old media files (logo and video) if being replaced
+	if (fileTypesBeingReplaced["temple_logo"] || fileTypesBeingReplaced["temple_video"]) && entity.Media != "" {
+		var oldMediaInfo MediaInfo
+		if err := json.Unmarshal([]byte(entity.Media), &oldMediaInfo); err == nil {
+			
+			// Delete old logo if being replaced
+			if fileTypesBeingReplaced["temple_logo"] && oldMediaInfo.Logo != "" {
+				// Extract filename from URL (e.g., "/files/123/logo.jpg" -> "logo.jpg")
+				logoFileName := filepath.Base(oldMediaInfo.Logo)
+				oldLogoPath := filepath.Join(entityDir, logoFileName)
+				if err := os.Remove(oldLogoPath); err != nil && !os.IsNotExist(err) {
+					log.Printf("⚠️ Failed to delete old logo: %v", err)
+				} else {
+					log.Printf("🗑️ Deleted old logo: %s", logoFileName)
+				}
+			}
+			
+			// Delete old video if being replaced
+			if fileTypesBeingReplaced["temple_video"] && oldMediaInfo.Video != "" {
+				// Extract filename from URL (e.g., "/files/123/video.mp4" -> "video.mp4")
+				videoFileName := filepath.Base(oldMediaInfo.Video)
+				oldVideoPath := filepath.Join(entityDir, videoFileName)
+				if err := os.Remove(oldVideoPath); err != nil && !os.IsNotExist(err) {
+					log.Printf("⚠️ Failed to delete old video: %v", err)
+				} else {
+					log.Printf("🗑️ Deleted old video: %s", videoFileName)
+				}
+			}
+		} else {
+			log.Printf("⚠️ Failed to parse old media JSON: %v", err)
 		}
 	}
 

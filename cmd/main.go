@@ -144,18 +144,13 @@ func main() {
 	})
 
 	// Create uploads directory
-	uploadDir := "/data/uploads"
+uploadDir := "/data/uploads"
 
-	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
-		panic(fmt.Sprintf("❌ Failed to create upload directory: %v", err))
-	}
+if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
+	panic(fmt.Sprintf("❌ Failed to create upload directory: %v", err))
+}
 
-	// ======= FILE SERVING ROUTES =======
-
-	// Primary route: /uploads/{entityID}/{filename}
-	router.GET("/uploads/:entityID/:filename", func(c *gin.Context) {
-		serveEntityFile(c, uploadDir)
-	})
+router.Static("/uploads", uploadDir)
 
 	// Alternative route: /files/{entityID}/{filename}
 	router.GET("/files/:entityID/:filename", func(c *gin.Context) {

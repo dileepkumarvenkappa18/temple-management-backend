@@ -22,7 +22,8 @@ type TokenPair struct {
 }
 
 type Service interface {
-	Register(input RegisterInput) error
+	RegisterAndReturnUser(input RegisterInput) (*User, error)
+UpdateTenantMedia(tenantID uint, logoURL, videoURL string) error
 	Login(input LoginInput) (*TokenPair, *User, error)
 	Refresh(refreshToken string) (string, error)
 	GetUserByID(userID uint) (User, error)
@@ -69,39 +70,37 @@ type RegisterInput struct {
 	TempleAddress     string
 	TemplePhoneNo     string
 	TempleDescription string
+	LogoURL           string
+	IntroVideoURL     string
 }
 
-func (s *service) Register(in RegisterInput) error {
+func (s *service) RegisterAndReturnUser(in RegisterInput) (*User, error) {
 	roleName := strings.ToLower(in.Role)
+
 	role, err := s.repo.FindRoleByName(roleName)
 	if err != nil {
-		return errors.New("invalid role")
+		return nil, errors.New("invalid role")
 	}
 
-	// ✅ Enforce Gmail-only email validation
 	if !strings.HasSuffix(strings.ToLower(in.Email), "@gmail.com") {
-		return errors.New("only @gmail.com emails are allowed")
+		return nil, errors.New("only @gmail.com emails are allowed")
 	}
 
-	// ✅ Hash password
 	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// ✅ Status logic
 	status := "active"
 	if roleName == "templeadmin" {
 		status = "pending"
 	}
 
-	// ✅ Clean phone number
 	phone, err := cleanPhone(in.Phone)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// ✅ Create the user
 	user := &User{
 		FullName:     in.FullName,
 		Email:        in.Email,
@@ -109,14 +108,13 @@ func (s *service) Register(in RegisterInput) error {
 		RoleID:       role.ID,
 		Status:       status,
 		Phone:        phone,
-		CreatedBy: "system",
+		CreatedBy:    "system",
 	}
 
 	if err := s.repo.Create(user); err != nil {
-		return err
+		return nil, err
 	}
 
-	// ✅ Extra step for templeadmin: Save tenant details + approval request
 	if roleName == "templeadmin" {
 		tenant := &TenantDetails{
 			UserID:            user.ID,
@@ -128,15 +126,31 @@ func (s *service) Register(in RegisterInput) error {
 		}
 
 		if err := s.repo.CreateTenantDetails(tenant); err != nil {
-			return errors.New("failed to save tenant details")
+			return nil, err
 		}
 
 		if err := s.repo.CreateApprovalRequest(user.ID, "tenant_approval"); err != nil {
-			return errors.New("failed to create approval request")
+			return nil, err
 		}
 	}
 
-	return nil
+	return user, nil
+}
+func (s *service) UpdateTenantMedia(tenantID uint, logoURL, videoURL string) error {
+	updates := map[string]interface{}{}
+
+	if logoURL != "" {
+		updates["logo_url"] = logoURL
+	}
+	if videoURL != "" {
+		updates["intro_video_url"] = videoURL
+	}
+
+	if len(updates) == 0 {
+		return nil // Nothing to update
+	}
+
+	return s.repo.UpdateTenantMedia(tenantID, updates)
 }
 
 // =============================

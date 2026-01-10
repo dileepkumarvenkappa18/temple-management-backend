@@ -21,8 +21,6 @@ type Service struct {
 	AuditService      auditlog.Service
 }
 
-
-
 func NewService(r *Repository, ms MembershipService, as auditlog.Service) *Service {
 	return &Service{
 		Repo:              r,
@@ -95,6 +93,9 @@ func (s *Service) CreateEntity(e *Entity, userID uint, userRoleID uint, ip strin
 	e.TrustDeedURL = strings.TrimSpace(e.TrustDeedURL)
 	e.PropertyDocsURL = strings.TrimSpace(e.PropertyDocsURL)
 	e.AdditionalDocsURLs = strings.TrimSpace(e.AdditionalDocsURLs)
+	
+	// 🆕 Sanitize media field
+	e.Media = strings.TrimSpace(e.Media)
 
 	// Save entity to database
 	if err := s.Repo.CreateEntity(e); err != nil {
@@ -151,6 +152,7 @@ func (s *Service) CreateEntity(e *Entity, userID uint, userRoleID uint, ip strin
 		"status":        e.Status,
 		"role_id":       userRoleID,
 		"auto_approved": e.Status == "approved",
+		"has_media":     e.Media != "", // 🆕 Log if media was uploaded
 	}
 
 	actionType := "TEMPLE_CREATED"
@@ -178,7 +180,6 @@ func (s *Service) GetEntityByID(id int) (Entity, error) {
 	return s.Repo.GetEntityByID(id)
 }
 
-// UpdateEntity - Temple Admin → Update own temple
 // UpdateEntity - Temple Admin → Update temple with re-approval logic for rejected temples
 func (s *Service) UpdateEntity(e Entity, userID uint, userRoleID uint, ip string, wasRejected bool) error {
 	existingEntity, err := s.Repo.GetEntityByID(int(e.ID))
@@ -217,7 +218,7 @@ func (s *Service) UpdateEntity(e Entity, userID uint, userRoleID uint, ip string
 		req := &auth.ApprovalRequest{
 			UserID:      userID,
 			EntityID:    &e.ID,
-			RequestType: "temple_reapproval", // Different type to indicate it's a re-approval
+			RequestType: "temple_reapproval",
 			Status:      "pending",
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -232,12 +233,10 @@ func (s *Service) UpdateEntity(e Entity, userID uint, userRoleID uint, ip string
 			}
 			s.AuditService.LogAction(context.Background(), &userID, &e.ID, "TEMPLE_REAPPROVAL_REQUEST_FAILED", auditDetails, ip, "failure")
 			
-			// Don't fail the entire update, just log the error
 			log.Printf("⚠️ Failed to create re-approval request for temple ID %d: %v", e.ID, err)
 		} else {
 			log.Printf("✅ Re-approval request created for previously rejected temple ID: %d", e.ID)
 			
-			// Log successful re-approval request creation
 			auditDetails := map[string]interface{}{
 				"temple_id":       e.ID,
 				"temple_name":     e.Name,
@@ -264,6 +263,7 @@ func (s *Service) UpdateEntity(e Entity, userID uint, userRoleID uint, ip string
 		"updated_fields":  getUpdatedFields(existingEntity, e),
 		"was_rejected":    wasRejected,
 		"status":          e.Status,
+		"media_updated":   existingEntity.Media != e.Media, // 🆕 Track media changes
 	}
 	
 	actionType := "TEMPLE_UPDATED"
@@ -275,11 +275,9 @@ func (s *Service) UpdateEntity(e Entity, userID uint, userRoleID uint, ip string
 
 	return nil
 }
+
 // ToggleEntityStatus toggles the active/inactive status of an entity
-// This should be added ONLY ONCE in your service.go file
-// If you have this method declared twice, remove one of them
-func (s *Service) ToggleEntityStatus(id int, isActive bool, userID uint, ip string) error{
-	// Get existing entity
+func (s *Service) ToggleEntityStatus(id int, isActive bool, userID uint, ip string) error {
 	existingEntity, err := s.Repo.GetEntityByID(id)
 	if err != nil {
 		auditDetails := map[string]interface{}{
@@ -291,7 +289,6 @@ func (s *Service) ToggleEntityStatus(id int, isActive bool, userID uint, ip stri
 		return err
 	}
 
-	// Update the status
 	if err := s.Repo.UpdateEntityStatus(id, isActive); err != nil {
 		auditDetails := map[string]interface{}{
 			"temple_id":   id,
@@ -304,7 +301,6 @@ func (s *Service) ToggleEntityStatus(id int, isActive bool, userID uint, ip stri
 		return err
 	}
 
-	// Log successful status toggle
 	statusText := "inactive"
 	if isActive {
 		statusText = "active"
@@ -365,11 +361,11 @@ func (s *Service) DeleteEntity(id int, userID uint, ip string) error {
 
 // ========== DEVOTEE MANAGEMENT ==========
 
-
 // GetDevotees - Temple Admin → Get devotees for specific entity
 func (s *Service) GetDevotees(entityID uint) ([]DevoteeDTO, error) {
 	return s.Repo.GetDevoteesByEntityID(entityID)
 }
+
 // GetDevoteeStats - Temple Admin → Get devotee statistics for entity
 func (s *Service) GetDevoteeStats(entityID uint) (DevoteeStats, error) {
 	return s.Repo.GetDevoteeStats(entityID)
@@ -444,10 +440,7 @@ func (s *Service) GetDashboardSummary(entityID uint) (DashboardSummary, error) {
 
 	return summary, nil
 }
-/*func (s *Service) GetVolunteersByEntityID(entityID uint) ([]UserEntityMembership, error) {
-	return s.Repo.GetVolunteersByEntityID(entityID)
-}
-*/
+
 // Helper function to track what fields were updated
 func getUpdatedFields(old, new Entity) []string {
 	var updatedFields []string
@@ -486,6 +479,10 @@ func getUpdatedFields(old, new Entity) []string {
 	}
 	if old.Pincode != new.Pincode {
 		updatedFields = append(updatedFields, "pincode")
+	}
+	// 🆕 Track media updates
+	if old.Media != new.Media {
+		updatedFields = append(updatedFields, "media")
 	}
 
 	return updatedFields

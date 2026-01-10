@@ -65,8 +65,6 @@ func (r *Repository) GetUserRoleID(userID uint) (uint, error) {
 	return roleID, nil
 }
 
-// Add these methods to your Repository struct in repository.go
-
 // CloseOldApprovalRequests marks old approval requests as closed when a new one is created
 func (r *Repository) CloseOldApprovalRequests(entityID uint, requestType string) error {
 	return r.DB.
@@ -115,6 +113,7 @@ func (r *Repository) UpdateApprovalRequestStatus(requestID uint, status string, 
 		Where("id = ?", requestID).
 		Updates(updates).Error
 }
+
 // Create an approval request for the temple
 func (r *Repository) CreateApprovalRequest(req *auth.ApprovalRequest) error {
 	return r.DB.Create(req).Error
@@ -184,12 +183,10 @@ func (r *Repository) GetApprovalStatsByRole() (map[string]interface{}, error) {
 	}, nil
 }
 
-// Fetch a single temple entity by ID
 // Fetch a single temple entity by ID with approval/rejection details
 func (r *Repository) GetEntityByID(id int) (Entity, error) {
 	var entity Entity
 	
-	// Query to get entity with approval/rejection details from approval_requests
 	err := r.DB.
 		Table("entities").
 		Select(`
@@ -205,13 +202,11 @@ func (r *Repository) GetEntityByID(id int) (Entity, error) {
 	return entity, err
 }
 
-// Update an existing temple entity
-// UpdateEntity - Fixed version that properly saves all fields
+// UpdateEntity - Fixed version that properly saves all fields including media
 func (r *Repository) UpdateEntity(e Entity) error {
 	e.UpdatedAt = time.Now()
 	
-	// Use Save() instead of Updates() to ensure all fields are updated
-	// Save() will update all fields including zero values
+	// Use Save() to ensure all fields are updated including zero values
 	result := r.DB.Model(&Entity{}).Where("id = ?", e.ID).Save(&e)
 	
 	if result.Error != nil {
@@ -225,7 +220,7 @@ func (r *Repository) UpdateEntity(e Entity) error {
 	return nil
 }
 
-// Alternative approach using Updates with all fields explicitly
+// Alternative approach using Updates with all fields explicitly including media
 func (r *Repository) UpdateEntityAlternative(e Entity) error {
 	e.UpdatedAt = time.Now()
 	
@@ -252,9 +247,10 @@ func (r *Repository) UpdateEntityAlternative(e Entity) error {
 		"property_docs_info":      e.PropertyDocsInfo,
 		"additional_docs_urls":    e.AdditionalDocsURLs,
 		"additional_docs_info":    e.AdditionalDocsInfo,
-		"status":                  e.Status,          // 🆕 Add status
-		"isactive":                e.IsActive,        // 🆕 Add isactive
-		"accepted_terms":          e.AcceptedTerms,   // 🆕 Add accepted_terms
+		"media":                   e.Media,           // 🆕 Add media field
+		"status":                  e.Status,
+		"isactive":                e.IsActive,
+		"accepted_terms":          e.AcceptedTerms,
 		"updated_at":              e.UpdatedAt,
 	}
 	
@@ -270,46 +266,47 @@ func (r *Repository) UpdateEntityAlternative(e Entity) error {
 	
 	return nil
 }
+
 // UpdateEntityStatus updates only the IsActive field of an entity
 func (r *Repository) UpdateEntityStatus(id int, isActive bool) error {
-    updates := map[string]interface{}{
-        "isactive":   isActive,
-        "updated_at": time.Now(),
-    }
-    
-    result := r.DB.Model(&Entity{}).Where("id = ?", id).Updates(updates)
-    
-    if result.Error != nil {
-        return result.Error
-    }
-    
-    if result.RowsAffected == 0 {
-        return fmt.Errorf("no entity found with id %d", id)
-    }
-    
-    return nil
+	updates := map[string]interface{}{
+		"isactive":   isActive,
+		"updated_at": time.Now(),
+	}
+	
+	result := r.DB.Model(&Entity{}).Where("id = ?", id).Updates(updates)
+	
+	if result.Error != nil {
+		return result.Error
+	}
+	
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("no entity found with id %d", id)
+	}
+	
+	return nil
 }
 
 // GetActiveEntities retrieves only active entities
 func (r *Repository) GetActiveEntities() ([]Entity, error) {
-    var entities []Entity
-    err := r.DB.Where("isactive = ?", true).Order("created_at DESC").Find(&entities).Error
-    return entities, err
+	var entities []Entity
+	err := r.DB.Where("isactive = ?", true).Order("created_at DESC").Find(&entities).Error
+	return entities, err
 }
 
 // GetActiveEntitiesByCreator retrieves only active entities created by a specific user
 func (r *Repository) GetActiveEntitiesByCreator(creatorID uint) ([]Entity, error) {
-    var entities []Entity
-    err := r.DB.Where("created_by = ? AND isactive = ?", creatorID, true).
-        Order("created_at DESC").
-        Find(&entities).Error
-    return entities, err
+	var entities []Entity
+	err := r.DB.Where("created_by = ? AND isactive = ?", creatorID, true).
+		Order("created_at DESC").
+		Find(&entities).Error
+	return entities, err
 }
+
 // Delete a temple entity by ID
 func (r *Repository) DeleteEntity(id int) error {
 	return r.DB.Delete(&Entity{}, id).Error
 }
-
 
 // DevoteeDTO with added nakshatra, rashi, and lagna fields
 type DevoteeDTO struct {
@@ -323,7 +320,7 @@ type DevoteeDTO struct {
 	Lagna     string `json:"lagna"`
 }
 
-// GetDevoteesByEntityID with LEFT JOIN to devotee_profiles table (PLURAL)
+// GetDevoteesByEntityID with LEFT JOIN to devotee_profiles table
 func (r *Repository) GetDevoteesByEntityID(entityID uint) ([]DevoteeDTO, error) {
 	var devotees []DevoteeDTO
 
@@ -344,6 +341,7 @@ func (r *Repository) GetDevoteesByEntityID(entityID uint) ([]DevoteeDTO, error) 
 	log.Printf("Found %d devotees for entity %d", len(devotees), entityID)
 	return devotees, nil
 }
+
 type DevoteeStats struct {
 	TotalDevotees  int64 `json:"total_devotees"`
 	ActiveDevotees int64 `json:"active_devotees"`
@@ -471,11 +469,3 @@ func (r *Repository) CountUpcomingEventsThisWeek(entityID uint) (int64, error) {
 		Count(&count).Error
 	return count, err
 }
-/*func (r *Repository) GetVolunteersByEntityID(entityID uint) ([]UserEntityMembership, error) {
-	var memberships []UserEntityMembership
-	err := r.DB.
-		Where("entity_id = ? AND status = ?", entityID, "active").
-		Find(&memberships).Error
-	return memberships, err
-}
-*/
