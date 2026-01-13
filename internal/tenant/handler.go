@@ -4,9 +4,9 @@ import (
 	//"bytes"
 	"fmt"
 	"io"
-    "os"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -14,12 +14,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	//"github.com/google/uuid"
-
+	//"github.com/google/uuid"
 	//"github.com/aws/aws-sdk-go/aws"
 	//"github.com/aws/aws-sdk-go/aws/session"
 	//"github.com/aws/aws-sdk-go/service/s3"
 )
-
 
 // Handler handles HTTP requests
 type Handler struct {
@@ -57,6 +56,7 @@ func getUserIDFromContext(c *gin.Context) (uint, bool) {
 
 	return 0, false
 }
+
 
 // =========================
 // GET TENANT PROFILE
@@ -389,6 +389,7 @@ func (h *Handler) CreateOrUpdateUser(c *gin.Context) {
         "user": user,
     })
 }
+// UploadFile handles file uploads for tenant logos and intro videos
 func (h *Handler) UploadFile(c *gin.Context) {
 	// Get logged-in user ID
 	userIDVal, exists := c.Get("userID")
@@ -404,14 +405,18 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	// Get tenant profile to resolve tenant_id
 	profile, err := h.service.GetTenantProfile(userID)
 	if err != nil {
+		log.Printf("❌ Failed to get tenant profile for user %d: %v", userID, err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Tenant profile not found"})
 		return
 	}
 	tenantID := profile.TenantID
 
+	log.Printf("📁 Upload - User ID: %d, Tenant ID from profile: %d", userID, tenantID)
+
 	// Get file
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
+		log.Printf("❌ Failed to get file from request: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to get file"})
 		return
 	}
@@ -431,17 +436,18 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	switch fileType {
 	case "logo":
 		allowedExtensions = []string{".jpg", ".jpeg", ".png", ".webp"}
-		maxSize = 5 * 1024 * 1024
+		maxSize = 5 * 1024 * 1024 // 5MB
 		folder = "logo"
 	case "video":
 		allowedExtensions = []string{".mp4", ".webm", ".mov"}
-		maxSize = 50 * 1024 * 1024
+		maxSize = 50 * 1024 * 1024 // 50MB
 		folder = "video"
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file type"})
 		return
 	}
 
+	// Validate file size
 	if header.Size > maxSize {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": fmt.Sprintf("Max file size is %d MB", maxSize/(1024*1024)),
@@ -449,6 +455,7 @@ func (h *Handler) UploadFile(c *gin.Context) {
 		return
 	}
 
+	// Validate file extension
 	ext := strings.ToLower(filepath.Ext(header.Filename))
 	valid := false
 	for _, e := range allowedExtensions {
@@ -458,36 +465,72 @@ func (h *Handler) UploadFile(c *gin.Context) {
 		}
 	}
 	if !valid {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file extension"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Invalid file extension. Allowed: %v", allowedExtensions),
+		})
 		return
 	}
 
-	// Create directory
-	baseDir := fmt.Sprintf("uploads/tenants/%d/%s", tenantID, folder)
+	// ✅ Use absolute path /data/uploads to match main.go
+	baseDir := filepath.Join("/data/uploads", "tenants", fmt.Sprintf("%d", tenantID), folder)
+	
+	log.Printf("📁 Creating directory: %s", baseDir)
+	
+	// Create directory with proper permissions
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
+		log.Printf("❌ Failed to create directory: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create directory"})
 		return
 	}
 
-	// Save file
+	// Generate unique filename with timestamp
 	filename := fmt.Sprintf("%d%s", time.Now().Unix(), ext)
 	fullPath := filepath.Join(baseDir, filename)
 
+	log.Printf("📁 Saving file to: %s", fullPath)
+
+	// Create the file
 	out, err := os.Create(fullPath)
 	if err != nil {
+		log.Printf("❌ Failed to create file: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
 		return
 	}
 	defer out.Close()
 
+	// Copy uploaded file content to destination
 	if _, err := io.Copy(out, file); err != nil {
+		log.Printf("❌ Failed to write file: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to write file"})
 		return
 	}
 
-	fileURL := "/" + fullPath
+	// ✅ Verify file was actually created
+	if fileInfo, err := os.Stat(fullPath); err != nil {
+		log.Printf("❌ File verification failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "File save verification failed"})
+		return
+	} else {
+		log.Printf("✅ File verified on disk: %s (%d bytes)", fullPath, fileInfo.Size())
+	}
+
+	// ✅ Return URL that matches router.Static("/uploads", "/data/uploads")
+	fileURL := fmt.Sprintf("/uploads/tenants/%d/%s/%s", tenantID, folder, filename)
+	
+	log.Printf("✅ File uploaded successfully!")
+	log.Printf("   📂 Disk path: %s", fullPath)
+	log.Printf("   🌐 URL path: %s", fileURL)
+	log.Printf("   📏 File size: %d bytes", header.Size)
+	log.Printf("   📝 Original name: %s", header.Filename)
 
 	c.JSON(http.StatusOK, gin.H{
 		"url": fileURL,
+		"message": "File uploaded successfully",
+		"file_info": gin.H{
+			"original_name": header.Filename,
+			"saved_name": filename,
+			"size": header.Size,
+			"type": fileType,
+		},
 	})
 }

@@ -224,6 +224,11 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	superadminRoutes.Use(middleware.RBACMiddleware("superadmin"))
 
 	{
+		// In routes.go, inside the superadminRoutes group
+superadminRoutes.POST("/upload/logo", superadminHandler.UploadLogo)
+superadminRoutes.POST("/upload/video", superadminHandler.UploadVideo)
+superadminRoutes.DELETE("/upload/file", superadminHandler.DeleteUploadedFile)
+
 		// ================ TENANT APPROVAL MANAGEMENT ================
 		// Paginated list of all tenants with optional ?status=pending&limit=10&page=1
 		superadminRoutes.GET("/tenants", superadminHandler.GetTenantsWithFilters)
@@ -605,12 +610,18 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	eventService.NotifSvc = notifSvc
 	sevaService.SetNotifService(notifSvc)
 
-	// ========== Tenant User Management ==========
-	tenantRepo := tenant.NewRepository(database.DB)
-	tenantService := tenant.NewService(tenantRepo)
-	tenantHandler := tenant.NewHandler(tenantService)
-	tenantProfileRoutes := protected.Group("/tenant/profile")
-tenantProfileRoutes.Use(middleware.RequireTempleAccess()) // Allow templeadmin, standarduser, monitoringuser
+/// ========== Tenant User Management (Complete Section) ==========
+// Add this section in routes.go around line 580-650
+
+// Initialize tenant repository, service, and handler
+tenantRepo := tenant.NewRepository(database.DB)
+tenantService := tenant.NewService(tenantRepo)
+tenantHandler := tenant.NewHandler(tenantService)
+
+// ========== Tenant Profile Routes ==========
+tenantProfileRoutes := protected.Group("/tenant/profile")
+// Use RBAC middleware instead of RequireTempleAccess for tenant profile
+tenantProfileRoutes.Use(middleware.RBACMiddleware("templeadmin", "standarduser", "monitoringuser"))
 {
     // Get tenant profile - all roles can view
     tenantProfileRoutes.GET("", tenantHandler.GetTenantProfile)
@@ -622,32 +633,37 @@ tenantProfileRoutes.Use(middleware.RequireTempleAccess()) // Allow templeadmin, 
         writeRoutes.PUT("", tenantHandler.UpdateTenantProfile)
     }
 }
-// Add upload route
+
+// Tenant upload routes
 tenantUploadRoutes := protected.Group("/tenant")
-tenantUploadRoutes.Use(middleware.RequireTempleAccess())
-tenantUploadRoutes.Use(middleware.RequireWriteAccess())
+tenantUploadRoutes.Use(middleware.RBACMiddleware("templeadmin", "standarduser", "monitoringuser"))
 {
-    tenantUploadRoutes.POST("/upload", tenantHandler.UploadFile)
+    writeRoutes := tenantUploadRoutes.Group("")
+    writeRoutes.Use(middleware.RequireWriteAccess())
+    {
+        writeRoutes.POST("/upload", tenantHandler.UploadFile)
+    }
 }
 
-	// Tenant user routes (templeadmin + standarduser manage, monitoringuser read-only)
-	tenantRoutes := protected.Group("/tenants/:id/user")
-	tenantRoutes.Use(middleware.RequireTempleAccess()) // restrict to members of this temple
-	{
-		// Read operations - all 3 roles can access
-		tenantRoutes.GET("/management", tenantHandler.GetUsers)
-		// Add this inside the tenant routes group
-		tenantRoutes.PATCH("/:id/user/:userId/status", tenantHandler.UpdateUserStatus)
+// ========== Tenant User Management Routes ==========
+// Tenant user routes (templeadmin + standarduser manage, monitoringuser read-only)
+tenantRoutes := protected.Group("/tenants/:id/user")
+tenantRoutes.Use(middleware.RequireTempleAccess()) // restrict to members of this temple
+{
+    // Read operations - all 3 roles can access
+    tenantRoutes.GET("/management", tenantHandler.GetUsers)
+    
+    // Update user status
+    tenantRoutes.PATCH("/:userId/status", tenantHandler.UpdateUserStatus)
 
-		// Write operations - only templeadmin + standarduser
-		writeRoutes := tenantRoutes.Group("")
-		writeRoutes.Use(middleware.RequireWriteAccess())
-		{
-			writeRoutes.POST("/", tenantHandler.CreateOrUpdateUser)
-			writeRoutes.PUT("/:userId", tenantHandler.UpdateUser)
-		}
-	}
-	
+    // Write operations - only templeadmin + standarduser
+    writeRoutes := tenantRoutes.Group("")
+    writeRoutes.Use(middleware.RequireWriteAccess())
+    {
+        writeRoutes.POST("/", tenantHandler.CreateOrUpdateUser)
+        writeRoutes.PUT("/:userId", tenantHandler.UpdateUser)
+    }
+}
 
 	// ========== Reports ==========
 	{
@@ -695,7 +711,7 @@ tenantUploadRoutes.Use(middleware.RequireWriteAccess())
 		}
 
 		// For upload files that don't exist, provide helpful error - Updated path
-		if strings.HasPrefix(c.Request.URL.Path, "/uploads") {
+		if strings.HasPrefix(c.Request.URL.Path, "/data/uploads") {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "File not found",
 				"message": "The requested file does not exist or has been moved",

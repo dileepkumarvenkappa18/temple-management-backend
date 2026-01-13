@@ -1,12 +1,17 @@
 package superadmin
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/middleware"
 )
@@ -19,6 +24,225 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
+
+// UploadLogo handles logo uploads for temple admins
+// Files are saved in uploads/tenants/{assignedTenantID}/
+func (h *Handler) UploadLogo(c *gin.Context) {
+	// Get user ID from context (set by auth middleware)
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	file, err := c.FormFile("logo")
+	if err != nil {
+		log.Printf("Error getting logo file: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Logo file is required"})
+		return
+	}
+
+	log.Printf("Received logo file: %s, Size: %d bytes, UserID: %v", file.Filename, file.Size, userID)
+
+	// Validate file type
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	allowedExts := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true}
+	if !allowedExts[ext] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file type. Only JPG, PNG, GIF, and WebP are allowed"})
+		return
+	}
+
+	// Validate file size (max 5MB)
+	if file.Size > 5*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File size must be less than 5MB"})
+		return
+	}
+
+	// Check if targetUserId is provided (for SuperAdmin creating new user)
+	var tenantID uint
+	targetUserIDStr := c.PostForm("targetUserId")
+	
+	if targetUserIDStr != "" {
+		// SuperAdmin is creating a new templeadmin - use target user ID as tenant ID
+		targetUserID, err := strconv.ParseUint(targetUserIDStr, 10, 32)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid target user ID"})
+			return
+		}
+		tenantID = uint(targetUserID)
+		log.Printf("Using target user ID as tenant ID: %v", tenantID)
+	} else {
+		// Normal upload - get tenant ID based on user's assignment or role
+		var err error
+		tenantID, err = h.service.GetTenantIDForUser(c.Request.Context(), userID)
+		if err != nil {
+			log.Printf("Error getting tenant ID for user %v: %v", userID, err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Failed to determine tenant ID: %v", err)})
+			return
+		}
+		log.Printf("Using assigned/role-based tenant ID: %v for user ID: %v", tenantID, userID)
+	}
+
+	// Generate unique filename
+	filename := fmt.Sprintf("logo_%s_%s%s", uuid.New().String(), time.Now().Format("20060102150405"), ext)
+	
+	// Create tenant-specific directory structure: uploads/tenants/{tenantID}/
+	uploadDir := fmt.Sprintf("uploads/tenants/%v", tenantID)
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		log.Printf("Error creating upload directory: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create upload directory"})
+		return
+	}
+
+	// Save file
+	savePath := filepath.Join(uploadDir, filename)
+	if err := c.SaveUploadedFile(file, savePath); err != nil {
+		log.Printf("Error saving file: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
+		return
+	}
+
+	log.Printf("File saved successfully: %s", savePath)
+
+	// Return URL in the format that can be served by static file handler
+	fileURL := fmt.Sprintf("/uploads/tenants/%v/%s", tenantID, filename)
+	
+	// Return response with clear structure
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"url":      fileURL,
+			"filename": filename,
+			"path":     savePath,
+			"tenantId": tenantID,
+		},
+		"message": "Logo uploaded successfully",
+	})
+}
+
+// UploadVideo handles video uploads for temple admins
+// Files are saved in uploads/tenants/{assignedTenantID}/
+func (h *Handler) UploadVideo(c *gin.Context) {
+	// Get user ID from context (set by auth middleware)
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	file, err := c.FormFile("video")
+	if err != nil {
+		log.Printf("Error getting video file: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Video file is required"})
+		return
+	}
+
+	log.Printf("Received video file: %s, Size: %d bytes, UserID: %v", file.Filename, file.Size, userID)
+
+	// Validate file type
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	allowedExts := map[string]bool{".mp4": true, ".avi": true, ".mov": true, ".wmv": true, ".webm": true}
+	if !allowedExts[ext] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file type. Only MP4, AVI, MOV, WMV, and WebM are allowed"})
+		return
+	}
+
+	// Validate file size (max 50MB)
+	if file.Size > 50*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File size must be less than 50MB"})
+		return
+	}
+
+	// Check if targetUserId is provided (for SuperAdmin creating new user)
+	var tenantID uint
+	targetUserIDStr := c.PostForm("targetUserId")
+	
+	if targetUserIDStr != "" {
+		// SuperAdmin is creating a new templeadmin - use target user ID as tenant ID
+		targetUserID, err := strconv.ParseUint(targetUserIDStr, 10, 32)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid target user ID"})
+			return
+		}
+		tenantID = uint(targetUserID)
+		log.Printf("Using target user ID as tenant ID: %v", tenantID)
+	} else {
+		// Normal upload - get tenant ID based on user's assignment or role
+		var err error
+		tenantID, err = h.service.GetTenantIDForUser(c.Request.Context(), userID)
+		if err != nil {
+			log.Printf("Error getting tenant ID for user %v: %v", userID, err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Failed to determine tenant ID: %v", err)})
+			return
+		}
+		log.Printf("Using assigned/role-based tenant ID: %v for user ID: %v", tenantID, userID)
+	}
+
+	// Generate unique filename
+	filename := fmt.Sprintf("video_%s_%s%s", uuid.New().String(), time.Now().Format("20060102150405"), ext)
+	
+	// Create tenant-specific directory structure: uploads/tenants/{tenantID}/
+	uploadDir := fmt.Sprintf("uploads/tenants/%v", tenantID)
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		log.Printf("Error creating upload directory: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create upload directory"})
+		return
+	}
+
+	// Save file
+	savePath := filepath.Join(uploadDir, filename)
+	if err := c.SaveUploadedFile(file, savePath); err != nil {
+		log.Printf("Error saving file: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
+		return
+	}
+
+	log.Printf("File saved successfully: %s", savePath)
+
+	// Return URL in the format that can be served by static file handler
+	fileURL := fmt.Sprintf("/uploads/tenants/%v/%s", tenantID, filename)
+	
+	// Return response with clear structure
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"url":      fileURL,
+			"filename": filename,
+			"path":     savePath,
+			"tenantId": tenantID,
+		},
+		"message": "Video uploaded successfully",
+	})
+}
+
+// DeleteUploadedFile - Delete uploaded file
+func (h *Handler) DeleteUploadedFile(c *gin.Context) {
+	var req struct {
+		FileURL string `json:"fileUrl" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File URL is required"})
+		return
+	}
+
+	// Extract path from URL (remove leading slash)
+	filePath := strings.TrimPrefix(req.FileURL, "/")
+
+	// Delete file
+	if err := os.Remove(filePath); err != nil {
+		log.Printf("Error deleting file %s: %v", filePath, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete file"})
+		return
+	}
+
+	log.Printf("File deleted successfully: %s", filePath)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "File deleted successfully",
+	})
+}
 // =========================== TENANT APPROVAL ===========================
 
 // GET /superadmin/tenants?status=pending&limit=10&page=1

@@ -15,11 +15,14 @@ type Repository struct {
 func NewRepository(db *gorm.DB) *Repository {
     return &Repository{db: db}
 }
+// In repository.go, replace GetTenantProfileByUserID with this improved version:
+
 func (r *Repository) GetTenantProfileByUserID(userID uint) (*TenantProfileResponse, error) {
 	log.Printf("🔍 REPO: Fetching tenant profile for user ID: %d", userID)
 
 	var row tenantProfileRow
 
+	// Strategy 1: Try via tenant_user_assignments (for standarduser, monitoringuser)
 	err := r.db.Table("users").
 		Select(`
 			tenant_details.id AS tenant_id,
@@ -43,17 +46,51 @@ func (r *Repository) GetTenantProfileByUserID(userID uint) (*TenantProfileRespon
 		Where("tenant_user_assignments.status = ?", "active").
 		Scan(&row).Error
 
+	// Strategy 2: If not found via assignments, try entity_id (for templeadmin)
+	if err != nil || row.TenantID == 0 {
+		log.Printf("⚠️ REPO: No active assignment found, trying entity_id for user ID: %d", userID)
+		
+		err = r.db.Table("users").
+			Select(`
+				tenant_details.id AS tenant_id,
+				tenant_details.temple_name,
+				tenant_details.temple_place,
+				tenant_details.temple_address,
+				tenant_details.temple_phone_no,
+				tenant_details.temple_description,
+				tenant_details.logo_url,
+				tenant_details.intro_video_url,
+				users.id AS user_id,
+				users.full_name AS user_full_name,
+				users.email AS user_email,
+				users.phone AS user_phone,
+				user_roles.role_name AS user_role
+			`).
+			Joins("INNER JOIN tenant_details ON users.entity_id = tenant_details.id").
+			Joins("LEFT JOIN user_roles ON users.role_id = user_roles.id").
+			Where("users.id = ?", userID).
+			Where("users.entity_id IS NOT NULL").
+			Where("users.entity_id > 0").
+			Scan(&row).Error
+		
+		if err == nil && row.TenantID > 0 {
+			log.Printf("✅ REPO: Found tenant via entity_id: %d", row.TenantID)
+		}
+	} else {
+		log.Printf("✅ REPO: Found tenant via assignment: %d", row.TenantID)
+	}
+
 	if err != nil {
 		log.Printf("❌ REPO: Database error: %v", err)
 		return nil, err
 	}
 
 	if row.TenantID == 0 {
-		log.Printf("⚠️ REPO: No active tenant assignment found for user ID: %d", userID)
-		return nil, errors.New("no active tenant assignment found")
+		log.Printf("⚠️ REPO: No tenant found for user ID: %d (tried both assignments and entity_id)", userID)
+		return nil, errors.New("no tenant assignment found")
 	}
 
-	// ✅ Map flat row → response DTO
+	// Map flat row → response DTO
 	profile := TenantProfileResponse{
 		TenantID:          row.TenantID,
 		TempleName:        row.TempleName,
@@ -71,7 +108,7 @@ func (r *Repository) GetTenantProfileByUserID(userID uint) (*TenantProfileRespon
 	profile.User.Phone = row.UserPhone
 	profile.User.Role = row.UserRole
 
-	log.Printf("✅ REPO: Tenant profile fetched successfully for user %d", userID)
+	log.Printf("✅ REPO: Tenant profile fetched successfully - Tenant ID: %d, User: %s", profile.TenantID, profile.User.FullName)
 	return &profile, nil
 }
 

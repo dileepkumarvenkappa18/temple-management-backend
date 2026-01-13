@@ -825,6 +825,7 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 				Name:        "Temple " + strconv.Itoa(id),
 				Description: "Temple associated with your account",
 				Status:      "active",
+				Media:       "mediaObj",
 				CreatedBy:   uint(id),
 				CreatedAt:   time.Now(),
 				UpdatedAt:   time.Now(),
@@ -860,49 +861,64 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 		return
 	}
 
-	// ================= MEDIA FIX =================
-	mediaObj := map[string]string{
-		"logo":  "",
-		"video": "",
-	}
+	// ================= MEDIA PARSING =================
+	
+// ================= MEDIA PARSING =================
+mediaObj := map[string]interface{}{} // Changed from map[string]string to map[string]interface{}
 
-	if entity.Media != "" {
-		if err := json.Unmarshal([]byte(entity.Media), &mediaObj); err != nil {
-			log.Printf("⚠️ Failed to parse media JSON for entity %d: %v", entity.ID, err)
-		}
-	}
-
-	// ================= RESPONSE =================
-	c.JSON(http.StatusOK, gin.H{
-		"id":               entity.ID,
-		"name":             entity.Name,
-		"main_deity":       entity.MainDeity,
-		"temple_type":      entity.TempleType,
-		"established_year": entity.EstablishedYear,
-		"phone":            entity.Phone,
-		"email":            entity.Email,
-		"description":      entity.Description,
-		"street_address":  entity.StreetAddress,
-		"city":             entity.City,
-		"district":         entity.District,
-		"state":            entity.State,
-		"pincode":          entity.Pincode,
-		"landmark":         entity.Landmark,
-		"map_link":         entity.MapLink,
-		"status":           entity.Status,
-		"isactive":         entity.IsActive,
-
-		// documents
-		"registration_cert_url": entity.RegistrationCertURL,
-		"trust_deed_url":        entity.TrustDeedURL,
-		"property_docs_url":     entity.PropertyDocsURL,
-		"additional_docs_urls":  entity.AdditionalDocsURLs,
-
-		// media (FIXED)
-		"media": mediaObj,
-	})
+// 🔥 CRITICAL FIX: Parse media field if it exists
+if entity.Media != "" {
+    log.Printf("📦 Raw Media from DB: %s", entity.Media)
+    if err := json.Unmarshal([]byte(entity.Media), &mediaObj); err != nil {
+        log.Printf("⚠️ Failed to parse media JSON for entity %d: %v", entity.ID, err)
+        log.Printf("⚠️ Media content: %s", entity.Media)
+        // Set empty media object on error
+        mediaObj = map[string]interface{}{
+            "logo":  "",
+            "video": "",
+        }
+    } else {
+        log.Printf("✅ Parsed Media - Logo: %v, Video: %v", mediaObj["logo"], mediaObj["video"])
+    }
+} else {
+    log.Printf("⚠️ No media found for entity %d", entity.ID)
+    // Set empty media object when no media
+    mediaObj = map[string]interface{}{
+        "logo":  "",
+        "video": "",
+    }
 }
 
+// ================= RESPONSE =================
+c.JSON(http.StatusOK, gin.H{
+    "id":                    entity.ID,
+    "name":                  entity.Name,
+    "main_deity":            entity.MainDeity,
+    "temple_type":           entity.TempleType,
+    "established_year":      entity.EstablishedYear,
+    "phone":                 entity.Phone,
+    "email":                 entity.Email,
+    "description":           entity.Description,
+    "street_address":        entity.StreetAddress,
+    "city":                  entity.City,
+    "district":              entity.District,
+    "state":                 entity.State,
+    "pincode":               entity.Pincode,
+    "landmark":              entity.Landmark,
+    "map_link":              entity.MapLink,
+    "status":                entity.Status,
+    "isactive":              entity.IsActive,
+
+    // documents
+    "registration_cert_url": entity.RegistrationCertURL,
+    "trust_deed_url":        entity.TrustDeedURL,
+    "property_docs_url":     entity.PropertyDocsURL,
+    "additional_docs_urls":  entity.AdditionalDocsURLs,
+
+    // 🔥 CRITICAL: MUST include media in response
+    "media": mediaObj,
+})
+}
 
 func (h *Handler) UpdateEntity(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))

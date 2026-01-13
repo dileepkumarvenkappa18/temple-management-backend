@@ -65,6 +65,8 @@ type CreateUserRequest struct {
 	TempleAddress     string `json:"templeAddress"`
 	TemplePhoneNo     string `json:"templePhoneNo"`
 	TempleDescription string `json:"templeDescription"`
+	LogoURL           string `json:"logoUrl"`           // NEW
+	IntroVideoURL     string `json:"introVideoUrl"`		// NEW
 }
 
 type UpdateUserRequest struct {
@@ -76,6 +78,8 @@ type UpdateUserRequest struct {
 	TempleAddress     string `json:"templeAddress"`
 	TemplePhoneNo     string `json:"templePhoneNo"`
 	TempleDescription string `json:"templeDescription"`
+	LogoURL           string `json:"logoUrl"`           // NEW
+	IntroVideoURL     string `json:"introVideoUrl"`     // NEW
 }
 
 // NEW: Struct for tenant selection (different from assignment)

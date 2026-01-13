@@ -600,6 +600,26 @@ func (r *Repository) GetUsersWithDetails(ctx context.Context) ([]UserResponse, i
 
 	return users, total, nil
 }
+func (r *Repository) GetAssignedTenantID(ctx context.Context, userID uint) (uint, error) {
+	var assignment struct {
+		TenantID uint `json:"tenant_id"`
+	}
+
+	err := r.db.WithContext(ctx).
+		Table("tenant_user_assignments").
+		Select("tenant_id").
+		Where("user_id = ? AND status = ?", userID, "active").
+		First(&assignment).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, errors.New("no active tenant assignment found")
+		}
+		return 0, err
+	}
+
+	return assignment.TenantID, nil
+}
 
 // Get user by ID with temple details
 func (r *Repository) GetUserWithDetails(ctx context.Context, userID uint) (*UserResponse, error) {
@@ -628,6 +648,8 @@ func (r *Repository) GetUserWithDetails(ctx context.Context, userID uint) (*User
             td.temple_address,
             td.temple_phone_no,
             td.temple_description,
+			COALESCE(td.logo_url, '') as logo_url,
+		COALESCE(td.intro_video_url, '') as intro_video_url,
             td.created_at as temple_created_at,
             td.updated_at as temple_updated_at,
             tenant_user.full_name as tenant_name,

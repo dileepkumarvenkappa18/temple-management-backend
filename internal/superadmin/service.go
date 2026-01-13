@@ -32,6 +32,69 @@ func NewService(repo *Repository, auditService auditlog.Service) *Service {
 	}
 }
 
+func (s *Service) GetTenantIDForUser(ctx context.Context, userIDInterface interface{}) (uint, error) {
+	// Convert interface to uint
+	var userID uint
+	switch v := userIDInterface.(type) {
+	case uint:
+		userID = v
+	case int:
+		userID = uint(v)
+	case float64:
+		userID = uint(v)
+	default:
+		return 0, fmt.Errorf("invalid user ID type: %T", userIDInterface)
+	}
+
+	if userID == 0 {
+		return 0, errors.New("invalid user ID: cannot be 0")
+	}
+
+	// Get user from database to check their role
+	user, err := s.repo.GetUserByID(ctx, userID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// Get role name
+	var roleName string
+	if user.RoleID > 0 {
+		role, err := s.repo.GetUserRoleByID(ctx, user.RoleID)
+		if err == nil && role != nil {
+			roleName = strings.ToLower(role.RoleName)
+		}
+	}
+
+	// Case 1: User is a temple admin - they ARE the tenant, use their own ID
+	if roleName == "templeadmin" {
+		return userID, nil
+	}
+
+	// Case 2: User is standarduser or monitoringuser - get their ASSIGNED tenant ID
+	if roleName == "standarduser" || roleName == "monitoringuser" {
+		assignedTenantID, err := s.repo.GetAssignedTenantID(ctx, userID)
+		if err != nil {
+			return 0, fmt.Errorf("failed to get assigned tenant for user %d: %w", userID, err)
+		}
+		if assignedTenantID == 0 {
+			return 0, fmt.Errorf("user %d has no assigned tenant", userID)
+		}
+		return assignedTenantID, nil
+	}
+
+	// Case 3: Superadmin creating a templeadmin
+	// In this case, the files are being uploaded BEFORE the user is created
+	// So we use the current user's ID as the tenant ID
+	// (The new templeadmin will get this ID when created)
+	if roleName == "superadmin" {
+		// For superadmin, we need to determine which tenant they're creating files for
+		// This is a bit tricky since the user doesn't exist yet
+		// We'll use the userID as-is, assuming it's the new tenant being created
+		return userID, nil
+	}
+
+	return 0, fmt.Errorf("unable to determine tenant ID for user %d with role %s", userID, roleName)
+}
 // ================== TENANT ==================
 
 func (s *Service) ApproveTenant(ctx context.Context, userID uint, adminID uint, ip string) error {
@@ -464,6 +527,8 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, adminID
 			TempleAddress:     req.TempleAddress,
 			TemplePhoneNo:     req.TemplePhoneNo,
 			TempleDescription: req.TempleDescription,
+			LogoURL:           req.LogoURL,           // NEW	
+			IntroVideoURL:     req.IntroVideoURL,     // NEW
 		}
 
 		if err := s.repo.CreateTenantDetails(ctx, tenantDetails); err != nil {
@@ -572,7 +637,7 @@ func (s *Service) UpdateUser(ctx context.Context, userID uint, req UpdateUserReq
 	// Update temple details if user is templeadmin and temple details provided
 	if existingUser.Role.RoleName == "templeadmin" &&
 		(req.TempleName != "" || req.TemplePlace != "" || req.TempleAddress != "" ||
-			req.TemplePhoneNo != "" || req.TempleDescription != "") {
+			req.TemplePhoneNo != "" || req.TempleDescription != "" || req.LogoURL != "" || req.IntroVideoURL != "") {
 
 		tenantDetails := &auth.TenantDetails{}
 		templeChanges := make(map[string]interface{})
@@ -596,6 +661,15 @@ func (s *Service) UpdateUser(ctx context.Context, userID uint, req UpdateUserReq
 		if req.TempleDescription != "" {
 			tenantDetails.TempleDescription = req.TempleDescription
 			templeChanges["temple_description"] = req.TempleDescription
+		}
+		if req.LogoURL != "" {
+			tenantDetails.LogoURL = req.LogoURL
+			templeChanges["logo_url"] = req.LogoURL
+		}
+		// NEW: Handle video URL update
+		if req.IntroVideoURL != "" {
+			tenantDetails.IntroVideoURL = req.IntroVideoURL
+			templeChanges["intro_video_url"] = req.IntroVideoURL
 		}
 
 		if err := s.repo.UpdateTenantDetails(ctx, userID, tenantDetails); err != nil {
