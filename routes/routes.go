@@ -315,7 +315,7 @@ superadminRoutes.DELETE("/upload/file", superadminHandler.DeleteUploadedFile)
 		superadminHandler.GetTenantsForSelection)
 
 	protected.GET("/tenantsInfo",
-		middleware.RBACMiddleware("templeadmin", "standarduser", "monitoringuser", "devotee"),
+		middleware.RBACMiddleware("templeadmin", "standarduser", "monitoringuser", "devotee","superadmin"),
 		superadminHandler.GetTenantsWithFilters)
 	// ========== Seva Routes ==========
 	// ==================== SEVA ROUTES ====================
@@ -372,6 +372,17 @@ superadminRoutes.DELETE("/upload/file", superadminHandler.DeleteUploadedFile)
 		entityService := entity.NewService(entityRepo, profileService, auditSvc)
 		// UPDATED: Use persistent volume path and proper file serving path
 		entityHandler := entity.NewHandler(entityService, "/data/uploads", "/files")
+		// ✅ Devotee can view temple (entity) details by ID – READ ONLY
+protected.GET("/entities/:id/details",
+	middleware.RBACMiddleware(
+		"devotee",
+		"volunteer",
+		"templeadmin",
+		"superadmin",
+	),
+	entityHandler.GetEntityByID,
+)
+
 
 		// Add special endpoint for templeadmins to view their created entities
 		protected.GET("/entities/by-creator", middleware.RBACMiddleware("templeadmin"), func(c *gin.Context) {
@@ -433,7 +444,7 @@ superadminRoutes.DELETE("/upload/file", superadminHandler.DeleteUploadedFile)
 
 		// GetAllEntities - allowed for templeadmin, superadmin, standarduser, monitoringuser
 		protected.GET("/entities",
-			middleware.RBACMiddleware("templeadmin", "superadmin", "standarduser", "monitoringuser"),
+			middleware.RBACMiddleware("templeadmin", "superadmin", "standarduser", "monitoringuser","devotee","volunteer"),
 			entityHandler.GetAllEntities,
 		)
 	}
@@ -501,6 +512,7 @@ superadminRoutes.DELETE("/upload/file", superadminHandler.DeleteUploadedFile)
 	templeSearchRoutes := protected.Group("/temples")
 	{
 		templeSearchRoutes.GET("/search", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.SearchTemples)
+		templeSearchRoutes.GET("/entities", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.GetRecentTemples)
 		templeSearchRoutes.GET("/recent", middleware.RBACMiddleware("devotee", "volunteer"), profileHandler.GetRecentTemples)
 	}
 

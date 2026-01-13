@@ -835,8 +835,17 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 			return
 		}
 	}
+	
 
 	// ================= PERMISSION CHECK =================
+	// ================= PERMISSION CHECK =================
+
+// ✅ Public read-only access for devotees via /details
+if strings.HasSuffix(c.FullPath(), "/details") &&
+	user.Role.RoleName == "devotee" {
+	// allow access, skip permission checks
+} else {
+
 	hasAccess := false
 
 	switch user.Role.RoleName {
@@ -857,9 +866,12 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 	}
 
 	if !hasAccess {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied to this entity"})
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "Access denied to this entity",
+		})
 		return
 	}
+}
 
 	// ================= MEDIA PARSING =================
 	

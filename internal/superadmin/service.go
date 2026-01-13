@@ -564,8 +564,15 @@ func (s *Service) GetUserByID(ctx context.Context, userID uint) (*UserResponse, 
 }
 
 // Update user
-func (s *Service) UpdateUser(ctx context.Context, userID uint, req UpdateUserRequest, adminID uint, ip string) error {
-	// Get existing user to check if it exists
+func (s *Service) UpdateUser(
+	ctx context.Context,
+	userID uint,
+	req UpdateUserRequest,
+	adminID uint,
+	ip string,
+) error {
+
+	// Fetch existing user
 	existingUser, err := s.repo.GetUserWithDetails(ctx, userID)
 	if err != nil {
 		s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATE_FAILED", map[string]interface{}{
@@ -575,125 +582,125 @@ func (s *Service) UpdateUser(ctx context.Context, userID uint, req UpdateUserReq
 		return errors.New("user not found")
 	}
 
-	// Check if email is being changed and if new email already exists
-	if req.Email != "" && req.Email != existingUser.Email {
-		exists, err := s.repo.UserExistsByEmail(ctx, req.Email)
+	// ======================
+	// EMAIL CHANGE CHECK
+	// ======================
+	if req.Email != nil && *req.Email != existingUser.Email {
+		exists, err := s.repo.UserExistsByEmail(ctx, *req.Email)
 		if err != nil {
-			s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATE_FAILED", map[string]interface{}{
-				"target_user_id": userID,
-				"target_email":   existingUser.Email,
-				"new_email":      req.Email,
-				"reason":         "failed to check email availability",
-			}, ip, "failure")
 			return errors.New("failed to check email availability")
 		}
 		if exists {
-			s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATE_FAILED", map[string]interface{}{
-				"target_user_id": userID,
-				"target_email":   existingUser.Email,
-				"new_email":      req.Email,
-				"reason":         "email already exists",
-			}, ip, "failure")
 			return errors.New("email already exists")
 		}
 	}
 
-	// Prepare user updates
+	// ======================
+	// USER UPDATE
+	// ======================
 	userUpdates := &auth.User{}
 	changes := make(map[string]interface{})
 
-	if req.FullName != "" {
-		userUpdates.FullName = req.FullName
-		changes["full_name"] = req.FullName
+	if req.FullName != nil {
+		userUpdates.FullName = *req.FullName
+		changes["full_name"] = *req.FullName
 	}
-	if req.Email != "" {
-		userUpdates.Email = req.Email
-		changes["email"] = req.Email
+
+	if req.Email != nil {
+		userUpdates.Email = *req.Email
+		changes["email"] = *req.Email
 	}
-	if req.Phone != "" {
-		phone, err := cleanPhone(req.Phone)
+
+	if req.Phone != nil {
+		phone, err := cleanPhone(*req.Phone)
 		if err != nil {
-			s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATE_FAILED", map[string]interface{}{
-				"target_user_id": userID,
-				"target_email":   existingUser.Email,
-				"reason":         "invalid phone number",
-			}, ip, "failure")
 			return err
 		}
 		userUpdates.Phone = phone
 		changes["phone"] = phone
 	}
 
-	// Update user
 	if err := s.repo.UpdateUser(ctx, userID, userUpdates); err != nil {
-		s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATE_FAILED", map[string]interface{}{
-			"target_user_id": userID,
-			"target_email":   existingUser.Email,
-			"reason":         "failed to update user",
-		}, ip, "failure")
 		return errors.New("failed to update user")
 	}
 
-	// Update temple details if user is templeadmin and temple details provided
-	if existingUser.Role.RoleName == "templeadmin" &&
-		(req.TempleName != "" || req.TemplePlace != "" || req.TempleAddress != "" ||
-			req.TemplePhoneNo != "" || req.TempleDescription != "" || req.LogoURL != "" || req.IntroVideoURL != "") {
+	// ======================
+	// TEMPLE DETAILS UPDATE
+	// ======================
+	if existingUser.Role.RoleName == "templeadmin" {
 
-		tenantDetails := &auth.TenantDetails{}
+		tenantUpdates := &auth.TenantDetails{}
 		templeChanges := make(map[string]interface{})
+		hasTempleUpdate := false
 
-		if req.TempleName != "" {
-			tenantDetails.TempleName = req.TempleName
-			templeChanges["temple_name"] = req.TempleName
-		}
-		if req.TemplePlace != "" {
-			tenantDetails.TemplePlace = req.TemplePlace
-			templeChanges["temple_place"] = req.TemplePlace
-		}
-		if req.TempleAddress != "" {
-			tenantDetails.TempleAddress = req.TempleAddress
-			templeChanges["temple_address"] = req.TempleAddress
-		}
-		if req.TemplePhoneNo != "" {
-			tenantDetails.TemplePhoneNo = req.TemplePhoneNo
-			templeChanges["temple_phone"] = req.TemplePhoneNo
-		}
-		if req.TempleDescription != "" {
-			tenantDetails.TempleDescription = req.TempleDescription
-			templeChanges["temple_description"] = req.TempleDescription
-		}
-		if req.LogoURL != "" {
-			tenantDetails.LogoURL = req.LogoURL
-			templeChanges["logo_url"] = req.LogoURL
-		}
-		// NEW: Handle video URL update
-		if req.IntroVideoURL != "" {
-			tenantDetails.IntroVideoURL = req.IntroVideoURL
-			templeChanges["intro_video_url"] = req.IntroVideoURL
+		if req.TempleName != nil {
+			if *req.TempleName == "" {
+				return errors.New("temple name cannot be empty")
+			}
+			tenantUpdates.TempleName = *req.TempleName
+			templeChanges["temple_name"] = *req.TempleName
+			hasTempleUpdate = true
 		}
 
-		if err := s.repo.UpdateTenantDetails(ctx, userID, tenantDetails); err != nil {
-			s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATE_FAILED", map[string]interface{}{
-				"target_user_id": userID,
-				"target_email":   existingUser.Email,
-				"reason":         "failed to update temple details",
-			}, ip, "failure")
-			return errors.New("failed to update temple details")
+		if req.TemplePlace != nil {
+			if *req.TemplePlace == "" {
+				return errors.New("temple place cannot be empty")
+			}
+			tenantUpdates.TemplePlace = *req.TemplePlace
+			templeChanges["temple_place"] = *req.TemplePlace
+			hasTempleUpdate = true
 		}
 
-		changes["temple_details"] = templeChanges
+		if req.TempleAddress != nil {
+			tenantUpdates.TempleAddress = *req.TempleAddress
+			templeChanges["temple_address"] = *req.TempleAddress
+			hasTempleUpdate = true
+		}
+
+		if req.TemplePhoneNo != nil {
+			tenantUpdates.TemplePhoneNo = *req.TemplePhoneNo
+			templeChanges["temple_phone_no"] = *req.TemplePhoneNo
+			hasTempleUpdate = true
+		}
+
+		if req.TempleDescription != nil {
+			tenantUpdates.TempleDescription = *req.TempleDescription
+			templeChanges["temple_description"] = *req.TempleDescription
+			hasTempleUpdate = true
+		}
+
+		if req.LogoURL != nil {
+			tenantUpdates.LogoURL = *req.LogoURL
+			templeChanges["logo_url"] = *req.LogoURL
+			hasTempleUpdate = true
+		}
+
+		if req.IntroVideoURL != nil {
+			tenantUpdates.IntroVideoURL = *req.IntroVideoURL
+			templeChanges["intro_video_url"] = *req.IntroVideoURL
+			hasTempleUpdate = true
+		}
+
+		if hasTempleUpdate {
+			if err := s.repo.UpdateTenantDetails(ctx, userID, tenantUpdates); err != nil {
+				return errors.New("failed to update temple details")
+			}
+			changes["temple_details"] = templeChanges
+		}
 	}
 
-	// Log successful user update
+	// ======================
+	// AUDIT LOG
+	// ======================
 	s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATED", map[string]interface{}{
 		"target_user_id": userID,
 		"target_email":   existingUser.Email,
-		"target_name":    existingUser.FullName,
 		"changes":        changes,
 	}, ip, "success")
 
 	return nil
 }
+
 
 // Delete user
 func (s *Service) DeleteUser(ctx context.Context, userID uint, adminID uint, ip string) error {

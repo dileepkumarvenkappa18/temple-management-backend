@@ -70,17 +70,20 @@ type CreateUserRequest struct {
 }
 
 type UpdateUserRequest struct {
-	FullName          string `json:"fullName"`
-	Email             string `json:"email" binding:"email"`
-	Phone             string `json:"phone"`
-	TempleName        string `json:"templeName"`
-	TemplePlace       string `json:"templePlace"`
-	TempleAddress     string `json:"templeAddress"`
-	TemplePhoneNo     string `json:"templePhoneNo"`
-	TempleDescription string `json:"templeDescription"`
-	LogoURL           string `json:"logoUrl"`           // NEW
-	IntroVideoURL     string `json:"introVideoUrl"`     // NEW
+	FullName          *string `json:"fullName"`
+	Email             *string `json:"email"`
+	Phone             *string `json:"phone"`
+
+	TempleName        *string `json:"templeName"`
+	TemplePlace       *string `json:"templePlace"`
+	TempleAddress     *string `json:"templeAddress"`
+	TemplePhoneNo     *string `json:"templePhoneNo"`
+	TempleDescription *string `json:"templeDescription"`
+
+	LogoURL           *string `json:"logoUrl"`
+	IntroVideoURL     *string `json:"introVideoUrl"`
 }
+
 
 // NEW: Struct for tenant selection (different from assignment)
 type TenantSelectionResponse struct {

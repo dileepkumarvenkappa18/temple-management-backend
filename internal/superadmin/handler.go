@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
+	//"github.com/google/uuid"
 	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/middleware"
 )
@@ -24,9 +24,8 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
-
 // UploadLogo handles logo uploads for temple admins
-// Files are saved in uploads/tenants/{assignedTenantID}/
+// Files are saved in /data/uploads/tenants/{assignedTenantID}/logo/
 func (h *Handler) UploadLogo(c *gin.Context) {
 	// Get user ID from context (set by auth middleware)
 	userID, exists := c.Get("user_id")
@@ -58,36 +57,40 @@ func (h *Handler) UploadLogo(c *gin.Context) {
 		return
 	}
 
-	// Check if targetUserId is provided (for SuperAdmin creating new user)
+	// ✅ CRITICAL FIX: Determine tenant ID based on context
 	var tenantID uint
 	targetUserIDStr := c.PostForm("targetUserId")
 	
 	if targetUserIDStr != "" {
-		// SuperAdmin is creating a new templeadmin - use target user ID as tenant ID
+		// SuperAdmin is creating/editing a new templeadmin
+		// Use target user ID as tenant ID (for new users, this will be their future tenant ID)
 		targetUserID, err := strconv.ParseUint(targetUserIDStr, 10, 32)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid target user ID"})
 			return
 		}
 		tenantID = uint(targetUserID)
-		log.Printf("Using target user ID as tenant ID: %v", tenantID)
+		log.Printf("✅ Using target user ID as tenant ID: %v (for creating/editing user)", tenantID)
 	} else {
-		// Normal upload - get tenant ID based on user's assignment or role
+		// Normal upload - get tenant ID based on current user's assignment or role
 		var err error
 		tenantID, err = h.service.GetTenantIDForUser(c.Request.Context(), userID)
 		if err != nil {
-			log.Printf("Error getting tenant ID for user %v: %v", userID, err)
+			log.Printf("❌ Error getting tenant ID for user %v: %v", userID, err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Failed to determine tenant ID: %v", err)})
 			return
 		}
-		log.Printf("Using assigned/role-based tenant ID: %v for user ID: %v", tenantID, userID)
+		log.Printf("✅ Using current user's tenant ID: %v for user ID: %v", tenantID, userID)
 	}
 
-	// Generate unique filename
-	filename := fmt.Sprintf("logo_%s_%s%s", uuid.New().String(), time.Now().Format("20060102150405"), ext)
+	// Generate unique filename with timestamp
+	filename := fmt.Sprintf("%d%s", time.Now().Unix(), ext)
 	
-	// Create tenant-specific directory structure: uploads/tenants/{tenantID}/
-	uploadDir := fmt.Sprintf("uploads/tenants/%v", tenantID)
+	// ✅ FIXED: Use same folder structure as Tenant upload - /data/uploads/tenants/{tenantID}/logo/
+	uploadDir := filepath.Join("/data/uploads", "tenants", fmt.Sprintf("%d", tenantID), "logo")
+	
+	log.Printf("📁 Creating directory: %s", uploadDir)
+	
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		log.Printf("Error creating upload directory: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create upload directory"})
@@ -104,24 +107,28 @@ func (h *Handler) UploadLogo(c *gin.Context) {
 
 	log.Printf("File saved successfully: %s", savePath)
 
-	// Return URL in the format that can be served by static file handler
-	fileURL := fmt.Sprintf("/uploads/tenants/%v/%s", tenantID, filename)
+	// ✅ FIXED: Return URL with folder structure matching Tenant upload
+	fileURL := fmt.Sprintf("/uploads/tenants/%d/logo/%s", tenantID, filename)
 	
-	// Return response with clear structure
+	log.Printf("✅ Logo uploaded successfully!")
+	log.Printf("   📂 Disk path: %s", savePath)
+	log.Printf("   🌐 URL path: %s", fileURL)
+	
+	// Return response with clear structure matching Tenant upload format
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data": gin.H{
-			"url":      fileURL,
-			"filename": filename,
-			"path":     savePath,
-			"tenantId": tenantID,
-		},
+		"url": fileURL,
 		"message": "Logo uploaded successfully",
+		"file_info": gin.H{
+			"original_name": file.Filename,
+			"saved_name": filename,
+			"size": file.Size,
+			"type": "logo",
+		},
 	})
 }
 
 // UploadVideo handles video uploads for temple admins
-// Files are saved in uploads/tenants/{assignedTenantID}/
+// Files are saved in /data/uploads/tenants/{assignedTenantID}/video/
 func (h *Handler) UploadVideo(c *gin.Context) {
 	// Get user ID from context (set by auth middleware)
 	userID, exists := c.Get("user_id")
@@ -153,36 +160,40 @@ func (h *Handler) UploadVideo(c *gin.Context) {
 		return
 	}
 
-	// Check if targetUserId is provided (for SuperAdmin creating new user)
+	// ✅ CRITICAL FIX: Determine tenant ID based on context
 	var tenantID uint
 	targetUserIDStr := c.PostForm("targetUserId")
 	
 	if targetUserIDStr != "" {
-		// SuperAdmin is creating a new templeadmin - use target user ID as tenant ID
+		// SuperAdmin is creating/editing a new templeadmin
+		// Use target user ID as tenant ID (for new users, this will be their future tenant ID)
 		targetUserID, err := strconv.ParseUint(targetUserIDStr, 10, 32)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid target user ID"})
 			return
 		}
 		tenantID = uint(targetUserID)
-		log.Printf("Using target user ID as tenant ID: %v", tenantID)
+		log.Printf("✅ Using target user ID as tenant ID: %v (for creating/editing user)", tenantID)
 	} else {
-		// Normal upload - get tenant ID based on user's assignment or role
+		// Normal upload - get tenant ID based on current user's assignment or role
 		var err error
 		tenantID, err = h.service.GetTenantIDForUser(c.Request.Context(), userID)
 		if err != nil {
-			log.Printf("Error getting tenant ID for user %v: %v", userID, err)
+			log.Printf("❌ Error getting tenant ID for user %v: %v", userID, err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Failed to determine tenant ID: %v", err)})
 			return
 		}
-		log.Printf("Using assigned/role-based tenant ID: %v for user ID: %v", tenantID, userID)
+		log.Printf("✅ Using current user's tenant ID: %v for user ID: %v", tenantID, userID)
 	}
 
-	// Generate unique filename
-	filename := fmt.Sprintf("video_%s_%s%s", uuid.New().String(), time.Now().Format("20060102150405"), ext)
+	// Generate unique filename with timestamp
+	filename := fmt.Sprintf("%d%s", time.Now().Unix(), ext)
 	
-	// Create tenant-specific directory structure: uploads/tenants/{tenantID}/
-	uploadDir := fmt.Sprintf("uploads/tenants/%v", tenantID)
+	// ✅ FIXED: Use same folder structure as Tenant upload - /data/uploads/tenants/{tenantID}/video/
+	uploadDir := filepath.Join("/data/uploads", "tenants", fmt.Sprintf("%d", tenantID), "video")
+	
+	log.Printf("📁 Creating directory: %s", uploadDir)
+	
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		log.Printf("Error creating upload directory: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create upload directory"})
@@ -199,19 +210,23 @@ func (h *Handler) UploadVideo(c *gin.Context) {
 
 	log.Printf("File saved successfully: %s", savePath)
 
-	// Return URL in the format that can be served by static file handler
-	fileURL := fmt.Sprintf("/uploads/tenants/%v/%s", tenantID, filename)
+	// ✅ FIXED: Return URL with folder structure matching Tenant upload
+	fileURL := fmt.Sprintf("/uploads/tenants/%d/video/%s", tenantID, filename)
 	
-	// Return response with clear structure
+	log.Printf("✅ Video uploaded successfully!")
+	log.Printf("   📂 Disk path: %s", savePath)
+	log.Printf("   🌐 URL path: %s", fileURL)
+	
+	// Return response with clear structure matching Tenant upload format
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data": gin.H{
-			"url":      fileURL,
-			"filename": filename,
-			"path":     savePath,
-			"tenantId": tenantID,
-		},
+		"url": fileURL,
 		"message": "Video uploaded successfully",
+		"file_info": gin.H{
+			"original_name": file.Filename,
+			"saved_name": filename,
+			"size": file.Size,
+			"type": "video",
+		},
 	})
 }
 
@@ -226,17 +241,34 @@ func (h *Handler) DeleteUploadedFile(c *gin.Context) {
 		return
 	}
 
-	// Extract path from URL (remove leading slash)
-	filePath := strings.TrimPrefix(req.FileURL, "/")
+	// ✅ FIXED: Handle both old and new URL formats
+	// Old: /uploads/tenants/1/filename.jpg
+	// New: /uploads/tenants/1/logo/filename.jpg
+	
+	// Convert URL path to disk path
+	// Remove /uploads prefix and prepend /data/uploads
+	urlPath := strings.TrimPrefix(req.FileURL, "/uploads")
+	filePath := filepath.Join("/data/uploads", urlPath)
+
+	log.Printf("🗑️  Attempting to delete file:")
+	log.Printf("   URL: %s", req.FileURL)
+	log.Printf("   Disk path: %s", filePath)
+
+	// Check if file exists before deleting
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		log.Printf("❌ File not found: %s", filePath)
+		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+		return
+	}
 
 	// Delete file
 	if err := os.Remove(filePath); err != nil {
-		log.Printf("Error deleting file %s: %v", filePath, err)
+		log.Printf("❌ Error deleting file %s: %v", filePath, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete file"})
 		return
 	}
 
-	log.Printf("File deleted successfully: %s", filePath)
+	log.Printf("✅ File deleted successfully: %s", filePath)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
