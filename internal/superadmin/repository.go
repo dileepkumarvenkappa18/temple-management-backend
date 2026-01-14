@@ -661,7 +661,7 @@ func (r *Repository) GetUserWithDetails(ctx context.Context, userID uint) (*User
 		Joins("LEFT JOIN tenant_user_assignments tua ON users.id = tua.user_id AND user_roles.role_name IN ('standarduser', 'monitoringuser') AND tua.status = 'active'").
 		Joins("LEFT JOIN users tenant_user ON tua.tenant_id = tenant_user.id").
 		Where("users.id = ?", userID)
-
+    var logoURL, introVideoURL string
 	row := query.Row()
 	err := row.Scan(
 		&user.ID,
@@ -679,6 +679,8 @@ func (r *Repository) GetUserWithDetails(ctx context.Context, userID uint) (*User
 		&templeAddress,
 		&templePhoneNo,
 		&templeDescription,
+		 &logoURL,           // ✅ ADD THIS
+    &introVideoURL, 
 		&templeCreatedAt,
 		&templeUpdatedAt,
 		&tenantName,
@@ -698,6 +700,8 @@ func (r *Repository) GetUserWithDetails(ctx context.Context, userID uint) (*User
 			TempleAddress:     safeString(templeAddress),
 			TemplePhoneNo:     safeString(templePhoneNo),
 			TempleDescription: safeString(templeDescription),
+			LogoURL:           logoURL,           // ✅ ADD THIS
+        IntroVideoURL:     introVideoURL,  
 			CreatedAt:         safeTime(templeCreatedAt),
 			UpdatedAt:         safeTime(templeUpdatedAt),
 		}

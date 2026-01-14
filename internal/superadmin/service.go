@@ -449,7 +449,18 @@ func (s *Service) GetTempleApprovalCounts(ctx context.Context) (*TempleApprovalC
 
 // ================== USER MANAGEMENT ==================
 
-// Create user (admin-created users)
+// Get users with pagination and filters
+func (s *Service) GetUsers(ctx context.Context, limit, page int, search, roleFilter, statusFilter string) ([]UserResponse, int64, error) {
+	return s.repo.GetUsers(ctx, limit, page, search, roleFilter, statusFilter)
+}
+
+// Get user by ID
+func (s *Service) GetUserByID(ctx context.Context, userID uint) (*UserResponse, error) {
+	return s.repo.GetUserWithDetails(ctx, userID)
+}
+
+// Update user
+// CreateUser - Create user (admin-created users)
 func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, adminID uint, ip string) error {
 	// Validate role exists
 	role, err := s.repo.FindRoleByName(ctx, strings.ToLower(req.Role))
@@ -520,6 +531,16 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, adminID
 
 	// If templeadmin role, create tenant details
 	if strings.ToLower(req.Role) == "templeadmin" {
+		// ✅ FIX: Ensure we're getting the values from request
+		logoURL := req.LogoURL
+		introVideoURL := req.IntroVideoURL
+		
+		// Debug logging to see what we're saving
+		fmt.Printf("📝 Creating tenant details for user %d\n", user.ID)
+		fmt.Printf("   Temple Name: %s\n", req.TempleName)
+		fmt.Printf("   LogoURL: %s\n", logoURL)
+		fmt.Printf("   IntroVideoURL: %s\n", introVideoURL)
+		
 		tenantDetails := &auth.TenantDetails{
 			UserID:            user.ID,
 			TempleName:        req.TempleName,
@@ -527,11 +548,12 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, adminID
 			TempleAddress:     req.TempleAddress,
 			TemplePhoneNo:     req.TemplePhoneNo,
 			TempleDescription: req.TempleDescription,
-			LogoURL:           req.LogoURL,           // NEW	
-			IntroVideoURL:     req.IntroVideoURL,     // NEW
+			LogoURL:           logoURL,
+			IntroVideoURL:     introVideoURL,
 		}
 
 		if err := s.repo.CreateTenantDetails(ctx, tenantDetails); err != nil {
+			fmt.Printf("❌ Failed to create tenant details: %v\n", err)
 			s.auditService.LogAction(ctx, &adminID, nil, "USER_CREATE_FAILED", map[string]interface{}{
 				"target_user_id": user.ID,
 				"target_email":   req.Email,
@@ -539,6 +561,8 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, adminID
 			}, ip, "failure")
 			return errors.New("failed to create temple details")
 		}
+		
+		fmt.Printf("✅ Tenant details created successfully for user %d\n", user.ID)
 	}
 
 	// Log successful user creation
@@ -553,17 +577,7 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, adminID
 	return nil
 }
 
-// Get users with pagination and filters
-func (s *Service) GetUsers(ctx context.Context, limit, page int, search, roleFilter, statusFilter string) ([]UserResponse, int64, error) {
-	return s.repo.GetUsers(ctx, limit, page, search, roleFilter, statusFilter)
-}
-
-// Get user by ID
-func (s *Service) GetUserByID(ctx context.Context, userID uint) (*UserResponse, error) {
-	return s.repo.GetUserWithDetails(ctx, userID)
-}
-
-// Update user
+// UpdateUser - Update user
 func (s *Service) UpdateUser(
 	ctx context.Context,
 	userID uint,
@@ -628,63 +642,87 @@ func (s *Service) UpdateUser(
 	// TEMPLE DETAILS UPDATE
 	// ======================
 	if existingUser.Role.RoleName == "templeadmin" {
+		fmt.Printf("📝 Updating temple details for user %d\n", userID)
 
-		tenantUpdates := &auth.TenantDetails{}
+		// ✅ FIX: Get current temple details first
+		var currentDetails auth.TenantDetails
+		if err := s.repo.db.WithContext(ctx).
+			Where("user_id = ?", userID).
+			First(&currentDetails).Error; err != nil {
+			fmt.Printf("❌ Failed to get current temple details: %v\n", err)
+			return errors.New("failed to get current temple details")
+		}
+
+		// Prepare update map - we'll update all fields that are provided
+		updateMap := make(map[string]interface{})
 		templeChanges := make(map[string]interface{})
-		hasTempleUpdate := false
 
+		// Update only fields that are provided
 		if req.TempleName != nil {
 			if *req.TempleName == "" {
 				return errors.New("temple name cannot be empty")
 			}
-			tenantUpdates.TempleName = *req.TempleName
+			updateMap["temple_name"] = *req.TempleName
 			templeChanges["temple_name"] = *req.TempleName
-			hasTempleUpdate = true
 		}
 
 		if req.TemplePlace != nil {
 			if *req.TemplePlace == "" {
 				return errors.New("temple place cannot be empty")
 			}
-			tenantUpdates.TemplePlace = *req.TemplePlace
+			updateMap["temple_place"] = *req.TemplePlace
 			templeChanges["temple_place"] = *req.TemplePlace
-			hasTempleUpdate = true
 		}
 
 		if req.TempleAddress != nil {
-			tenantUpdates.TempleAddress = *req.TempleAddress
+			updateMap["temple_address"] = *req.TempleAddress
 			templeChanges["temple_address"] = *req.TempleAddress
-			hasTempleUpdate = true
 		}
 
 		if req.TemplePhoneNo != nil {
-			tenantUpdates.TemplePhoneNo = *req.TemplePhoneNo
+			updateMap["temple_phone_no"] = *req.TemplePhoneNo
 			templeChanges["temple_phone_no"] = *req.TemplePhoneNo
-			hasTempleUpdate = true
 		}
 
 		if req.TempleDescription != nil {
-			tenantUpdates.TempleDescription = *req.TempleDescription
+			updateMap["temple_description"] = *req.TempleDescription
 			templeChanges["temple_description"] = *req.TempleDescription
-			hasTempleUpdate = true
 		}
 
+		// ✅ CRITICAL FIX: Always update logo and video URLs when provided
+		// Even if they're empty strings, we need to save them
 		if req.LogoURL != nil {
-			tenantUpdates.LogoURL = *req.LogoURL
+			updateMap["logo_url"] = *req.LogoURL
 			templeChanges["logo_url"] = *req.LogoURL
-			hasTempleUpdate = true
+			fmt.Printf("   Updating LogoURL: %s\n", *req.LogoURL)
 		}
 
 		if req.IntroVideoURL != nil {
-			tenantUpdates.IntroVideoURL = *req.IntroVideoURL
+			updateMap["intro_video_url"] = *req.IntroVideoURL
 			templeChanges["intro_video_url"] = *req.IntroVideoURL
-			hasTempleUpdate = true
+			fmt.Printf("   Updating IntroVideoURL: %s\n", *req.IntroVideoURL)
 		}
 
-		if hasTempleUpdate {
-			if err := s.repo.UpdateTenantDetails(ctx, userID, tenantUpdates); err != nil {
+		// Only update if there are changes
+		if len(updateMap) > 0 {
+			updateMap["updated_at"] = time.Now()
+			
+			err := s.repo.db.WithContext(ctx).
+				Model(&auth.TenantDetails{}).
+				Where("user_id = ?", userID).
+				Updates(updateMap).Error
+			
+			if err != nil {
+				fmt.Printf("❌ Failed to update temple details: %v\n", err)
+				s.auditService.LogAction(ctx, &adminID, nil, "USER_UPDATE_FAILED", map[string]interface{}{
+					"target_user_id": userID,
+					"reason":         "failed to update temple details",
+					"error":          err.Error(),
+				}, ip, "failure")
 				return errors.New("failed to update temple details")
 			}
+			
+			fmt.Printf("✅ Temple details updated successfully for user %d\n", userID)
 			changes["temple_details"] = templeChanges
 		}
 	}
@@ -700,7 +738,6 @@ func (s *Service) UpdateUser(
 
 	return nil
 }
-
 
 // Delete user
 func (s *Service) DeleteUser(ctx context.Context, userID uint, adminID uint, ip string) error {
