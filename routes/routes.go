@@ -313,12 +313,15 @@ superadminRoutes.DELETE("/upload/file", superadminHandler.DeleteUploadedFile)
 	protected.GET("/tenants/selection",
 		middleware.RBACMiddleware("superadmin", "standarduser", "monitoringuser"),
 		superadminHandler.GetTenantsForSelection)
+		// In your routes setup
+protected.GET("/tenant-details/:id",
+    middleware.RBACMiddleware("superadmin", "templeadmin", "standarduser", "monitoringuser"),
+    superadminHandler.GetTenantDetails)
 
 	protected.GET("/tenantsInfo",
 		middleware.RBACMiddleware("templeadmin", "standarduser", "monitoringuser", "devotee","superadmin"),
 		superadminHandler.GetTenantsWithFilters)
 	// ========== Seva Routes ==========
-	// ==================== SEVA ROUTES ====================
 
 	sevaRepo := seva.NewRepository(database.DB)
 	sevaService := seva.NewService(sevaRepo, auditSvc)
