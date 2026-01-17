@@ -27,6 +27,9 @@ UpdateTenantMedia(tenantID uint, logoURL, videoURL string) error
 	Login(input LoginInput) (*TokenPair, *User, error)
 	Refresh(refreshToken string) (string, error)
 	GetUserByID(userID uint) (User, error)
+		// 🔥 ADD THIS
+	GetAccountDetails(userID uint) (*AccountDetailsResponse, error)
+	UpdateAccountDetails(userID uint, input UpdateAccountDetailsInput) (*AccountDetailsResponse, error)
 
 	// Password reset methods
 	RequestPasswordReset(email string) error
@@ -70,6 +73,14 @@ type RegisterInput struct {
 	TempleAddress     string
 	TemplePhoneNo     string
 	TempleDescription string
+	 // 🆕 Bank details
+    AccountHolderName string
+    AccountNumber     string
+    BankName          string
+    BranchName        string
+    IFSCCode          string
+    AccountType       string
+    UPIID             string
 	LogoURL           string
 	IntroVideoURL     string
 }
@@ -128,6 +139,25 @@ func (s *service) RegisterAndReturnUser(in RegisterInput) (*User, error) {
 		if err := s.repo.CreateTenantDetails(tenant); err != nil {
 			return nil, err
 		}
+		   // 🆕 Create bank account details
+    bank := &BankAccountDetails{
+        UserID:            user.ID,
+        AccountHolderName: in.AccountHolderName,
+        AccountNumber:     in.AccountNumber,
+        BankName:          in.BankName,
+        BranchName:        in.BranchName,
+        IFSCCode:          in.IFSCCode,
+        AccountType:       in.AccountType,
+    }
+    
+    // Only set UPI ID if provided
+    if in.UPIID != "" {
+        bank.UPIID = &in.UPIID
+    }
+
+    if err := s.repo.CreateBankDetails(bank); err != nil {
+        return nil, err
+    }
 
 		if err := s.repo.CreateApprovalRequest(user.ID, "tenant_approval"); err != nil {
 			return nil, err
@@ -135,6 +165,119 @@ func (s *service) RegisterAndReturnUser(in RegisterInput) (*User, error) {
 	}
 
 	return user, nil
+}
+
+// UpdateAccountDetails updates user, temple, and bank details
+func (s *service) UpdateAccountDetails(userID uint, input UpdateAccountDetailsInput) (*AccountDetailsResponse, error) {
+	user, err := s.repo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	if user.Role.RoleName != "templeadmin" {
+		return nil, errors.New("only temple admins can update account details")
+	}
+
+	// Update user basic info
+	if input.FullName != "" || input.Phone != "" {
+		userUpdates := make(map[string]interface{})
+		if input.FullName != "" {
+			userUpdates["full_name"] = input.FullName
+		}
+		if input.Phone != "" {
+			phone, err := cleanPhone(input.Phone)
+			if err != nil {
+				return nil, err
+			}
+			userUpdates["phone"] = phone
+		}
+		if err := s.repo.UpdateUserBasicInfo(userID, userUpdates); err != nil {
+			return nil, err
+		}
+	}
+
+	// Update temple details
+	templeUpdates := make(map[string]interface{})
+	if input.TempleName != "" {
+		templeUpdates["temple_name"] = input.TempleName
+	}
+	if input.TemplePlace != "" {
+		templeUpdates["temple_place"] = input.TemplePlace
+	}
+	if input.TempleAddress != "" {
+		templeUpdates["temple_address"] = input.TempleAddress
+	}
+	if input.TemplePhoneNo != "" {
+		templeUpdates["temple_phone_no"] = input.TemplePhoneNo
+	}
+	if input.TempleDescription != "" {
+		templeUpdates["temple_description"] = input.TempleDescription
+	}
+	if input.LogoURL != "" {
+		templeUpdates["logo_url"] = input.LogoURL
+	}
+	if input.IntroVideoURL != "" {
+		templeUpdates["intro_video_url"] = input.IntroVideoURL
+	}
+
+	if len(templeUpdates) > 0 {
+		if err := s.repo.UpdateTenantDetails(userID, templeUpdates); err != nil {
+			return nil, err
+		}
+	}
+
+	// Update bank details
+	bankUpdates := make(map[string]interface{})
+	if input.AccountHolderName != "" {
+		bankUpdates["account_holder_name"] = input.AccountHolderName
+	}
+	if input.AccountNumber != "" {
+		bankUpdates["account_number"] = input.AccountNumber
+	}
+	if input.BankName != "" {
+		bankUpdates["bank_name"] = input.BankName
+	}
+	if input.BranchName != "" {
+		bankUpdates["branch_name"] = input.BranchName
+	}
+	if input.IFSCCode != "" {
+		bankUpdates["ifsc_code"] = strings.ToUpper(input.IFSCCode)
+	}
+	if input.AccountType != "" {
+		bankUpdates["account_type"] = input.AccountType
+	}
+	if input.UPIID != "" {
+		bankUpdates["upi_id"] = input.UPIID
+	}
+
+	if len(bankUpdates) > 0 {
+		if err := s.repo.UpdateBankDetails(userID, bankUpdates); err != nil {
+			return nil, err
+		}
+	}
+
+	// Return updated details
+	return s.GetAccountDetails(userID)
+}
+
+// Add this struct for the update input
+type UpdateAccountDetailsInput struct {
+	FullName          string
+	Phone             string
+	TempleName        string
+	TemplePlace       string
+	TempleAddress     string
+	TemplePhoneNo     string
+	TempleDescription string
+	LogoURL           string
+	IntroVideoURL     string
+	AccountHolderName string
+	AccountNumber     string
+	BankName          string
+	BranchName        string
+	IFSCCode          string
+	AccountType       string
+	UPIID             string
 }
 func (s *service) UpdateTenantMedia(tenantID uint, logoURL, videoURL string) error {
 	updates := map[string]interface{}{}
@@ -394,4 +537,97 @@ func (s *service) GetPublicRoles() ([]PublicRoleResponse, error) {
 	}
 
 	return publicRoles, nil
+}
+func (s *service) GetAccountDetails(userID uint) (*AccountDetailsResponse, error) {
+
+	user, err := s.repo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	resp := &AccountDetailsResponse{}
+	resp.User.ID = user.ID
+	resp.User.FullName = user.FullName
+	resp.User.Email = user.Email
+	resp.User.Phone = user.Phone
+	resp.User.Status = user.Status
+	resp.User.Role = user.Role.RoleName
+
+	// Temple Admin only
+	if user.Role.RoleName == "templeadmin" {
+
+		tenant, err := s.repo.GetTenantDetailsByUserID(userID)
+		if err == nil {
+			resp.Temple = &struct {
+				TempleName        string `json:"temple_name"`
+				TemplePlace       string `json:"temple_place"`
+				TempleAddress     string `json:"temple_address"`
+				TemplePhoneNo     string `json:"temple_phone_no"`
+				TempleDescription string `json:"temple_description"`
+				LogoURL           string `json:"logo_url"`
+				IntroVideoURL     string `json:"intro_video_url"`
+			}{
+				TempleName:        tenant.TempleName,
+				TemplePlace:       tenant.TemplePlace,
+				TempleAddress:     tenant.TempleAddress,
+				TemplePhoneNo:     tenant.TemplePhoneNo,
+				TempleDescription: tenant.TempleDescription,
+				LogoURL:           tenant.LogoURL,
+				IntroVideoURL:     tenant.IntroVideoURL,
+			}
+		}
+
+		bank, err := s.repo.GetBankDetailsByUserID(userID)
+		if err == nil {
+			resp.Bank = &struct {
+				AccountHolderName string  `json:"account_holder_name"`
+				AccountNumber     string  `json:"account_number"`
+				BankName          string  `json:"bank_name"`
+				BranchName        string  `json:"branch_name"`
+				IFSCCode          string  `json:"ifsc_code"`
+				AccountType       string  `json:"account_type"`
+				UPIID             *string `json:"upi_id,omitempty"`
+			}{
+				AccountHolderName: bank.AccountHolderName,
+				AccountNumber:     bank.AccountNumber,
+				BankName:          bank.BankName,
+				BranchName:        bank.BranchName,
+				IFSCCode:          bank.IFSCCode,
+				AccountType:       bank.AccountType,
+				UPIID:             bank.UPIID,
+			}
+		}
+	}
+
+	return resp, nil
+}
+type AccountDetailsResponse struct {
+	User struct {
+		ID       uint   `json:"id"`
+		FullName string `json:"full_name"`
+		Email    string `json:"email"`
+		Phone    string `json:"phone"`
+		Status   string `json:"status"`
+		Role     string `json:"role"`
+	} `json:"user"`
+
+	Temple *struct {
+		TempleName        string `json:"temple_name"`
+		TemplePlace       string `json:"temple_place"`
+		TempleAddress     string `json:"temple_address"`
+		TemplePhoneNo     string `json:"temple_phone_no"`
+		TempleDescription string `json:"temple_description"`
+		LogoURL           string `json:"logo_url"`
+		IntroVideoURL     string `json:"intro_video_url"`
+	} `json:"temple,omitempty"`
+
+	Bank *struct {
+		AccountHolderName string  `json:"account_holder_name"`
+		AccountNumber     string  `json:"account_number"`
+		BankName          string  `json:"bank_name"`
+		BranchName        string  `json:"branch_name"`
+		IFSCCode          string  `json:"ifsc_code"`
+		AccountType       string  `json:"account_type"`
+		UPIID             *string `json:"upi_id,omitempty"`
+	} `json:"bank,omitempty"`
 }

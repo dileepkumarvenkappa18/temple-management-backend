@@ -180,6 +180,13 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		authGroup.POST("/register", authHandler.Register)
 		authGroup.POST("/login", authHandler.Login)
 		authGroup.POST("/refresh", authHandler.Refresh)
+		authGroup.GET("/account/details", 
+		middleware.AuthMiddleware(cfg, authSvc), 
+		authHandler.GetAccountDetails)
+	
+	authGroup.PUT("/account/details", 
+		middleware.AuthMiddleware(cfg, authSvc), 
+		authHandler.UpdateAccountDetails)
 
 		// Forgot/Reset/Logout
 		authGroup.POST("/forgot-password", authHandler.ForgotPassword)
