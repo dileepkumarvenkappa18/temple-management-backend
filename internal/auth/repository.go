@@ -20,6 +20,12 @@ type Repository interface {
 	GetUserEmailsByRole(roleName string, entityID uint) ([]string, error)
 	GetUserIDsByRole(roleName string, entityID uint) ([]uint, error)
 	UpdateTenantMedia(tenantID uint, updates map[string]interface{}) error
+	GetTenantDetailsByUserID(userID uint) (*TenantDetails, error)
+	GetBankDetailsByUserID(userID uint) (*BankAccountDetails, error)
+	UpdateTenantDetails(tenantID uint, updates map[string]interface{}) error
+	 CreateBankDetails(b *BankAccountDetails) error
+	 UpdateBankDetails(userID uint, updates map[string]interface{}) error
+	UpdateUserBasicInfo(userID uint, updates map[string]interface{}) error
 
 	// Password reset methods
 	SetForgotPasswordToken(userID uint, token string, expiry time.Time) error
@@ -27,7 +33,7 @@ type Repository interface {
 	ClearResetToken(userID uint) error
 	Update(user *User) error
 	CreateTenantDetails(t *TenantDetails) error
-	
+
 	// NEW: Public roles method
 	GetPublicRoles() ([]UserRole, error)
 
@@ -36,8 +42,32 @@ type Repository interface {
 	GetUserPermissionType(userID uint) (string, error)
 }
 
-
 type repository struct{ db *gorm.DB }
+
+func (r *repository) GetTenantDetailsByUserID(userID uint) (*TenantDetails, error) {
+	var tenant TenantDetails
+	err := r.db.Where("user_id = ?", userID).First(&tenant).Error
+	if err != nil {
+		return nil, err
+	}
+	return &tenant, nil
+}
+
+// UpdateBankDetails updates bank account details
+func (r *repository) UpdateBankDetails(userID uint, updates map[string]interface{}) error {
+	return r.db.
+		Model(&BankAccountDetails{}).
+		Where("user_id = ?", userID).
+		Updates(updates).Error
+}
+
+// UpdateUserBasicInfo updates user's name and phone
+func (r *repository) UpdateUserBasicInfo(userID uint, updates map[string]interface{}) error {
+	return r.db.
+		Model(&User{}).
+		Where("id = ?", userID).
+		Updates(updates).Error
+}
 
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db}
@@ -85,7 +115,7 @@ func (r *repository) UpdateTenantDetails(tenantID uint, updates map[string]inter
 // UpdateTenantMedia - FIXED VERSION with better error handling and logging
 func (r *repository) UpdateTenantMedia(tenantID uint, updates map[string]interface{}) error {
 	log.Printf("🔍 UpdateTenantMedia called - TenantID: %d, Updates: %+v", tenantID, updates)
-	
+
 	// First, check if tenant_details record exists
 	var existingTenant TenantDetails
 	err := r.db.Where("user_id = ?", tenantID).First(&existingTenant).Error
@@ -97,26 +127,26 @@ func (r *repository) UpdateTenantMedia(tenantID uint, updates map[string]interfa
 		log.Printf("❌ Error checking tenant_details: %v", err)
 		return err
 	}
-	
-	log.Printf("✅ Found existing tenant_details - ID: %d, Current Logo: %s, Current Video: %s", 
+
+	log.Printf("✅ Found existing tenant_details - ID: %d, Current Logo: %s, Current Video: %s",
 		existingTenant.ID, existingTenant.LogoURL, existingTenant.IntroVideoURL)
-	
+
 	// Perform the update
 	result := r.db.
 		Model(&TenantDetails{}).
 		Where("user_id = ?", tenantID).
 		Updates(updates)
-	
+
 	if result.Error != nil {
 		log.Printf("❌ Database update failed: %v", result.Error)
 		return result.Error
 	}
-	
+
 	if result.RowsAffected == 0 {
 		log.Printf("⚠️ Update executed but 0 rows affected for user_id %d", tenantID)
 		return fmt.Errorf("no rows updated for user_id %d", tenantID)
 	}
-	
+
 	// Verify the update
 	var updatedTenant TenantDetails
 	err = r.db.Where("user_id = ?", tenantID).First(&updatedTenant).Error
@@ -124,10 +154,10 @@ func (r *repository) UpdateTenantMedia(tenantID uint, updates map[string]interfa
 		log.Printf("❌ Error verifying update: %v", err)
 		return err
 	}
-	
-	log.Printf("✅ Update successful - Rows affected: %d, New Logo: %s, New Video: %s", 
+
+	log.Printf("✅ Update successful - Rows affected: %d, New Logo: %s, New Video: %s",
 		result.RowsAffected, updatedTenant.LogoURL, updatedTenant.IntroVideoURL)
-	
+
 	return nil
 }
 
@@ -141,52 +171,51 @@ func (r *repository) FindRoleByName(name string) (*UserRole, error) {
 // Find user's approved EntityID (either via approval or membership)
 func (r *repository) FindEntityIDByUserID(userID uint) (*uint, error) {
 
-    // 1. Check templeadmin approval
-    var req ApprovalRequest
-    err := r.db.
-        Where("user_id = ? AND status = ?", userID, "approved").
-        Order("id DESC").
-        First(&req).Error
-    if err == nil && req.EntityID != nil {
-        return req.EntityID, nil
-    }
+	// 1. Check templeadmin approval
+	var req ApprovalRequest
+	err := r.db.
+		Where("user_id = ? AND status = ?", userID, "approved").
+		Order("id DESC").
+		First(&req).Error
+	if err == nil && req.EntityID != nil {
+		return req.EntityID, nil
+	}
 
-    // 2. Check devotee/volunteer membership
-    type membership struct {
-        EntityID uint
-    }
+	// 2. Check devotee/volunteer membership
+	type membership struct {
+		EntityID uint
+	}
 
-    var m membership
-    err = r.db.
-        Table("user_entity_memberships").
-        Select("entity_id").
-        Where("user_id = ?", userID).
-        Order("joined_at DESC").
-        First(&m).Error
-    if err == nil {
-        return &m.EntityID, nil
-    }
+	var m membership
+	err = r.db.
+		Table("user_entity_memberships").
+		Select("entity_id").
+		Where("user_id = ?", userID).
+		Order("joined_at DESC").
+		First(&m).Error
+	if err == nil {
+		return &m.EntityID, nil
+	}
 
-    // 3. NEW: Check if the user is the creator of the entity
-    type entity struct {
-        ID        uint
-        CreatedBy uint
-    }
+	// 3. NEW: Check if the user is the creator of the entity
+	type entity struct {
+		ID        uint
+		CreatedBy uint
+	}
 
-    var e entity
-    err = r.db.
-        Table("entities").
-        Select("id, created_by").
-        Where("created_by = ?", userID).
-        Order("created_at DESC").
-        First(&e).Error
-    if err == nil {
-        return &e.ID, nil
-    }
+	var e entity
+	err = r.db.
+		Table("entities").
+		Select("id, created_by").
+		Where("created_by = ?", userID).
+		Order("created_at DESC").
+		First(&e).Error
+	if err == nil {
+		return &e.ID, nil
+	}
 
-    return nil, gorm.ErrRecordNotFound
+	return nil, gorm.ErrRecordNotFound
 }
-
 
 // Create approval request for templeadmin
 func (r *repository) CreateApprovalRequest(userID uint, requestType string) error {
@@ -294,16 +323,16 @@ func (r *repository) GetAssignedTenantID(userID uint) (*uint, error) {
 	var assignment struct {
 		TenantID uint
 	}
-	
+
 	err := r.db.Table("tenant_user_assignments").
 		Select("tenant_id").
 		Where("user_id = ? AND status = ?", userID, "active").
 		First(&assignment).Error
-		
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &assignment.TenantID, nil
 }
 
@@ -312,17 +341,17 @@ func (r *repository) GetUserPermissionType(userID uint) (string, error) {
 	var user struct {
 		RoleName string
 	}
-	
+
 	err := r.db.Table("users").
 		Select("user_roles.role_name").
 		Joins("JOIN user_roles ON users.role_id = user_roles.id").
 		Where("users.id = ?", userID).
 		First(&user).Error
-		
+
 	if err != nil {
 		return "", err
 	}
-	
+
 	// Set permission type based on role
 	switch user.RoleName {
 	case "standarduser":
@@ -332,4 +361,27 @@ func (r *repository) GetUserPermissionType(userID uint) (string, error) {
 	default:
 		return "full", nil
 	}
+}
+func (r *repository) GetBankDetailsByUserID(userID uint) (*BankAccountDetails, error) {
+	var bank BankAccountDetails
+	err := r.db.
+		Where("user_id = ?", userID).
+		First(&bank).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &bank, nil
+}
+func (r *repository) CreateBankDetails(b *BankAccountDetails) error {
+    log.Printf("📝 Creating bank_account_details - UserID: %d, Account: %s", 
+        b.UserID, b.AccountNumber)
+    err := r.db.Create(b).Error
+    if err != nil {
+        log.Printf("❌ Failed to create bank_account_details: %v", err)
+    } else {
+        log.Printf("✅ Created bank_account_details - ID: %d", b.ID)
+    }
+    return err
 }

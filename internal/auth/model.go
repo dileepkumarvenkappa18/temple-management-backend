@@ -91,6 +91,27 @@ type TenantDetails struct {
 func (TenantDetails) TableName() string {
 	return "tenant_details"
 }
+// BankAccountDetails represents the bank_account_details table
+type BankAccountDetails struct {
+	ID                uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID            uint      `gorm:"not null" json:"user_id"`
+	User              User      `gorm:"foreignKey:UserID;references:ID" json:"user"`
+
+	AccountHolderName string  `gorm:"size:255;not null" json:"account_holder_name"`
+	AccountNumber     string  `gorm:"size:30;not null" json:"account_number"`
+	BankName          string  `gorm:"size:255;not null" json:"bank_name"`
+	BranchName        string  `gorm:"size:255;not null" json:"branch_name"`
+	IFSCCode          string  `gorm:"size:11;not null" json:"ifsc_code"`
+	AccountType       string  `gorm:"size:20;not null" json:"account_type"`
+	UPIID             *string `gorm:"size:100" json:"upi_id,omitempty"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (BankAccountDetails) TableName() string {
+	return "bank_account_details"
+}
 
 type PublicRoleResponse struct {
 	ID          uint   `json:"id"`

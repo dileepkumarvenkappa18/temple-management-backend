@@ -33,6 +33,15 @@ type RegisterRequest struct {
 	TemplePhoneNo     string `form:"templePhoneNo" json:"templePhoneNo"`
 	TempleDescription string `form:"templeDescription" json:"templeDescription"`
 
+	    // 🆕 Bank Account Details
+    AccountHolderName string `form:"accountHolderName" json:"accountHolderName"`
+    AccountNumber     string `form:"accountNumber" json:"accountNumber"`
+    BankName          string `form:"bankName" json:"bankName"`
+    BranchName        string `form:"branchName" json:"branchName"`
+    IFSCCode          string `form:"ifscCode" json:"ifscCode"`
+    AccountType       string `form:"accountType" json:"accountType"`
+    UPIID             string `form:"upiId" json:"upiId"`
+
 	LogoURL       string `json:"logo_url"`
 	IntroVideoURL string `json:"intro_video_url"`
 }
@@ -69,6 +78,18 @@ func (h *Handler) Register(c *gin.Context) {
 			})
 			return
 		}
+		   // 🆕 Validate bank details
+    if req.AccountHolderName == "" ||
+        req.AccountNumber == "" ||
+        req.BankName == "" ||
+        req.BranchName == "" ||
+        req.IFSCCode == "" ||
+        req.AccountType == "" {
+        c.JSON(http.StatusBadRequest, gin.H{
+            "error": "All bank account details are required for Temple Admin registration",
+        })
+        return
+    }
 
 		// Check for logo file
 		if _, err := c.FormFile("logo"); err != nil {
@@ -99,6 +120,14 @@ func (h *Handler) Register(c *gin.Context) {
 		TempleAddress:     req.TempleAddress,
 		TemplePhoneNo:     req.TemplePhoneNo,
 		TempleDescription: req.TempleDescription,
+		 // 🆕 Add bank details
+    AccountHolderName: req.AccountHolderName,
+    AccountNumber:     req.AccountNumber,
+    BankName:          req.BankName,
+    BranchName:        req.BranchName,
+    IFSCCode:          req.IFSCCode,
+    AccountType:       req.AccountType,
+    UPIID:             req.UPIID,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -454,4 +483,93 @@ func (h *Handler) GetPublicRoles(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": roles})
+}
+
+
+func (h *Handler) GetAccountDetails(c *gin.Context) {
+	userVal, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	user := userVal.(User)
+
+	if strings.ToLower(user.Role.RoleName) != "templeadmin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	data, err := h.service.GetAccountDetails(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+func (h *Handler) UpdateAccountDetails(c *gin.Context) {
+	userVal, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	user := userVal.(User)
+
+	if strings.ToLower(user.Role.RoleName) != "templeadmin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	var req struct {
+		FullName          string `json:"full_name"`
+		Phone             string `json:"phone"`
+		TempleName        string `json:"temple_name"`
+		TemplePlace       string `json:"temple_place"`
+		TempleAddress     string `json:"temple_address"`
+		TemplePhoneNo     string `json:"temple_phone_no"`
+		TempleDescription string `json:"temple_description"`
+		LogoURL           string `json:"logo_url"`
+		IntroVideoURL     string `json:"intro_video_url"`
+		AccountHolderName string `json:"account_holder_name"`
+		AccountNumber     string `json:"account_number"`
+		BankName          string `json:"bank_name"`
+		BranchName        string `json:"branch_name"`
+		IFSCCode          string `json:"ifsc_code"`
+		AccountType       string `json:"account_type"`
+		UPIID             string `json:"upi_id"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	input := UpdateAccountDetailsInput{
+		FullName:          req.FullName,
+		Phone:             req.Phone,
+		TempleName:        req.TempleName,
+		TemplePlace:       req.TemplePlace,
+		TempleAddress:     req.TempleAddress,
+		TemplePhoneNo:     req.TemplePhoneNo,
+		TempleDescription: req.TempleDescription,
+		LogoURL:           req.LogoURL,
+		IntroVideoURL:     req.IntroVideoURL,
+		AccountHolderName: req.AccountHolderName,
+		AccountNumber:     req.AccountNumber,
+		BankName:          req.BankName,
+		BranchName:        req.BranchName,
+		IFSCCode:          req.IFSCCode,
+		AccountType:       req.AccountType,
+		UPIID:             req.UPIID,
+	}
+
+	data, err := h.service.UpdateAccountDetails(user.ID, input)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": data, "message": "Account details updated successfully"})
 }

@@ -180,6 +180,13 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		authGroup.POST("/register", authHandler.Register)
 		authGroup.POST("/login", authHandler.Login)
 		authGroup.POST("/refresh", authHandler.Refresh)
+		authGroup.GET("/account/details", 
+		middleware.AuthMiddleware(cfg, authSvc), 
+		authHandler.GetAccountDetails)
+	
+	authGroup.PUT("/account/details", 
+		middleware.AuthMiddleware(cfg, authSvc), 
+		authHandler.UpdateAccountDetails)
 
 		// Forgot/Reset/Logout
 		authGroup.POST("/forgot-password", authHandler.ForgotPassword)
@@ -313,12 +320,15 @@ superadminRoutes.DELETE("/upload/file", superadminHandler.DeleteUploadedFile)
 	protected.GET("/tenants/selection",
 		middleware.RBACMiddleware("superadmin", "standarduser", "monitoringuser"),
 		superadminHandler.GetTenantsForSelection)
+		// In your routes setup
+protected.GET("/tenant-details/:id",
+    middleware.RBACMiddleware("superadmin", "templeadmin", "standarduser", "monitoringuser"),
+    superadminHandler.GetTenantDetails)
 
 	protected.GET("/tenantsInfo",
 		middleware.RBACMiddleware("templeadmin", "standarduser", "monitoringuser", "devotee","superadmin"),
 		superadminHandler.GetTenantsWithFilters)
 	// ========== Seva Routes ==========
-	// ==================== SEVA ROUTES ====================
 
 	sevaRepo := seva.NewRepository(database.DB)
 	sevaService := seva.NewService(sevaRepo, auditSvc)
