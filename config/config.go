@@ -9,7 +9,7 @@ import (
 )
 
 // ✅ Global constants (accessible from other packages)
-var UploadPath = "./uploads"
+var UploadPath = "/data/uploads"
 var BaseURL = "http://localhost:8080"
 
 type Config struct {
@@ -46,6 +46,9 @@ type Config struct {
 	// ✅ FCM Config
 	FCMCredentialsPath string // Path to Firebase service account JSON
 	FCMProjectID       string // Firebase Project ID (optional, can be in JSON)
+
+	// ✅ Frontend URL for CORS
+	FrontendURL string // Frontend URL for CORS origins
 }
 
 // Load reads environment variables and returns a Config object
@@ -88,5 +91,7 @@ func Load() *Config {
 
 		FCMCredentialsPath: os.Getenv("FCM_CREDENTIALS_PATH"),
 		FCMProjectID:       os.Getenv("FCM_PROJECT_ID"),
+
+		FrontendURL: os.Getenv("FRONTEND_URL"),
 	}
 }

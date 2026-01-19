@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -271,7 +273,7 @@ func (h *Handler) SendNotification(c *gin.Context) {
 	// Send notification asynchronously
 	go func() {
 		bgCtx := context.Background()
-		
+
 		if err := h.Service.SendNotification(
 			bgCtx,
 			ctx.UserID,
@@ -367,13 +369,14 @@ func (h *Handler) StreamInApp(c *gin.Context) {
 	ctx := accessContext.(middleware.AccessContext)
 
 	// ✅ Set CORS headers for SSE
+	cfg := config.Load()
 	origin := c.GetHeader("Origin")
 	if origin == "" {
-		origin = "http://localhost:4173"
+		origin = cfg.FrontendURL
 	}
 	c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 	c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-	
+
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
@@ -436,25 +439,32 @@ func (h *Handler) StreamInAppWithToken(c *gin.Context) {
 		return
 	}
 	userID := uint(uidFloat)
+	frontendURL := os.Getenv("FRONTEND_URL")
+
+	// Remove the "http://" or "https://" prefix
+	frontendURL = strings.TrimPrefix(frontendURL, "http://")
+	frontendURL = strings.TrimPrefix(frontendURL, "https://")
+
+	// Construct both http and https versions
+	httpVersion := "http://" + frontendURL
+	httpsVersion := "https://" + frontendURL
 
 	// ✅ CRITICAL FIX: Set specific CORS headers for SSE (cannot use wildcard with credentials)
 	origin := c.GetHeader("Origin")
 	allowedOrigins := map[string]bool{
-		"http://localhost:5173":   true,
-		"http://127.0.0.1:5173":   true,
-		"http://localhost:4173":   true,
-		"http://127.0.0.1:4173":   true,
+		httpVersion:  true,
+		httpsVersion: true,
 	}
-	
+
 	// Validate origin and set specific header
 	if origin == "" || !allowedOrigins[origin] {
-		origin = "http://localhost:4173" // Default fallback
+		origin = httpsVersion
 	}
-	
+
 	c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 	c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 	c.Writer.Header().Set("Access-Control-Expose-Headers", "Content-Type")
-	
+
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
@@ -508,8 +518,8 @@ func (h *Handler) RegisterFCMToken(c *gin.Context) {
 
 	var req struct {
 		DeviceToken string `json:"device_token" binding:"required"`
-		DeviceType  string `json:"device_type"`  // android, ios, web
-		DeviceName  string `json:"device_name"`  // optional
+		DeviceType  string `json:"device_type"` // android, ios, web
+		DeviceName  string `json:"device_name"` // optional
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -588,10 +598,10 @@ func (h *Handler) SendFCMNotification(c *gin.Context) {
 	ip := middleware.GetIPFromContext(c)
 
 	var req struct {
-		Title    string `json:"title" binding:"required"`
-		Body     string `json:"body" binding:"required"`
-		UserIDs  []uint `json:"user_ids"`  // specific user IDs
-		Roles    []string `json:"roles"`    // or by roles (devotees, volunteers, etc.)
+		Title   string   `json:"title" binding:"required"`
+		Body    string   `json:"body" binding:"required"`
+		UserIDs []uint   `json:"user_ids"` // specific user IDs
+		Roles   []string `json:"roles"`    // or by roles (devotees, volunteers, etc.)
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {

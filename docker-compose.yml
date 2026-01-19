@@ -21,9 +21,10 @@ services:
       FIREBASE_PROJECT_ID: tms-app-38fc7
       FCM_CREDENTIALS_PATH: app/serviceAccountKey.json
       FCM_PROJECT_ID: tms-app-38fc7
+    user: "33:33"
     volumes:
-      - ./uploads:/data/uploads
-      - ./logs:/app/logs
+      - /var/www/uploads:/data/uploads
+      - /var/www/logs:/data/logs
       - ./serviceAccountKey.json:/app/serviceAccountKey.json:ro
     depends_on:
       postgres:

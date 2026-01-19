@@ -150,10 +150,14 @@ func SendBulkEmailsAsync(recipients []string, subject, body string) {
 // ======================
 func SendResetLink(toEmail string, resetToken string) error {
 	baseURL := frontendURL
-	if baseURL == "" {
-		baseURL = "http://localhost:5173" // Updated to match your frontend
-		fmt.Println("⚠️ FRONTEND_URL not set, using default:", baseURL)
-	}
+
+	// Removing it.. let it bomb, better they set it
+	/*
+		if baseURL == "" {
+			baseURL = "http://localhost:5173" // Updated to match your frontend
+			fmt.Println("⚠️ FRONTEND_URL not set, using default:", baseURL)
+		}
+	*/
 
 	resetURL := fmt.Sprintf("%s/auth-pages/reset-password?token=%s", baseURL, resetToken)
 	subject := "Reset your password"

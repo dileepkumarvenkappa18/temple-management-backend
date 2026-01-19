@@ -13,7 +13,6 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"github.com/sharath018/temple-management-backend/config"
 	"github.com/sharath018/temple-management-backend/database"
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
@@ -24,6 +23,7 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/notification"
 	"github.com/sharath018/temple-management-backend/routes"
 	"github.com/sharath018/temple-management-backend/utils"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -100,9 +100,20 @@ func main() {
 		c.Next()
 	})
 
+	frontendURL := os.Getenv("FRONTEND_URL")
+
+	// Extract the base part of the URL (without the protocol)
+	// Remove the "http://" or "https://" prefix
+	frontendURL = strings.TrimPrefix(frontendURL, "http://")
+	frontendURL = strings.TrimPrefix(frontendURL, "https://")
+
+	// Construct both http and https versions
+	httpVersion := "http://" + frontendURL
+	httpsVersion := "https://" + frontendURL
+
 	// Enhanced CORS middleware
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173", "http://127.0.0.1:4173"},
+		AllowOrigins:     []string{httpVersion, httpsVersion},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Tenant-ID", "x-force-delete", "Content-Length", "X-Requested-With", "Cache-Control", "Pragma", "X-Entity-ID"},
 		ExposeHeaders:    []string{"Content-Length", "Content-Type", "Content-Disposition", "Cache-Control", "Pragma", "Expires"},
@@ -114,10 +125,8 @@ func main() {
 	router.OPTIONS("/api/v1/superadmin/*path", func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
 		allowedOrigins := []string{
-			"http://localhost:5173",
-			"http://127.0.0.1:5173",
-			"http://localhost:4173",
-			"http://127.0.0.1:4173",
+			httpVersion,
+			httpsVersion,
 		}
 
 		originAllowed := false
@@ -128,8 +137,9 @@ func main() {
 			}
 		}
 
+		// They better set it
 		if !originAllowed {
-			origin = "http://localhost:4173"
+			c.Status(403)
 		}
 
 		log.Printf("🔧 SuperAdmin OPTIONS request from origin: %s for path: %s", origin, c.Request.URL.Path)
@@ -144,13 +154,13 @@ func main() {
 	})
 
 	// Create uploads directory
-uploadDir := "/data/uploads"
+	uploadDir := "/data/uploads"
 
-if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
-	panic(fmt.Sprintf("❌ Failed to create upload directory: %v", err))
-}
+	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
+		panic(fmt.Sprintf("❌ Failed to create upload directory: %v", err))
+	}
 
-router.Static("/uploads", uploadDir)
+	router.Static("/uploads", uploadDir)
 
 	// Alternative route: /files/{entityID}/{filename}
 	router.GET("/files/:entityID/:filename", func(c *gin.Context) {
@@ -425,7 +435,7 @@ router.Static("/uploads", uploadDir)
 	fmt.Printf("📦 Bulk download: http://localhost:%s/api/v1/entities/{id}/files-all\n", cfg.Port)
 	fmt.Printf("✅ CORS configured for: localhost:4173, localhost:5173\n")
 	fmt.Printf("✅ PATCH method enabled for approvals\n")
-	
+
 	if utils.IsFCMEnabled() {
 		fmt.Println("✅ Firebase Cloud Messaging enabled")
 	} else {
