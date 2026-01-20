@@ -402,16 +402,35 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	}
 	userID := userIDVal.(uint)
 
-	// Get tenant profile to resolve tenant_id
-	profile, err := h.service.GetTenantProfile(userID)
-	if err != nil {
-		log.Printf("❌ Failed to get tenant profile for user %d: %v", userID, err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Tenant profile not found"})
-		return
+	// ✅ Get tenant ID from X-Tenant-ID header first
+	var tenantID uint
+	tenantIDHeader := c.GetHeader("X-Tenant-ID")
+	
+	if tenantIDHeader != "" {
+		// Try to parse tenant ID from header
+		tenantID64, err := strconv.ParseUint(tenantIDHeader, 10, 64)
+		if err != nil {
+			log.Printf("⚠️ Invalid X-Tenant-ID header: %v", err)
+		} else {
+			tenantID = uint(tenantID64)
+			log.Printf("📁 Upload - Using tenant ID from header: %d", tenantID)
+		}
 	}
-	tenantID := profile.TenantID
 
-	log.Printf("📁 Upload - User ID: %d, Tenant ID from profile: %d", userID, tenantID)
+	// ✅ Fallback: Get tenant profile if header is missing or invalid
+	if tenantID == 0 {
+		log.Printf("📁 No valid X-Tenant-ID header, fetching from profile for user %d", userID)
+		profile, err := h.service.GetTenantProfile(userID)
+		if err != nil {
+			log.Printf("❌ Failed to get tenant profile for user %d: %v", userID, err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Tenant profile not found"})
+			return
+		}
+		tenantID = profile.TenantID
+		log.Printf("📁 Upload - Using tenant ID from profile: %d", tenantID)
+	}
+
+	log.Printf("📁 Upload - User ID: %d, Tenant ID: %d", userID, tenantID)
 
 	// Get file
 	file, header, err := c.Request.FormFile("file")

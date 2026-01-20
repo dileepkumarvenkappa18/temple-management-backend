@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"regexp"
 	"strings"
@@ -267,8 +268,22 @@ func (s *Service) GetPendingEntities(ctx context.Context) ([]entity.Entity, erro
 	return s.repo.GetPendingEntities(ctx)
 }
 
+// In superadmin/service.go
+
 func (s *Service) GetEntitiesWithFilters(ctx context.Context, status string, limit, page int) ([]entity.Entity, int64, error) {
-	return s.repo.GetEntitiesWithFilters(ctx, status, limit, page)
+	log.Printf("🔧 Service: GetEntitiesWithFilters called with status='%s', limit=%d, page=%d", status, limit, page)
+	
+	// Pass through to repository
+	entities, total, err := s.repo.GetEntitiesWithFilters(ctx, status, limit, page)
+	
+	if err != nil {
+		log.Printf("❌ Service: Error from repository: %v", err)
+		return nil, 0, err
+	}
+	
+	log.Printf("✅ Service: Repository returned %d entities (total: %d)", len(entities), total)
+	
+	return entities, total, nil
 }
 
 func (s *Service) ApproveEntity(ctx context.Context, entityID uint, adminID uint, ip string) error {

@@ -359,8 +359,7 @@ func (h *Handler) UpdateTenantApprovalStatus(c *gin.Context) {
 
 // GET /superadmin/entities?status=pending&limit=10&page=1
 func (h *Handler) GetEntitiesWithFilters(c *gin.Context) {
-	// IMPORTANT CHANGE: Don't force status to uppercase, accept any case
-	status := c.DefaultQuery("status", "pending")
+	status := c.DefaultQuery("status", "")  // 🔧 Changed default to empty string
 	limitStr := c.DefaultQuery("limit", "10")
 	pageStr := c.DefaultQuery("page", "1")
 
@@ -373,22 +372,26 @@ func (h *Handler) GetEntitiesWithFilters(c *gin.Context) {
 		page = 1
 	}
 
-	log.Printf("Fetching entities with status: %s, limit: %d, page: %d", status, limit, page)
+	log.Printf("📥 GetEntitiesWithFilters - Query params: status='%s', limit=%d, page=%d", status, limit, page)
+	
+	// 🔧 Handle 'all' status by converting to empty string
+	if strings.ToLower(status) == "all" {
+		log.Printf("🔄 Converting 'all' status to empty string to fetch all entities")
+		status = ""
+	}
 
 	entities, total, err := h.service.GetEntitiesWithFilters(c.Request.Context(), status, limit, page)
 	if err != nil {
-		log.Printf("Error fetching entities: %v", err)
+		log.Printf("❌ Error fetching entities: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch entities"})
 		return
 	}
 
-	log.Printf("Successfully fetched %d entities (total: %d)", len(entities), total)
-	c.JSON(http.StatusOK, gin.H{
-		"data":  entities,
-		"total": total,
-		"page":  page,
-		"limit": limit,
-	})
+	log.Printf("✅ Returning %d entities (total: %d) to frontend", len(entities), total)
+
+	// 🔧 IMPORTANT: Return as array directly (not wrapped in "data")
+	// This matches what your frontend expects based on the service code
+	c.JSON(http.StatusOK, entities)
 }
 
 // PATCH /superadmin/entities/:id
