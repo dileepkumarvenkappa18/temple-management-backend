@@ -47,8 +47,8 @@ type Donation struct {
 	Method string `gorm:"size:50;not null;index" json:"method"`                 // Razorpay method used (UPI, CARD, etc.)
 	Status string `gorm:"size:20;default:'PENDING';index" json:"status"`        // PENDING, SUCCESS, FAILED
 
-	OrderID   string  `gorm:"size:100;uniqueIndex" json:"order_id"`            // Razorpay Order ID
-	PaymentID *string `gorm:"size:100;index" json:"payment_id,omitempty"`      // Razorpay Payment ID (only if success)
+	OrderID   string  `gorm:"size:100;uniqueIndex" json:"transactionId"`
+    PaymentID *string `gorm:"size:100;index" json:"paymentId,omitempty"`
 
 	Note *string `gorm:"type:text" json:"note,omitempty"`                       // Optional donor message/intention
 

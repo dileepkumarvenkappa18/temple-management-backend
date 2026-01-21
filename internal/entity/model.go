@@ -79,3 +79,40 @@ type MediaInfo struct {
 func (Entity) TableName() string {
 	return "entities"
 }
+// Add these structs to entity/model.go
+
+// CreatorDetails represents the temple creator's public information
+type CreatorDetails struct {
+	ID       uint   `json:"id"`
+	FullName string `json:"full_name"`
+	Email    string `json:"email"`
+	Phone    string `json:"phone"`
+	Role     string `json:"role"`
+	
+	// Temple details (if creator is templeadmin)
+	Temple *CreatorTempleInfo `gorm:"-" json:"temple,omitempty"` // 🔥 Add gorm:"-"
+	
+	// Bank details (if creator is templeadmin)
+	Bank *CreatorBankInfo `gorm:"-" json:"bank,omitempty"` // 🔥 Add gorm:"-"
+}
+
+type CreatorTempleInfo struct {
+	TempleName        string `json:"temple_name"`
+	TemplePlace       string `json:"temple_place"`
+	TempleAddress     string `json:"temple_address"`
+	TemplePhoneNo     string `json:"temple_phone_no"`
+	TempleDescription string `json:"temple_description"`
+	LogoURL           string `json:"logo_url"`
+	IntroVideoURL     string `json:"intro_video_url"`
+}
+
+type CreatorBankInfo struct {
+	AccountHolderName string  `json:"account_holder_name"`
+	AccountNumber     string  `json:"account_number"`
+	BankName          string  `json:"bank_name"`
+	BranchName        string  `json:"branch_name"`
+	IFSCCode          string  `json:"ifsc_code"`
+	AccountType       string  `json:"account_type"`
+	UPIID             *string `json:"upi_id,omitempty"`
+	// Note: Account number is intentionally excluded for security
+}

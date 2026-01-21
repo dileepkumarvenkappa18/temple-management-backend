@@ -116,9 +116,6 @@ func (h *Handler) CreateDonation(c *gin.Context) {
 	})
 }
 
-// ==============================
-// ✅ 2. Verify Razorpay Signature - UNCHANGED
-// ==============================
 func (h *Handler) VerifyDonation(c *gin.Context) {
 	var req VerifyPaymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -128,16 +125,20 @@ func (h *Handler) VerifyDonation(c *gin.Context) {
 
 	req.IPAddress = middleware.GetIPFromContext(c)
 
+	// ✅ DO NOT read payment method from request
+	// Method is fetched from Razorpay inside service layer
+
 	if err := h.svc.VerifyAndUpdateDonation(req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Donation verified successfully",
+		"message": "Donation verification initiated",
 		"success": true,
 	})
 }
+
 
 // ==============================
 // 🔍 3. Get My Donations - UPDATED: Entity-based approach

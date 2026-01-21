@@ -180,9 +180,19 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 		authGroup.POST("/register", authHandler.Register)
 		authGroup.POST("/login", authHandler.Login)
 		authGroup.POST("/refresh", authHandler.Refresh)
-		authGroup.GET("/account/details", 
-		middleware.AuthMiddleware(cfg, authSvc), 
-		authHandler.GetAccountDetails)
+		authGroup.GET("/account/details",
+	middleware.AuthMiddleware(cfg, authSvc),
+	middleware.RBACMiddleware(
+		"devotee",
+		"volunteer",
+		"templeadmin",
+		"standarduser",
+		"monitoringuser",
+		"superadmin",
+	),
+	authHandler.GetAccountDetails,
+)
+
 	
 	authGroup.PUT("/account/details", 
 		middleware.AuthMiddleware(cfg, authSvc), 
@@ -434,7 +444,7 @@ protected.GET("/entities/:id/details",
 			}
 
 			// Read operations - all three roles can access
-			entityRoutes.GET("/:id", entityHandler.GetEntityByID)
+			//entityRoutes.GET("/:id", entityHandler.GetEntityByID)
 			entityRoutes.GET("/:id/devotees", entityHandler.GetDevoteesByEntity)
 			entityRoutes.GET("/:id/devotee-stats", entityHandler.GetDevoteeStats)
 			entityRoutes.GET("/:id/devotees/:userId/profile", profileHandler.GetDevoteeProfileByEntity) // ✅ UPDATED: Changed :entityId to :id
@@ -450,6 +460,11 @@ protected.GET("/entities/:id/details",
 		protected.POST("/entities",
 			middleware.RBACMiddleware("templeadmin", "superadmin", "standarduser"),
 			entityHandler.CreateEntity,
+		)
+
+		protected.GET("/entities/:id",
+			middleware.RBACMiddleware("templeadmin", "superadmin", "devotee"),
+			entityHandler.GetEntityByID,
 		)
 
 		// GetAllEntities - allowed for templeadmin, superadmin, standarduser, monitoringuser
@@ -541,7 +556,9 @@ protected.GET("/entities/:id/details",
 				devoteeRoutes.POST("", donationHandler.CreateDonation)
 				devoteeRoutes.POST("/verify", donationHandler.VerifyDonation)
 				devoteeRoutes.GET("/my", donationHandler.GetMyDonations)
+				devoteeRoutes.GET("/history", donationHandler.GetDonationsByEntity)
 			}
+
 
 			// ========== TEMPLE ADMIN ROUTES (UPDATED PERMISSIONS) ==========
 			templeRoutes := donationRoutes.Group("")
@@ -560,6 +577,7 @@ protected.GET("/entities/:id/details",
 					writeRoutes.GET("/export", donationHandler.ExportDonations)
 				}
 			}
+			
 
 			// ========== SHARED ROUTES (BOTH DEVOTEE AND TEMPLE ADMIN) ==========
 			// Receipt generation - both devotees and temple admins can access

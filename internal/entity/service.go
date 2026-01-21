@@ -179,6 +179,12 @@ func (s *Service) GetEntitiesByCreator(creatorID uint) ([]Entity, error) {
 func (s *Service) GetEntityByID(id int) (Entity, error) {
 	return s.Repo.GetEntityByID(id)
 }
+// Add to entity/service.go
+
+// GetCreatorDetails retrieves creator information for an entity
+func (s *Service) GetCreatorDetails(creatorID uint) (*CreatorDetails, error) {
+	return s.Repo.GetCreatorDetailsByID(creatorID)
+}
 
 // UpdateEntity - Temple Admin → Update temple with re-approval logic for rejected temples
 func (s *Service) UpdateEntity(e Entity, userID uint, userRoleID uint, ip string, wasRejected bool) error {

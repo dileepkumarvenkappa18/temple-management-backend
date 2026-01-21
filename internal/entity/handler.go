@@ -779,6 +779,7 @@ func (h *Handler) GetAllEntities(c *gin.Context) {
 
 // GetEntityByID retrieves a specific entity by ID with permission checks
 func (h *Handler) GetEntityByID(c *gin.Context) {
+
 	// ================= PARAM =================
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -815,8 +816,10 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 	// ================= FETCH ENTITY =================
 	entity, err := h.Service.GetEntityByID(id)
 	if err != nil {
-		// Allow mock entity only for assigned standard / monitoring users
-		if (user.Role.RoleName == "standarduser" || user.Role.RoleName == "monitoringuser") &&
+
+		// Allow mock entity ONLY for assigned standard / monitoring users
+		if (user.Role.RoleName == "standarduser" ||
+			user.Role.RoleName == "monitoringuser") &&
 			accessContext.AssignedEntityID != nil &&
 			*accessContext.AssignedEntityID == uint(id) {
 
@@ -825,44 +828,94 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 				Name:        "Temple " + strconv.Itoa(id),
 				Description: "Temple associated with your account",
 				Status:      "active",
-				Media:       "mediaObj",
+				Media:       "",
 				CreatedBy:   uint(id),
 				CreatedAt:   time.Now(),
 				UpdatedAt:   time.Now(),
 			}
+
 		} else {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Temple not found"})
 			return
 		}
 	}
-	
+
+	// ================= MEDIA PARSING =================
+	mediaObj := map[string]interface{}{
+		"logo":  "",
+		"video": "",
+	}
+
+	if entity.Media != "" {
+		log.Printf("📦 Raw Media from DB: %s", entity.Media)
+		if err := json.Unmarshal([]byte(entity.Media), &mediaObj); err != nil {
+			log.Printf("⚠️ Failed to parse media JSON for entity %d: %v", entity.ID, err)
+		} else {
+			log.Printf("✅ Parsed Media: %+v", mediaObj)
+		}
+	}
+
+	// ================= FETCH CREATOR DETAILS =================
+	var creatorDetails *CreatorDetails
+	if entity.CreatedBy > 0 {
+		creatorDetails, err = h.Service.GetCreatorDetails(entity.CreatedBy)
+		if err != nil {
+			log.Printf("⚠️ Failed to fetch creator details for entity %d: %v", entity.ID, err)
+			// Don't fail the request, just log the error
+		}
+	}
+
+	// =========================================================
+	// ✅ DEVOTEE SAFE READ-ONLY ACCESS (PUBLIC DETAILS ENDPOINT)
+	// =========================================================
+	if user.Role.RoleName == "devotee" &&
+		strings.HasSuffix(c.FullPath(), "/details") {
+
+		response := gin.H{
+			"id":          entity.ID,
+			"name":        entity.Name,
+			"main_deity":  entity.MainDeity,
+			"temple_type": entity.TempleType,
+			"city":        entity.City,
+			"district":    entity.District,
+			"state":       entity.State,
+			"map_link":    entity.MapLink,
+			"status":      entity.Status,
+			"isactive":    entity.IsActive,
+			"media":       mediaObj,
+		}
+
+		// 🆕 Include creator details for devotees
+		if creatorDetails != nil {
+			response["creator"] = creatorDetails
+		}
+
+		c.JSON(http.StatusOK, response)
+		return
+	}
 
 	// ================= PERMISSION CHECK =================
-	// ================= PERMISSION CHECK =================
-
-// ✅ Public read-only access for devotees via /details
-if strings.HasSuffix(c.FullPath(), "/details") &&
-	user.Role.RoleName == "devotee" {
-	// allow access, skip permission checks
-} else {
-
 	hasAccess := false
 
 	switch user.Role.RoleName {
+
 	case "superadmin":
 		hasAccess = true
 
 	case "templeadmin":
 		hasAccess =
-			(accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == uint(id)) ||
+			(accessContext.DirectEntityID != nil &&
+				*accessContext.DirectEntityID == uint(id)) ||
 				entity.CreatedBy == user.ID
 
 	case "standarduser", "monitoringuser":
 		if accessContext.AssignedEntityID != nil {
-			hasAccess =
-				*accessContext.AssignedEntityID == uint(id) ||
-					entity.CreatedBy == *accessContext.AssignedEntityID
+			hasAccess = *accessContext.AssignedEntityID == uint(id)
 		}
+
+	case "devotee":
+		// ❌ Devotees are NOT allowed full entity access
+		hasAccess = false
 	}
 
 	if !hasAccess {
@@ -871,66 +924,49 @@ if strings.HasSuffix(c.FullPath(), "/details") &&
 		})
 		return
 	}
+
+	// ================= FULL RESPONSE (ADMIN ONLY) =================
+	response := gin.H{
+		"id":               entity.ID,
+		"name":             entity.Name,
+		"main_deity":       entity.MainDeity,
+		"temple_type":      entity.TempleType,
+		"established_year": entity.EstablishedYear,
+		"phone":            entity.Phone,
+		"email":            entity.Email,
+		"description":      entity.Description,
+		"street_address":   entity.StreetAddress,
+		"city":             entity.City,
+		"district":         entity.District,
+		"state":            entity.State,
+		"pincode":          entity.Pincode,
+		"landmark":         entity.Landmark,
+		"map_link":         entity.MapLink,
+		"status":           entity.Status,
+		"isactive":         entity.IsActive,
+
+		// documents
+		"registration_cert_url": entity.RegistrationCertURL,
+		"trust_deed_url":        entity.TrustDeedURL,
+		"property_docs_url":     entity.PropertyDocsURL,
+		"additional_docs_urls":  entity.AdditionalDocsURLs,
+
+		// media
+		"media": mediaObj,
+
+		// meta
+		"created_by":      entity.CreatedBy,
+		"creator_role_id": entity.CreatorRoleID,
+	}
+
+	// 🆕 Include full creator details for admins
+	if creatorDetails != nil {
+		response["creator"] = creatorDetails
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
-	// ================= MEDIA PARSING =================
-	
-// ================= MEDIA PARSING =================
-mediaObj := map[string]interface{}{} // Changed from map[string]string to map[string]interface{}
-
-// 🔥 CRITICAL FIX: Parse media field if it exists
-if entity.Media != "" {
-    log.Printf("📦 Raw Media from DB: %s", entity.Media)
-    if err := json.Unmarshal([]byte(entity.Media), &mediaObj); err != nil {
-        log.Printf("⚠️ Failed to parse media JSON for entity %d: %v", entity.ID, err)
-        log.Printf("⚠️ Media content: %s", entity.Media)
-        // Set empty media object on error
-        mediaObj = map[string]interface{}{
-            "logo":  "",
-            "video": "",
-        }
-    } else {
-        log.Printf("✅ Parsed Media - Logo: %v, Video: %v", mediaObj["logo"], mediaObj["video"])
-    }
-} else {
-    log.Printf("⚠️ No media found for entity %d", entity.ID)
-    // Set empty media object when no media
-    mediaObj = map[string]interface{}{
-        "logo":  "",
-        "video": "",
-    }
-}
-
-// ================= RESPONSE =================
-c.JSON(http.StatusOK, gin.H{
-    "id":                    entity.ID,
-    "name":                  entity.Name,
-    "main_deity":            entity.MainDeity,
-    "temple_type":           entity.TempleType,
-    "established_year":      entity.EstablishedYear,
-    "phone":                 entity.Phone,
-    "email":                 entity.Email,
-    "description":           entity.Description,
-    "street_address":        entity.StreetAddress,
-    "city":                  entity.City,
-    "district":              entity.District,
-    "state":                 entity.State,
-    "pincode":               entity.Pincode,
-    "landmark":              entity.Landmark,
-    "map_link":              entity.MapLink,
-    "status":                entity.Status,
-    "isactive":              entity.IsActive,
-
-    // documents
-    "registration_cert_url": entity.RegistrationCertURL,
-    "trust_deed_url":        entity.TrustDeedURL,
-    "property_docs_url":     entity.PropertyDocsURL,
-    "additional_docs_urls":  entity.AdditionalDocsURLs,
-
-    // 🔥 CRITICAL: MUST include media in response
-    "media": mediaObj,
-})
-}
 
 func (h *Handler) UpdateEntity(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))

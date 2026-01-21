@@ -116,7 +116,7 @@ func (s *service) StartDonation(req CreateDonationRequest) (*CreateDonationRespo
 		Amount:       req.Amount,
 		DonationType: req.DonationType,
 		ReferenceID:  req.ReferenceID,
-		Method:       "PENDING", // Will be updated after payment
+		Method:       " ", // Will be updated after payment
 		Status:       StatusPending,
 		OrderID:      orderID,
 		Note:         req.Note,
@@ -147,73 +147,84 @@ func (s *service) StartDonation(req CreateDonationRequest) (*CreateDonationRespo
 		RazorpayKey: s.cfg.RazorpayKey,
 	}, nil
 }
+func (s *service) HandleRazorpayWebhook(orderID, paymentID, method string, amount float64) error {
+	now := time.Now()
 
-// VerifyAndUpdateDonation securely verifies Razorpay signature and updates payment status (DEVOTEE - UNCHANGED)
+	return s.repo.UpdatePaymentDetails(
+		context.Background(),
+		orderID,
+		UpdatePaymentDetailsParams{
+			Status:    StatusSuccess,
+			PaymentID: &paymentID,
+			Method:    method,
+			Amount:    amount,
+			DonatedAt: &now,
+		},
+	)
+}
+
+// VerifyAndUpdateDonation securely verifies Razorpay signature and updates payment status
+// ✅ Works for UPI / CARD / WALLET
+// ❌ Skips NETBANKING (handled via webhook)
 func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 	ctx := context.Background()
-	
-	// Step 1: Verify HMAC Signature
+
+	// Step 1: Get donation record FIRST
+	donation, err := s.repo.GetByOrderID(ctx, req.OrderID)
+	if err != nil {
+		s.auditSvc.LogAction(ctx, nil, nil, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
+			"order_id": req.OrderID,
+			"reason":   "donation record not found",
+		}, req.IPAddress, "failure")
+
+		return errors.New("donation record not found for given order ID")
+	}
+
+	// 🚨 CRITICAL FIX: DO NOT verify NETBANKING here
+	if donation.Method == MethodNetbanking {
+		// Netbanking confirmation comes via Razorpay webhook
+		return nil
+	}
+
+	// Step 2: Verify HMAC Signature (ONLY for instant methods)
 	expected := hmac.New(sha256.New, []byte(s.cfg.RazorpaySecret))
 	expected.Write([]byte(req.OrderID + "|" + req.PaymentID))
 	computedSignature := hex.EncodeToString(expected.Sum(nil))
 
 	if computedSignature != req.RazorpaySig {
-		s.auditSvc.LogAction(ctx, nil, nil, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
+		s.auditSvc.LogAction(ctx, &donation.UserID, &donation.EntityID, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
 			"order_id":   req.OrderID,
 			"payment_id": req.PaymentID,
 			"reason":     "invalid payment signature",
 		}, req.IPAddress, "failure")
-		
+
 		return fmt.Errorf("invalid payment signature")
 	}
 
-	// Step 2: Fetch payment details from Razorpay
+	// Step 3: Fetch payment details from Razorpay
 	payment, err := s.client.Payment.Fetch(req.PaymentID, nil, nil)
 	if err != nil {
-		s.auditSvc.LogAction(ctx, nil, nil, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
+		s.auditSvc.LogAction(ctx, &donation.UserID, &donation.EntityID, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
 			"order_id":   req.OrderID,
 			"payment_id": req.PaymentID,
 			"reason":     "razorpay payment fetch failed",
 			"error":      err.Error(),
 		}, req.IPAddress, "failure")
-		
+
 		return fmt.Errorf("razorpay payment fetch failed: %w", err)
 	}
 
 	status, ok := payment["status"].(string)
 	if !ok {
-		s.auditSvc.LogAction(ctx, nil, nil, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
-			"order_id":   req.OrderID,
-			"payment_id": req.PaymentID,
-			"reason":     "invalid payment status format",
-		}, req.IPAddress, "failure")
-		
 		return errors.New("invalid payment status format")
 	}
 
-	// Step 3: Get donation record
-	donation, err := s.repo.GetByOrderID(context.Background(), req.OrderID)
-	if err != nil {
-		s.auditSvc.LogAction(ctx, nil, nil, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
-			"order_id":   req.OrderID,
-			"payment_id": req.PaymentID,
-			"reason":     "donation record not found",
-		}, req.IPAddress, "failure")
-		
-		return errors.New("donation record not found for given order ID")
-	}
-
+	// Step 4: Prevent duplicate processing
 	if donation.Status == StatusSuccess {
-		s.auditSvc.LogAction(ctx, &donation.UserID, &donation.EntityID, "DONATION_ALREADY_PROCESSED", map[string]interface{}{
-			"order_id":   req.OrderID,
-			"payment_id": req.PaymentID,
-			"amount":     donation.Amount,
-		}, req.IPAddress, "success")
-		
-		return nil // Already processed
+		return nil
 	}
 
-	// Step 4: Update donation status
+	// Step 5: Extract amount
 	var amount float64
 	switch val := payment["amount"].(type) {
 	case float64:
@@ -222,21 +233,15 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 		amountPaise, _ := val.Float64()
 		amount = amountPaise / 100
 	default:
-		s.auditSvc.LogAction(ctx, &donation.UserID, &donation.EntityID, "DONATION_VERIFICATION_FAILED", map[string]interface{}{
-			"order_id":   req.OrderID,
-			"payment_id": req.PaymentID,
-			"reason":     "unsupported amount type",
-			"amount_type": fmt.Sprintf("%T", val),
-		}, req.IPAddress, "failure")
-		
 		return fmt.Errorf("unsupported amount type: %T", val)
 	}
 
+	// Step 6: Determine final status
 	newStatus := StatusFailed
 	var donatedAt *time.Time
 	auditAction := "DONATION_FAILED"
 	auditStatus := "failure"
-	
+
 	if status == "captured" {
 		newStatus = StatusSuccess
 		now := time.Now()
@@ -245,14 +250,14 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 		auditStatus = "success"
 	}
 
-	// Extract payment method
+	// Step 7: Extract payment method
 	method := "UNKNOWN"
 	if paymentMethod, ok := payment["method"].(string); ok {
 		method = paymentMethod
 	}
 
-	// Update the donation record
-	err = s.repo.UpdatePaymentDetails(context.Background(), req.OrderID, UpdatePaymentDetailsParams{
+	// Step 8: Update donation record
+	err = s.repo.UpdatePaymentDetails(ctx, req.OrderID, UpdatePaymentDetailsParams{
 		Status:    newStatus,
 		PaymentID: &req.PaymentID,
 		Method:    method,
@@ -264,26 +269,24 @@ func (s *service) VerifyAndUpdateDonation(req VerifyPaymentRequest) error {
 		s.auditSvc.LogAction(ctx, &donation.UserID, &donation.EntityID, "DONATION_UPDATE_FAILED", map[string]interface{}{
 			"order_id":   req.OrderID,
 			"payment_id": req.PaymentID,
-			"amount":     amount,
-			"method":     method,
 			"error":      err.Error(),
 		}, req.IPAddress, "failure")
-		
+
 		return err
 	}
 
+	// Step 9: Audit success
 	s.auditSvc.LogAction(ctx, &donation.UserID, &donation.EntityID, auditAction, map[string]interface{}{
 		"order_id":       req.OrderID,
 		"payment_id":     req.PaymentID,
 		"amount":         amount,
-		"donation_type":  donation.DonationType,
 		"method":         method,
 		"razorpay_status": status,
-		"reference_id":   donation.ReferenceID,
 	}, req.IPAddress, auditStatus)
 
 	return nil
 }
+
 
 // ==============================
 // Data Retrieval - UPDATED for entity-based approach
