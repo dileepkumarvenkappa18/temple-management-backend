@@ -380,6 +380,8 @@ protected.GET("/tenant-details/:id",
 		devoteeSevaRoutes.POST("/bookings", sevaHandler.BookSeva)
 		devoteeSevaRoutes.GET("/my-bookings", sevaHandler.GetMyBookings)
 		devoteeSevaRoutes.GET("/", sevaHandler.GetSevas)
+		devoteeSevaRoutes.POST("/book-with-payment", sevaHandler.BookSevaWithPayment)
+		devoteeSevaRoutes.POST("/verify-payment", sevaHandler.VerifySevaPayment)
 	}
 
 	// ========== Entity ==========

@@ -14,6 +14,9 @@ type Repository interface {
 	ListSevasByEntityID(ctx context.Context, entityID uint) ([]Seva, error)
 	UpdateSeva(ctx context.Context, seva *Seva) error
 	DeleteSeva(ctx context.Context, id uint) error
+	GetBookingByOrderID(ctx context.Context, orderID string) (*SevaBooking, error)
+	UpdateSevaBooking(ctx context.Context, booking *SevaBooking) error
+
 
 	// Enhanced seva listing with filters
 	GetSevasWithFilters(ctx context.Context, entityID uint, sevaType, search, status string, limit, offset int) ([]Seva, int64, error)
@@ -389,3 +392,17 @@ func (r *repository) CountBookingsByStatus(ctx context.Context, entityID uint) (
 
 	return counts, nil
 }
+// GetBookingByOrderID retrieves a booking by Razorpay order ID
+func (r *repository) GetBookingByOrderID(ctx context.Context, orderID string) (*SevaBooking, error) {
+	var booking SevaBooking
+	err := r.db.WithContext(ctx).
+		Where("razorpay_order_id = ?", orderID).
+		First(&booking).Error
+	return &booking, err
+}
+
+// UpdateSevaBooking updates a seva booking
+func (r *repository) UpdateSevaBooking(ctx context.Context, booking *SevaBooking) error {
+	return r.db.WithContext(ctx).Save(booking).Error
+}
+

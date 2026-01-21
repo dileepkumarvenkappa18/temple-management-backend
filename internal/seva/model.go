@@ -44,6 +44,12 @@ type SevaBooking struct {
 	EntityID    uint      `gorm:"not null" json:"entity_id"`      // Temple where the seva is hosted
 	BookingTime time.Time `json:"booking_time"`                   // Auto-timestamp
 	Status      string    `gorm:"type:varchar(20);default:'pending'" json:"status"` // pending / approved / rejected
+	Amount              float64   `gorm:"type:decimal(10,2)" json:"amount"`
+	RazorpayOrderID     string    `gorm:"type:varchar(255)" json:"razorpay_order_id,omitempty"`
+	RazorpayPaymentID   string    `gorm:"type:varchar(255)" json:"razorpay_payment_id,omitempty"`
+	RazorpaySignature   string    `gorm:"type:varchar(512)" json:"razorpay_signature,omitempty"`
+	PaymentVerifiedAt   *time.Time `json:"payment_verified_at,omitempty"`
+	
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }

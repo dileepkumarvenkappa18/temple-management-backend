@@ -1,14 +1,19 @@
 package seva
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
-	"fmt"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/razorpay/razorpay-go"
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
+	"github.com/sharath018/temple-management-backend/internal/auth"
 	"github.com/sharath018/temple-management-backend/middleware"
 )
 
@@ -32,13 +37,13 @@ func getAccessContextFromContext(c *gin.Context) (middleware.AccessContext, bool
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
 		return middleware.AccessContext{}, false
 	}
-	
+
 	accessContext, ok := accessContextRaw.(middleware.AccessContext)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid access context"})
 		return middleware.AccessContext{}, false
 	}
-	
+
 	return accessContext, true
 }
 
@@ -71,6 +76,22 @@ type UpdateSevaRequest struct {
 
 type BookSevaRequest struct {
 	SevaID uint `json:"seva_id" binding:"required"`
+}
+
+// ✅ NEW: Payment request structs
+type BookSevaWithPaymentRequest struct {
+	SevaID   uint    `json:"seva_id" binding:"required"`
+	Amount   float64 `json:"amount" binding:"required"`
+	EntityID uint    `json:"entity_id"`
+	SevaName string  `json:"seva_name"`
+	SevaType string  `json:"seva_type"`
+}
+
+type VerifySevaPaymentRequest struct {
+	RazorpayOrderID   string `json:"razorpay_order_id" binding:"required"`
+	RazorpayPaymentID string `json:"razorpay_payment_id" binding:"required"`
+	RazorpaySignature string `json:"razorpay_signature" binding:"required"`
+	SevaID            uint   `json:"seva_id" binding:"required"`
 }
 
 // ========================= SEVA HANDLERS =============================
@@ -132,8 +153,8 @@ func (h *Handler) CreateSeva(c *gin.Context) {
 		EndTime:        input.EndTime,
 		Duration:       input.Duration,
 		AvailableSlots: input.AvailableSlots, // ✅ UPDATED
-		BookedSlots:    0,                     // ✅ NEW: Initialize to 0
-		RemainingSlots: input.AvailableSlots,  // ✅ NEW: Initially same as available
+		BookedSlots:    0,                    // ✅ NEW: Initialize to 0
+		RemainingSlots: input.AvailableSlots, // ✅ NEW: Initially same as available
 		Status:         "upcoming",
 	}
 
@@ -564,6 +585,158 @@ func (h *Handler) BookSeva(c *gin.Context) {
 	})
 }
 
+// ✅ NEW: Book Seva with Razorpay Payment
+func (h *Handler) BookSevaWithPayment(c *gin.Context) {
+	var input BookSevaWithPaymentRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
+		return
+	}
+
+	user := c.MustGet("user").(auth.User)
+	if user.Role.RoleName != "devotee" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	// Validate seva exists and has available slots
+	seva, err := h.service.GetSevaByID(c, input.SevaID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Seva not found"})
+		return
+	}
+
+	// Check remaining slots
+	if seva.RemainingSlots <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No slots available for this seva"})
+		return
+	}
+
+	// Get Razorpay credentials from environment
+	razorpayKey := os.Getenv("RAZORPAY_KEY_ID")
+	razorpaySecret := os.Getenv("RAZORPAY_KEY_SECRET")
+
+	if razorpayKey == "" || razorpaySecret == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Payment gateway not configured"})
+		return
+	}
+
+	// Initialize Razorpay client
+	client := razorpay.NewClient(razorpayKey, razorpaySecret)
+
+	// Create Razorpay order
+	data := map[string]interface{}{
+		"amount":   int(input.Amount * 100), // Convert to paise
+		"currency": "INR",
+		"receipt":  fmt.Sprintf("seva_%d_%d", input.SevaID, time.Now().Unix()),
+		"notes": map[string]interface{}{
+			"seva_id":   input.SevaID,
+			"user_id":   user.ID,
+			"entity_id": input.EntityID,
+			"seva_name": input.SevaName,
+			"seva_type": input.SevaType,
+		},
+	}
+
+	body, err := client.Order.Create(data, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create payment order: " + err.Error()})
+		return
+	}
+
+	orderID := body["id"].(string)
+
+	// Create pending booking with Razorpay order ID
+	ip := middleware.GetIPFromContext(c)
+	booking := SevaBooking{
+		SevaID:          input.SevaID,
+		UserID:          user.ID,
+		EntityID:        input.EntityID,
+		Amount:          input.Amount,
+		BookingTime:     time.Now(),
+		Status:          "pending",
+		RazorpayOrderID: orderID,
+	}
+
+	if err := h.service.CreateSevaBookingWithPayment(c, &booking, user.ID, input.EntityID, ip); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Booking failed: " + err.Error()})
+		return
+	}
+
+	// Return order details for Razorpay checkout
+	c.JSON(http.StatusCreated, gin.H{
+		"success":      true,
+		"order_id":     orderID,
+		"razorpay_key": razorpayKey,
+		"amount":       input.Amount,
+		"booking_id":   booking.ID,
+		"message":      "Razorpay order created successfully",
+	})
+}
+
+// ✅ NEW: Verify Seva Payment
+func (h *Handler) VerifySevaPayment(c *gin.Context) {
+	var input VerifySevaPaymentRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
+		return
+	}
+
+	user := c.MustGet("user").(auth.User)
+
+	// Get Razorpay secret
+	razorpaySecret := os.Getenv("RAZORPAY_KEY_SECRET")
+	if razorpaySecret == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Payment gateway not configured"})
+		return
+	}
+
+	// Verify signature
+message := input.RazorpayOrderID + "|" + input.RazorpayPaymentID
+
+mac := hmac.New(sha256.New, []byte(razorpaySecret))
+mac.Write([]byte(message))
+
+expectedSignature := hex.EncodeToString(mac.Sum(nil))
+
+	if expectedSignature != input.RazorpaySignature {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid payment signature",
+		})
+		return
+	}
+
+	ip := middleware.GetIPFromContext(c)
+
+	// Update booking with payment details and approve
+	if err := h.service.VerifySevaPayment(
+		c,
+		input.RazorpayOrderID,
+		input.RazorpayPaymentID,
+		input.RazorpaySignature,
+		input.SevaID,
+		user.ID,
+		ip,
+	); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Payment verification failed: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Payment verified successfully",
+		"status":  "approved",
+	})
+}
+
+func (h *Handler) Write(b []byte) {
+	panic("unimplemented")
+}
+
 func (h *Handler) GetMyBookings(c *gin.Context) {
 	user := c.MustGet("user").(auth.User)
 	bookings, err := h.service.GetBookingsForUser(c, user.ID)
@@ -666,7 +839,7 @@ func (h *Handler) GetBookingCounts(c *gin.Context) {
 		if !ok {
 			return
 		}
-		
+
 		contextEntityID := accessContext.GetAccessibleEntityID()
 		if contextEntityID == nil {
 			c.JSON(http.StatusForbidden, gin.H{"error": "No accessible entity"})
@@ -684,7 +857,7 @@ func (h *Handler) GetBookingCounts(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"counts": counts})
 }
 
-// ✅ UPDATED: UpdateBookingStatus - Updates BookedSlots and RemainingSlots
+// UPDATED: UpdateBookingStatus - Updates BookedSlots and RemainingSlots
 func (h *Handler) UpdateBookingStatus(c *gin.Context) {
 	user := c.MustGet("user").(auth.User)
 

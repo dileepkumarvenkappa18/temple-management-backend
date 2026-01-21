@@ -30,6 +30,9 @@ type Service interface {
 
     // Composite Booking Details
     GetDetailedBookingsForEntity(ctx context.Context, entityID uint) ([]DetailedBooking, error)
+    CreateSevaBookingWithPayment(ctx context.Context, booking *SevaBooking, userID uint, entityID uint, ip string) error
+	VerifySevaPayment(ctx context.Context, razorpayOrderID, razorpayPaymentID, razorpaySignature string, sevaID, userID uint, ip string) error
+
 
     // Filters, Search, Pagination
     SearchBookings(ctx context.Context, filter BookingFilter) ([]DetailedBooking, int64, error)
@@ -583,4 +586,144 @@ func (s *service) GetPaginatedSevas(ctx context.Context, entityID uint, sevaType
 // Get approved booking counts per seva
 func (s *service) GetApprovedBookingCountsPerSeva(ctx context.Context, entityID uint) (map[uint]int64, error) {
     return s.repo.GetApprovedBookingsCountPerSeva(ctx, entityID)
+}
+// CreateSevaBookingWithPayment creates a pending booking with Razorpay order
+func (s *service) CreateSevaBookingWithPayment(ctx context.Context, booking *SevaBooking, userID uint, entityID uint, ip string) error {
+	// Validate Seva exists and is bookable
+	seva, err := s.repo.GetSevaByID(ctx, booking.SevaID)
+	if err != nil {
+		s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_BOOKING_FAILED", map[string]interface{}{
+			"seva_id": booking.SevaID,
+			"reason":  "seva not found",
+			"error":   err.Error(),
+		}, ip, "failure")
+		return err
+	}
+
+	// Check if seva is bookable
+	if seva.Status != "upcoming" && seva.Status != "ongoing" {
+		s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_BOOKING_FAILED", map[string]interface{}{
+			"seva_id":     booking.SevaID,
+			"seva_status": seva.Status,
+			"reason":      "seva is not bookable",
+		}, ip, "failure")
+		return errors.New("seva is not available for booking")
+	}
+
+	// Check remaining slots
+	if seva.RemainingSlots <= 0 {
+		s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_BOOKING_FAILED", map[string]interface{}{
+			"seva_id":         booking.SevaID,
+			"remaining_slots": seva.RemainingSlots,
+			"reason":          "no slots available",
+		}, ip, "failure")
+		return errors.New("no slots available for this seva")
+	}
+
+	// Create booking (pending status)
+	err = s.repo.BookSeva(ctx, booking)
+	if err != nil {
+		s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_BOOKING_FAILED", map[string]interface{}{
+			"seva_id": booking.SevaID,
+			"error":   err.Error(),
+		}, ip, "failure")
+		return err
+	}
+
+	s.auditSvc.LogAction(ctx, &userID, &entityID, "SEVA_BOOKING_PAYMENT_INITIATED", map[string]interface{}{
+		"booking_id":         booking.ID,
+		"seva_id":            booking.SevaID,
+		"razorpay_order_id":  booking.RazorpayOrderID,
+		"amount":             booking.Amount,
+		"remaining_slots":    seva.RemainingSlots,
+	}, ip, "success")
+
+	return nil
+}
+
+// VerifySevaPayment verifies payment and approves booking
+func (s *service) VerifySevaPayment(ctx context.Context, razorpayOrderID, razorpayPaymentID, razorpaySignature string, sevaID, userID uint, ip string) error {
+	// Find booking by order ID
+	booking, err := s.repo.GetBookingByOrderID(ctx, razorpayOrderID)
+	if err != nil {
+		s.auditSvc.LogAction(ctx, &userID, nil, "SEVA_PAYMENT_VERIFICATION_FAILED", map[string]interface{}{
+			"razorpay_order_id": razorpayOrderID,
+			"reason":            "booking not found",
+			"error":             err.Error(),
+		}, ip, "failure")
+		return err
+	}
+
+	// Verify booking belongs to user
+	if booking.UserID != userID {
+		s.auditSvc.LogAction(ctx, &userID, &booking.EntityID, "SEVA_PAYMENT_VERIFICATION_FAILED", map[string]interface{}{
+			"booking_id": booking.ID,
+			"reason":     "unauthorized access",
+		}, ip, "failure")
+		return errors.New("unauthorized access to booking")
+	}
+
+	// Get seva for slot validation
+	seva, err := s.repo.GetSevaByID(ctx, booking.SevaID)
+	if err != nil {
+		return err
+	}
+
+	// Check if slots are still available
+	if seva.RemainingSlots <= 0 {
+		s.auditSvc.LogAction(ctx, &userID, &booking.EntityID, "SEVA_PAYMENT_VERIFICATION_FAILED", map[string]interface{}{
+			"booking_id":      booking.ID,
+			"remaining_slots": seva.RemainingSlots,
+			"reason":          "no slots available",
+		}, ip, "failure")
+		return errors.New("no slots available for this seva")
+	}
+
+	// Update booking with payment details
+	now := time.Now()
+	booking.RazorpayPaymentID = razorpayPaymentID
+	booking.RazorpaySignature = razorpaySignature
+	booking.PaymentVerifiedAt = &now
+	booking.Status = "approved"
+
+	// Update booking in database
+	if err := s.repo.UpdateSevaBooking(ctx, booking); err != nil {
+		s.auditSvc.LogAction(ctx, &userID, &booking.EntityID, "SEVA_PAYMENT_VERIFICATION_FAILED", map[string]interface{}{
+			"booking_id": booking.ID,
+			"error":      err.Error(),
+		}, ip, "failure")
+		return err
+	}
+
+	// Increment booked slots
+	if err := s.repo.IncrementBookedSlots(ctx, booking.SevaID); err != nil {
+		s.auditSvc.LogAction(ctx, &userID, &booking.EntityID, "SEVA_SLOT_UPDATE_FAILED", map[string]interface{}{
+			"booking_id": booking.ID,
+			"seva_id":    booking.SevaID,
+			"error":      err.Error(),
+		}, ip, "failure")
+		return fmt.Errorf("failed to update slots: %v", err)
+	}
+
+	s.auditSvc.LogAction(ctx, &userID, &booking.EntityID, "SEVA_PAYMENT_VERIFIED", map[string]interface{}{
+		"booking_id":          booking.ID,
+		"seva_id":             booking.SevaID,
+		"razorpay_payment_id": razorpayPaymentID,
+		"amount":              booking.Amount,
+		"status":              "approved",
+	}, ip, "success")
+
+	// Send notification
+	if s.notifSvc != nil {
+		_ = s.notifSvc.CreateInAppNotification(
+			ctx,
+			userID,
+			booking.EntityID,
+			"Seva Booking Confirmed",
+			fmt.Sprintf("Your seva booking has been confirmed. Payment ID: %s", razorpayPaymentID),
+			"seva",
+		)
+	}
+
+	return nil
 }
