@@ -63,11 +63,19 @@ type DonationWithUser struct {
 	DonorName      string    `json:"donorName" db:"user_name"`          // FIXED: donor info
 	DonorEmail     string    `json:"donorEmail" db:"user_email"`        // FIXED: donor info
 	PaymentMethod  string    `json:"method" db:"method"`                // FIXED: payment method
+
+	// 🔹 NEW: Bank details (from donations table)
+	AccountHolderName string  `json:"account_holder_name"`
+	AccountNumber     string  `json:"account_number"`
+	AccountType       string  `json:"account_type"`
+	IFSCCode          string  `json:"ifsc_code"`
+	UPIID             *string `json:"upi_id"`
 }
 
 // DonationFilters for filtering and pagination
 type DonationFilters struct {
 	EntityID  uint       `json:"entity_id"`
+	UserID    uint		`json:"user_id,omitempty"`
 	Status    string     `json:"status,omitempty"`
 	Type      string     `json:"type,omitempty"`
 	Method    string     `json:"method,omitempty"`

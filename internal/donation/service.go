@@ -341,10 +341,29 @@ func (s *service) GetDonationsWithFilters(filters DonationFilters, accessContext
 		return nil, 0, errors.New("read access denied")
 	}
 
-	// Verify entity access
-	entityID := accessContext.GetAccessibleEntityID()
-	if entityID == nil || *entityID != filters.EntityID {
-		return nil, 0, errors.New("access denied to requested entity")
+	// 🔒 UPDATED LOGIC: Verify access based on filter combination
+	if filters.EntityID != 0 && filters.UserID != 0 {
+		// Both filters: verify entity access AND user is requesting their own data
+		entityID := accessContext.GetAccessibleEntityID()
+		if entityID == nil || *entityID != filters.EntityID {
+			return nil, 0, errors.New("access denied to requested entity")
+		}
+		if filters.UserID != accessContext.UserID {
+			return nil, 0, errors.New("access denied: cannot view other users' donations")
+		}
+	} else if filters.EntityID != 0 {
+		// Entity-based filtering: verify user has access to this entity
+		entityID := accessContext.GetAccessibleEntityID()
+		if entityID == nil || *entityID != filters.EntityID {
+			return nil, 0, errors.New("access denied to requested entity")
+		}
+	} else if filters.UserID != 0 {
+		// User-based filtering: verify user can only see their own donations
+		if filters.UserID != accessContext.UserID {
+			return nil, 0, errors.New("access denied: cannot view other users' donations")
+		}
+	} else {
+		return nil, 0, errors.New("either entity_id or user_id must be specified")
 	}
 
 	donations, total, err := s.repo.ListWithFilters(context.Background(), filters)

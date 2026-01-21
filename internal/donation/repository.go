@@ -69,6 +69,11 @@ func (r *repository) GetByIDWithUser(ctx context.Context, donationID uint) (*Don
 			d.id, d.user_id, d.entity_id, d.amount, d.donation_type, d.reference_id,
 			d.method, d.status, d.order_id, d.payment_id, d.note, d.donated_at,
 			d.created_at, d.updated_at,
+			d.account_holder_name,
+			d.account_number,
+			d.account_type,
+			d.ifsc_code,
+			d.upi_id,
 			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name, 
 			COALESCE(u.email, '') as user_email,
 			COALESCE(e.name, '') as entity_name
@@ -114,6 +119,11 @@ func (r *repository) ListByUserID(ctx context.Context, userID uint) ([]DonationW
 			d.id, d.user_id, d.entity_id, d.amount, d.donation_type, d.reference_id,
 			d.method, d.status, d.order_id, d.payment_id, d.note, d.donated_at,
 			d.created_at, d.updated_at,
+			d.account_holder_name,
+			d.account_number,
+			d.account_type,
+			d.ifsc_code,
+			d.upi_id,
 			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name, 
 			COALESCE(u.email, '') as user_email,
 			COALESCE(e.name, '') as entity_name
@@ -136,6 +146,11 @@ func (r *repository) ListByUserIDAndEntity(ctx context.Context, userID uint, ent
 			d.id, d.user_id, d.entity_id, d.amount, d.donation_type, d.reference_id,
 			d.method, d.status, d.order_id, d.payment_id, d.note, d.donated_at,
 			d.created_at, d.updated_at,
+			d.account_holder_name,
+			d.account_number,
+			d.account_type,
+			d.ifsc_code,
+			d.upi_id,
 			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name, 
 			COALESCE(u.email, '') as user_email,
 			COALESCE(e.name, '') as entity_name
@@ -160,22 +175,47 @@ func (r *repository) ListWithFilters(ctx context.Context, filters DonationFilter
 			d.id, d.user_id, d.entity_id, d.amount, d.donation_type, d.reference_id,
 			d.method, d.status, d.order_id, d.payment_id, d.note, d.donated_at,
 			d.created_at, d.updated_at,
+			d.account_holder_name,
+			d.account_number,
+			d.account_type,
+			d.ifsc_code,
+			d.upi_id,
 			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name, 
 			COALESCE(u.email, '') as user_email,
 			COALESCE(e.name, '') as entity_name
 		`).
 		Joins("LEFT JOIN users u ON d.user_id = u.id").
-		Joins("LEFT JOIN entities e ON d.entity_id = e.id").
-		Where("d.entity_id = ?", filters.EntityID) // CRITICAL: Entity-based filtering
+		Joins("LEFT JOIN entities e ON d.entity_id = e.id")
 
-	// Apply filters
+	// 🔒 UPDATED LOGIC: Apply filters based on what's provided
+	if filters.EntityID != 0 && filters.UserID != 0 {
+		// Both filters: user's donations within specific entity (for devotees)
+		query = query.Where("d.entity_id = ? AND d.user_id = ?", filters.EntityID, filters.UserID)
+	} else if filters.EntityID != 0 {
+		// Entity only: all donations for entity (for admins)
+		query = query.Where("d.entity_id = ?", filters.EntityID)
+	} else if filters.UserID != 0 {
+		// User only: all user's donations across entities
+		query = query.Where("d.user_id = ?", filters.UserID)
+	}
+
+	// Apply other filters
 	query = r.applyFilters(query, filters)
 
 	// Count total records
 	countQuery := r.db.WithContext(ctx).
 		Table("donations d").
-		Joins("LEFT JOIN users u ON d.user_id = u.id").
-		Where("d.entity_id = ?", filters.EntityID) // CRITICAL: Entity-based filtering for count too
+		Joins("LEFT JOIN users u ON d.user_id = u.id")
+	
+	// 🔒 UPDATED LOGIC: Apply same filters to count query
+	if filters.EntityID != 0 && filters.UserID != 0 {
+		countQuery = countQuery.Where("d.entity_id = ? AND d.user_id = ?", filters.EntityID, filters.UserID)
+	} else if filters.EntityID != 0 {
+		countQuery = countQuery.Where("d.entity_id = ?", filters.EntityID)
+	} else if filters.UserID != 0 {
+		countQuery = countQuery.Where("d.user_id = ?", filters.UserID)
+	}
+	
 	countQuery = r.applyFilters(countQuery, filters)
 	countQuery.Count(&total)
 

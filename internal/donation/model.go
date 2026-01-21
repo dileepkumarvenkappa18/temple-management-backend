@@ -52,6 +52,13 @@ type Donation struct {
 
 	Note *string `gorm:"type:text" json:"note,omitempty"`                       // Optional donor message/intention
 
+	// 🔹 BANK DETAILS (ADDED)
+	AccountHolderName string  `gorm:"size:255" json:"account_holder_name"`
+	AccountNumber     string  `gorm:"size:30" json:"account_number"`
+	AccountType       string  `gorm:"size:20" json:"account_type"`
+	IFSCCode          string  `gorm:"size:11" json:"ifsc_code"`
+	UPIID             *string `gorm:"size:100" json:"upi_id,omitempty"`
+	
 	DonatedAt *time.Time     `json:"donated_at,omitempty"`                      // Set only on successful payment
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`

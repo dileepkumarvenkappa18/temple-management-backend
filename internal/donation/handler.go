@@ -1,6 +1,7 @@
 package donation
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -180,25 +181,98 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 		return
 	}
 
-	// NEW: Extract entity ID using same logic as events
-	entityID, err := getEntityIDFromRequest(c, accessContext)
-	if err != nil || entityID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
+	// ✅ EXTRACT entity_id STRICTLY (from param OR query)
+	var entityID uint
+
+	// 1️⃣ Try route param: /entity/:entityId/...
+	if entityIDStr := c.Param("entityId"); entityIDStr != "" {
+		id, err := strconv.ParseUint(entityIDStr, 10, 64)
+		if err != nil || id == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entity_id in path"})
+			return
+		}
+		entityID = uint(id)
+	}
+
+	// 2️⃣ Fallback to query param ?entity_id=
+	if entityID == 0 {
+		if id := c.Query("entity_id"); id != "" {
+			parsedID, err := strconv.ParseUint(id, 10, 64)
+			if err != nil || parsedID == 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entity_id in query"})
+				return
+			}
+			entityID = uint(parsedID)
+		}
+	}
+
+	// 3️⃣ Final fallback: Try header
+	if entityID == 0 {
+		if headerEntityID := c.GetHeader("X-Entity-ID"); headerEntityID != "" {
+			parsedID, err := strconv.ParseUint(headerEntityID, 10, 64)
+			if err == nil && parsedID != 0 {
+				entityID = uint(parsedID)
+			}
+		}
+	}
+
+	// 🔒 DEVOTEES MUST HAVE ENTITY_ID
+	if accessContext.RoleName == "devotee" && entityID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "entity_id is required for devotees",
+		})
 		return
 	}
 
-	// Parse query parameters
+	// Initialize filters
 	filters := DonationFilters{
-		EntityID: entityID, // NEW: Use extracted entity ID
-		Page:     parseIntQuery(c, "page", 1),
-		Limit:    parseIntQuery(c, "limit", 20),
-		Status:   c.Query("status"),
-		Type:     c.Query("type"),
-		Method:   c.Query("method"),
-		Search:   c.Query("search"),
+		Page:   parseIntQuery(c, "page", 1),
+		Limit:  parseIntQuery(c, "limit", 20),
+		Status: c.Query("status"),
+		Type:   c.Query("type"),
+		Method: c.Query("method"),
+		Search: c.Query("search"),
 	}
 
-	// Parse date filters
+	// 🔒 ROLE-BASED FILTERING WITH ENTITY ISOLATION
+	switch accessContext.RoleName {
+	case "devotee":
+		// Devotees see ONLY their own donations for the CURRENT entity
+		filters.UserID = accessContext.UserID
+		filters.EntityID = entityID // Already validated above, cannot be 0
+		
+	case "admin", "superadmin":
+		// Admins can see all donations
+		if entityID != 0 {
+			// If entity specified, filter by entity
+			filters.EntityID = entityID
+			filters.UserID = 0
+		} else {
+			// If no entity specified, show all (admin privilege)
+			filters.EntityID = 0
+			filters.UserID = 0
+		}
+		
+	case "trustee", "staff", "templeadmin":
+		// Trustees/Staff can see entity donations
+		if entityID != 0 {
+			filters.EntityID = entityID
+			filters.UserID = 0
+		} else {
+			// No entity specified, show their own donations only
+			filters.UserID = accessContext.UserID
+			filters.EntityID = 0
+		}
+		
+	default:
+		// Unknown role: show only their own donations
+		filters.UserID = accessContext.UserID
+		if entityID != 0 {
+			filters.EntityID = entityID
+		}
+	}
+
+	// Date filters
 	if fromStr := c.Query("from"); fromStr != "" {
 		if from, err := time.Parse("2006-01-02", fromStr); err == nil {
 			filters.From = &from
@@ -210,7 +284,7 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 		}
 	}
 
-	// Parse amount filters
+	// Amount filters
 	if minStr := c.Query("min"); minStr != "" {
 		if min, err := strconv.ParseFloat(minStr, 64); err == nil {
 			filters.MinAmount = &min
@@ -222,12 +296,12 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 		}
 	}
 
-	// Handle date range presets
+	// Date presets
 	switch c.Query("dateRange") {
 	case "today":
 		today := time.Now().Truncate(24 * time.Hour)
-		filters.From = &today
 		tomorrow := today.Add(24 * time.Hour)
+		filters.From = &today
 		filters.To = &tomorrow
 	case "week":
 		weekAgo := time.Now().AddDate(0, 0, -7)
@@ -240,8 +314,13 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 		filters.From = &yearAgo
 	}
 
+	// 📝 DEBUG LOG (remove in production)
+	log.Printf("🔍 Donation Filters Applied - Role: %s, UserID: %d, EntityID: %d", 
+		accessContext.RoleName, filters.UserID, filters.EntityID)
+
 	donations, total, err := h.svc.GetDonationsWithFilters(filters, accessContext)
 	if err != nil {
+		log.Printf("❌ Error fetching donations: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
