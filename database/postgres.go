@@ -58,7 +58,7 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&auth.User{},
 		&auth.ApprovalRequest{},
 		&auth.TenantDetails{},
-		&auth.BankAccountDetails{}, // 🆕 Bank details
+		&auth.Tenant_BankAccountDetails{}, // 🆕 Bank details
 		&auth.TenantUserAssignment{},
 		
 		// Other models

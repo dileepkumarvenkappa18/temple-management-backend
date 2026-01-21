@@ -92,7 +92,7 @@ func (TenantDetails) TableName() string {
 	return "tenant_details"
 }
 // BankAccountDetails represents the bank_account_details table
-type BankAccountDetails struct {
+type Tenant_BankAccountDetails struct {
 	ID                uint      `gorm:"primaryKey;autoIncrement" json:"id"`
 	UserID            uint      `gorm:"not null" json:"user_id"`
 	User              User      `gorm:"foreignKey:UserID;references:ID" json:"user"`
@@ -109,8 +109,8 @@ type BankAccountDetails struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func (BankAccountDetails) TableName() string {
-	return "bank_account_details"
+func (Tenant_BankAccountDetails) TableName() string {
+	return "tenant_bank_account_details"
 }
 
 type PublicRoleResponse struct {

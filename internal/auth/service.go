@@ -140,7 +140,7 @@ func (s *service) RegisterAndReturnUser(in RegisterInput) (*User, error) {
 			return nil, err
 		}
 		   // 🆕 Create bank account details
-    bank := &BankAccountDetails{
+    bank := &Tenant_BankAccountDetails{
         UserID:            user.ID,
         AccountHolderName: in.AccountHolderName,
         AccountNumber:     in.AccountNumber,

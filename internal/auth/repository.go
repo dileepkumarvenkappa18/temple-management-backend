@@ -21,9 +21,9 @@ type Repository interface {
 	GetUserIDsByRole(roleName string, entityID uint) ([]uint, error)
 	UpdateTenantMedia(tenantID uint, updates map[string]interface{}) error
 	GetTenantDetailsByUserID(userID uint) (*TenantDetails, error)
-	GetBankDetailsByUserID(userID uint) (*BankAccountDetails, error)
+	GetBankDetailsByUserID(userID uint) (*Tenant_BankAccountDetails, error)
 	UpdateTenantDetails(tenantID uint, updates map[string]interface{}) error
-	 CreateBankDetails(b *BankAccountDetails) error
+	 CreateBankDetails(b *Tenant_BankAccountDetails) error
 	 UpdateBankDetails(userID uint, updates map[string]interface{}) error
 	UpdateUserBasicInfo(userID uint, updates map[string]interface{}) error
 
@@ -56,7 +56,7 @@ func (r *repository) GetTenantDetailsByUserID(userID uint) (*TenantDetails, erro
 // UpdateBankDetails updates bank account details
 func (r *repository) UpdateBankDetails(userID uint, updates map[string]interface{}) error {
 	return r.db.
-		Model(&BankAccountDetails{}).
+		Model(&Tenant_BankAccountDetails{}).
 		Where("user_id = ?", userID).
 		Updates(updates).Error
 }
@@ -362,8 +362,8 @@ func (r *repository) GetUserPermissionType(userID uint) (string, error) {
 		return "full", nil
 	}
 }
-func (r *repository) GetBankDetailsByUserID(userID uint) (*BankAccountDetails, error) {
-	var bank BankAccountDetails
+func (r *repository) GetBankDetailsByUserID(userID uint) (*Tenant_BankAccountDetails, error) {
+	var bank Tenant_BankAccountDetails
 	err := r.db.
 		Where("user_id = ?", userID).
 		First(&bank).Error
@@ -374,7 +374,7 @@ func (r *repository) GetBankDetailsByUserID(userID uint) (*BankAccountDetails, e
 
 	return &bank, nil
 }
-func (r *repository) CreateBankDetails(b *BankAccountDetails) error {
+func (r *repository) CreateBankDetails(b *Tenant_BankAccountDetails) error {
     log.Printf("📝 Creating bank_account_details - UserID: %d, Account: %s", 
         b.UserID, b.AccountNumber)
     err := r.db.Create(b).Error
