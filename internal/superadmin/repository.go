@@ -216,11 +216,14 @@ func (r *Repository) GetPendingEntities(ctx context.Context) ([]entity.Entity, e
 	return temples, err
 }
 
-func (r *Repository) GetEntitiesWithFilters(ctx context.Context, status string, limit, page int) ([]entity.Entity, int64, error) {
+func (r *Repository) GetEntitiesWithFilters(
+	ctx context.Context,
+	status string,
+	limit, page int,
+) ([]entity.Entity, int64, error) {
+
 	var temples []entity.Entity
 	var total int64
-
-	offset := (page - 1) * limit
 
 	query := r.db.WithContext(ctx).Model(&entity.Entity{})
 
@@ -228,16 +231,35 @@ func (r *Repository) GetEntitiesWithFilters(ctx context.Context, status string, 
 		query = query.Where("LOWER(status) = LOWER(?)", status)
 	}
 
+	// Count always
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	if err := query.Limit(limit).Offset(offset).Find(&temples).Error; err != nil {
+	// ♾️ INFINITY MODE
+	if limit == 0 {
+		if err := query.
+			Order("created_at DESC").
+			Find(&temples).Error; err != nil {
+			return nil, 0, err
+		}
+		return temples, total, nil
+	}
+
+	// PAGINATED MODE
+	offset := (page - 1) * limit
+
+	if err := query.
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&temples).Error; err != nil {
 		return nil, 0, err
 	}
 
 	return temples, total, nil
 }
+
 
 func (r *Repository) ApproveEntity(ctx context.Context, entityID uint, adminID uint) error {
 	approvedAt := time.Now()

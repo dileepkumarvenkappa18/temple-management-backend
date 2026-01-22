@@ -270,19 +270,29 @@ func (s *Service) GetPendingEntities(ctx context.Context) ([]entity.Entity, erro
 
 // In superadmin/service.go
 
-func (s *Service) GetEntitiesWithFilters(ctx context.Context, status string, limit, page int) ([]entity.Entity, int64, error) {
+func (s *Service) GetEntitiesWithFilters(
+	ctx context.Context,
+	status string,
+	limit, page int,
+) ([]entity.Entity, int64, error) {
+
 	log.Printf("🔧 Service: GetEntitiesWithFilters called with status='%s', limit=%d, page=%d", status, limit, page)
-	
-	// Pass through to repository
+
+	// ✅ SAFETY GUARD FOR INFINITY & BAD VALUES
+	if limit < 0 {
+		limit = 0
+	}
+	if page <= 0 {
+		page = 1
+	}
+
 	entities, total, err := s.repo.GetEntitiesWithFilters(ctx, status, limit, page)
-	
 	if err != nil {
 		log.Printf("❌ Service: Error from repository: %v", err)
 		return nil, 0, err
 	}
-	
+
 	log.Printf("✅ Service: Repository returned %d entities (total: %d)", len(entities), total)
-	
 	return entities, total, nil
 }
 

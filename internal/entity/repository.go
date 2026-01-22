@@ -187,21 +187,44 @@ func (r *Repository) GetApprovalStatsByRole() (map[string]interface{}, error) {
 func (r *Repository) GetEntityByID(id int) (Entity, error) {
 	var entity Entity
 	
+	// First, get the basic entity data
 	err := r.DB.
 		Table("entities").
-		Select(`
-			entities.*,
-			approval_requests.approved_at,
-			approval_requests.rejected_at,
-			approval_requests.admin_notes as rejection_reason
-		`).
-		Joins("LEFT JOIN approval_requests ON entities.id = approval_requests.entity_id AND approval_requests.request_type = 'entity'").
-		Where("entities.id = ?", id).
+		Where("id = ?", id).
 		First(&entity).Error
 	
-	return entity, err
+	if err != nil {
+		return entity, err
+	}
+	
+	// Then, get the latest approval request data (if exists)
+	var approvalData struct {
+		ApprovedAt      *time.Time
+		RejectedAt      *time.Time
+		RejectionReason string
+	}
+	
+	err = r.DB.
+		Table("approval_requests").
+		Select("approved_at, rejected_at, admin_notes as rejection_reason").
+		Where("entity_id = ? AND request_type IN (?, ?)", id, "temple_approval", "temple_reapproval").
+		Order("created_at DESC").
+		Limit(1).
+		Scan(&approvalData).Error
+	
+	// If approval data exists, attach it to the entity
+	if err == nil {
+		entity.ApprovedAt = approvalData.ApprovedAt
+		entity.RejectedAt = approvalData.RejectedAt
+		if approvalData.RejectionReason != "" {
+			entity.RejectionReason = approvalData.RejectionReason
+		}
+	}
+	
+	log.Printf("📄 Fetched entity %d: additional_docs_urls = %s", entity.ID, entity.AdditionalDocsURLs)
+	
+	return entity, nil
 }
-
 // UpdateEntity - Fixed version that properly saves all fields including media
 func (r *Repository) UpdateEntity(e Entity) error {
 	e.UpdatedAt = time.Now()

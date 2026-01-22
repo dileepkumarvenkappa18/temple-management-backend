@@ -278,18 +278,34 @@ func (h *Handler) processFileUploadsToTemp(form *multipart.Form, tempFiles *[]Te
 		*tempFiles = append(*tempFiles, info)
 	}
 
-	// Multiple additional docs: additional_docs_0..9
-	for i := 0; i < 10; i++ {
-		field := fmt.Sprintf("additional_docs_%d", i)
-		if add := form.File[field]; len(add) > 0 {
-			info, err := h.uploadFileToTemp(add[0], tempSessionDir, "additional_docs")
-			if err != nil {
-				log.Printf("Warning: Failed to upload additional document %d: %v", i, err)
-				continue
+		// First try non-indexed format (multiple files with same name)
+		if additionalDocs := form.File["additional_docs"]; len(additionalDocs) > 0 {
+			log.Printf("📎 Found %d additional docs (non-indexed format)", len(additionalDocs))
+			for idx, file := range additionalDocs {
+				info, err := h.uploadFileToTemp(file, tempSessionDir, "additional_docs")
+				if err != nil {
+					log.Printf("Warning: Failed to upload additional document %d: %v", idx, err)
+					continue
+				}
+				*tempFiles = append(*tempFiles, info)
+				log.Printf("✅ Additional doc %d uploaded: %s", idx, file.Filename)
 			}
-			*tempFiles = append(*tempFiles, info)
+		} else {
+			// Fallback to indexed format for backward compatibility
+			log.Printf("📎 Checking for indexed additional docs format...")
+			for i := 0; i < 10; i++ {
+				field := fmt.Sprintf("additional_docs_%d", i)
+				if add := form.File[field]; len(add) > 0 {
+					info, err := h.uploadFileToTemp(add[0], tempSessionDir, "additional_docs")
+					if err != nil {
+						log.Printf("Warning: Failed to upload additional document %d: %v", i, err)
+						continue
+					}
+					*tempFiles = append(*tempFiles, info)
+					log.Printf("✅ Additional doc %d uploaded (indexed): %s", i, add[0].Filename)
+				}
+			}
 		}
-	}
 
 	// 🆕 Process temple logo
 	if logoFiles := form.File["temple_logo"]; len(logoFiles) > 0 {
