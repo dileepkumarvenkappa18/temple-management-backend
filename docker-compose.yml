@@ -21,6 +21,9 @@ services:
       FIREBASE_PROJECT_ID: tms-app-38fc7
       FCM_CREDENTIALS_PATH: app/serviceAccountKey.json
       FCM_PROJECT_ID: tms-app-38fc7
+      
+       TURNSTILE_SECRET_KEY=0x4AAAAAACOHzJSWYw-ecMHTktspGlo05ag
+        VITE_ENABLE_TURNSTILE=true
     volumes:
       - /var/www/uploads:/data/uploads
       - /var/www/logs:/data/logs

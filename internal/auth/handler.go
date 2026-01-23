@@ -10,12 +10,20 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sharath018/temple-management-backend/utils"
 )
 
-type Handler struct{ service Service }
+type Handler struct {
+	service        Service
+	captchaService *utils.CaptchaService
+}
 
-func NewHandler(s Service) *Handler { return &Handler{s} }
-
+func NewHandler(s Service, captchaService *utils.CaptchaService) *Handler {
+	return &Handler{
+		service:        s,
+		captchaService: captchaService,
+	}
+}
 // ===============================
 // Registration
 // ===============================
@@ -26,6 +34,7 @@ type RegisterRequest struct {
 	Password string `form:"password" json:"password" binding:"required,min=6"`
 	Role     string `form:"role" json:"role" binding:"required"`
 	Phone    string `form:"phone" json:"phone" binding:"required"`
+	CaptchaToken string `form:"captchaToken" json:"captchaToken"`
 
 	TempleName        string `form:"templeName" json:"templeName"`
 	TemplePlace       string `form:"templePlace" json:"templePlace"`
@@ -51,6 +60,24 @@ func (h *Handler) Register(c *gin.Context) {
 	if err := c.ShouldBind(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	if h.captchaService.IsEnabled() {
+		if req.CaptchaToken == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "CAPTCHA verification is required",
+			})
+			return
+		}
+
+		clientIP := c.ClientIP()
+		if err := h.captchaService.VerifyToken(req.CaptchaToken, clientIP); err != nil {
+			log.Printf("❌ CAPTCHA verification failed for IP %s: %v", clientIP, err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "CAPTCHA verification failed. Please try again.",
+			})
+			return
+		}
+		log.Printf("✅ CAPTCHA verified successfully for registration: %s", req.Email)
 	}
 
 	// ❌ Block superadmin
@@ -235,6 +262,7 @@ func isGmail(email string) bool {
 type loginReq struct {
 	Email    string `json:"email" binding:"required,email" example:"sharath@example.com"`
 	Password string `json:"password" binding:"required" example:"secret123"`
+	CaptchaToken string `json:"captchaToken"`
 }
 
 func (h *Handler) Login(c *gin.Context) {
@@ -243,7 +271,28 @@ func (h *Handler) Login(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	tokens, user, err := h.service.Login(LoginInput(req))
+	if h.captchaService.IsEnabled() {
+		if req.CaptchaToken == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "CAPTCHA verification is required",
+			})
+			return
+		}
+
+		clientIP := c.ClientIP()
+		if err := h.captchaService.VerifyToken(req.CaptchaToken, clientIP); err != nil {
+			log.Printf("❌ CAPTCHA verification failed for IP %s: %v", clientIP, err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "CAPTCHA verification failed. Please try again.",
+			})
+			return
+		}
+		log.Printf("✅ CAPTCHA verified successfully for login: %s", req.Email)
+	}		
+tokens, user, err := h.service.Login(LoginInput{
+	Email:    req.Email,
+	Password: req.Password,
+})
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return

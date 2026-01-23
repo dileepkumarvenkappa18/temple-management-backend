@@ -25,6 +25,7 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/tenant"
 	"github.com/sharath018/temple-management-backend/internal/userprofile"
 	"github.com/sharath018/temple-management-backend/middleware"
+		"github.com/sharath018/temple-management-backend/utils"
 
 	_ "github.com/sharath018/temple-management-backend/docs"
 	swaggerFiles "github.com/swaggo/files"
@@ -126,7 +127,7 @@ func addUploadDebugging(r *gin.Engine) {
 	})
 }
 
-func Setup(r *gin.Engine, cfg *config.Config) {
+func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaService) {
 	// Ensure uploads directory exists - Updated to use persistent volume
 	uploadPath := "/data/uploads" // Changed from ./uploads
 	if err := os.MkdirAll(uploadPath, 0755); err != nil {
@@ -173,7 +174,7 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	// ========== Auth ==========
 	authRepo := auth.NewRepository(database.DB)
 	authSvc := auth.NewService(authRepo, cfg)
-	authHandler := auth.NewHandler(authSvc)
+	authHandler := auth.NewHandler(authSvc, captchaService)
 
 	authGroup := api.Group("/auth")
 	{

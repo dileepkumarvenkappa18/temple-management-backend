@@ -37,6 +37,14 @@ func main() {
 
 	// Init Kafka
 	utils.InitializeKafka()
+	
+	// 🔒 Initialize CAPTCHA service
+   captchaService := utils.LoadCaptchaFromEnv()
+   if captchaService.IsEnabled() {
+       log.Println("✅ CAPTCHA verification is ENABLED")
+   } else {
+       log.Println("⚠️  CAPTCHA verification is DISABLED")
+   }
 
 	// 🔥 Init Firebase - SINGLE INITIALIZATION POINT
 	log.Println("🔄 Initializing Firebase...")
@@ -425,7 +433,7 @@ func main() {
 	})
 
 	// Register existing routes
-	routes.Setup(router, cfg)
+routes.Setup(router, cfg, captchaService)
 
 	// Start server
 	fmt.Printf("🚀 Server starting on port %s\n", cfg.Port)
