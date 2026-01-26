@@ -1,3 +1,6 @@
+
+
+
 package entity
 
 import (
@@ -492,44 +495,25 @@ func (r *Repository) CountUpcomingEventsThisWeek(entityID uint) (int64, error) {
 		Count(&count).Error
 	return count, err
 }
-// GetCreatorDetailsByID fetches creator information including temple and bank details
-func (r *Repository) GetCreatorDetailsByID(creatorID uint) (*CreatorDetails, error) {
-	var creator CreatorDetails
-	
-	// Get basic user info
-	err := r.DB.Table("users").
-		Select("users.id, users.full_name, users.email, users.phone, user_roles.role_name as role").
-		Joins("JOIN user_roles ON users.role_id = user_roles.id").
-		Where("users.id = ?", creatorID).
-		Scan(&creator).Error
-	
+func (r *Repository) GetCreatorDetails(entityID uint) (*CreatorDetails, error) {
+	var out CreatorDetails
+
+	err := r.DB.Table("entities e").
+		Select(`
+			u.full_name AS name,
+			b.account_holder_name,
+			b.account_number,
+			b.ifsc_code,
+			b.account_type,
+			b.upi_id
+		`).
+		Joins("JOIN users u ON u.id = e.created_by").
+		Joins("LEFT JOIN tenant_bank_account_details b ON b.user_id = u.id").
+		Where("e.id = ?", entityID).
+		Scan(&out).Error
+
 	if err != nil {
 		return nil, err
 	}
-	
-	// If creator is templeadmin, fetch temple details
-	if creator.Role == "templeadmin" {
-		var templeInfo CreatorTempleInfo
-		err = r.DB.Table("tenant_details").
-			Select("temple_name, temple_place, temple_address, temple_phone_no, temple_description, logo_url, intro_video_url").
-			Where("user_id = ?", creatorID).
-			Scan(&templeInfo).Error
-		
-		if err == nil {
-			creator.Temple = &templeInfo
-		}
-		
-		// Fetch bank details - 🆕 NOW INCLUDING account_number
-		var bankInfo CreatorBankInfo
-		err = r.DB.Table("bank_account_details").
-			Select("account_holder_name, account_number, bank_name, branch_name, ifsc_code, account_type, upi_id").
-			Where("user_id = ?", creatorID).
-			Scan(&bankInfo).Error
-		
-		if err == nil {
-			creator.Bank = &bankInfo
-		}
-	}
-	
-	return &creator, nil
+	return &out, nil
 }

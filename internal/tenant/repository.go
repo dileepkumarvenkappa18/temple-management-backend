@@ -276,10 +276,9 @@ func (r *Repository) UpdateUserDetails(userID uint, input UserInput) error {
     return r.db.Table("users").Where("id = ?", userID).Updates(updates).Error
 }
 
-// GetTenantUsers retrieves all users for a tenant
 func (r *Repository) GetTenantUsers(tenantID uint, role string) ([]UserResponse, error) {
     var users []UserResponse
-    
+
     query := r.db.Table("users").
         Select(`
             users.id,
@@ -287,25 +286,22 @@ func (r *Repository) GetTenantUsers(tenantID uint, role string) ([]UserResponse,
             users.email,
             users.phone,
             users.status,
-            users.created_at,
-            roles.role_name as role
+            users.created_at
         `).
-        Joins("INNER JOIN tenant_user_assignments ON users.id = tenant_user_assignments.user_id").
-        Joins("LEFT JOIN roles ON users.role_id = roles.id").
-        Where("tenant_user_assignments.tenant_id = ?", tenantID).
-        Where("tenant_user_assignments.status = ?", "active")
-    
-    if role != "" {
-        query = query.Where("roles.role_name = ?", role)
-    }
-    
-    err := query.Scan(&users).Error
-    if err != nil {
+        Joins("INNER JOIN tenant_user_assignments tua ON users.id = tua.user_id").
+        Where("tua.tenant_id = ?", tenantID).
+        Where("tua.status = ?", "active")
+
+    // ❌ role filter REMOVED from DB
+    // Role is handled by JWT / frontend mapping
+
+    if err := query.Scan(&users).Error; err != nil {
         return nil, err
     }
-    
+
     return users, nil
 }
+
 
 // GetRoleIDByName retrieves role ID by role name
 func (r *Repository) GetRoleIDByName(roleName string) (uint, error) {

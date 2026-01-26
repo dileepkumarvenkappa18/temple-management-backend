@@ -82,19 +82,7 @@ func (Entity) TableName() string {
 // Add these structs to entity/model.go
 
 // CreatorDetails represents the temple creator's public information
-type CreatorDetails struct {
-	ID       uint   `json:"id"`
-	FullName string `json:"full_name"`
-	Email    string `json:"email"`
-	Phone    string `json:"phone"`
-	Role     string `json:"role"`
-	
-	// Temple details (if creator is templeadmin)
-	Temple *CreatorTempleInfo `gorm:"-" json:"temple,omitempty"` // 🔥 Add gorm:"-"
-	
-	// Bank details (if creator is templeadmin)
-	Bank *CreatorBankInfo `gorm:"-" json:"bank,omitempty"` // 🔥 Add gorm:"-"
-}
+
 
 type CreatorTempleInfo struct {
 	TempleName        string `json:"temple_name"`
@@ -115,4 +103,12 @@ type CreatorBankInfo struct {
 	AccountType       string  `json:"account_type"`
 	UPIID             *string `json:"upi_id,omitempty"`
 	// Note: Account number is intentionally excluded for security
+}
+type CreatorDetails struct {
+	Name              string  `json:"name"`                  // maps to: u.full_name AS name
+	AccountHolderName string  `json:"account_holder_name"`   // b.account_holder_name
+	AccountNumber     string  `json:"account_number"`        // b.account_number
+	IFSCCode          string  `json:"ifsc_code"`             // b.ifsc_code
+	AccountType       string  `json:"account_type"`          // b.account_type
+	UPIID             *string `json:"upi_id,omitempty"`      // b.upi_id
 }

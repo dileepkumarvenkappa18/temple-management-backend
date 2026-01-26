@@ -872,14 +872,15 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 	}
 
 	// ================= FETCH CREATOR DETAILS =================
-	var creatorDetails *CreatorDetails
-	if entity.CreatedBy > 0 {
-		creatorDetails, err = h.Service.GetCreatorDetails(entity.CreatedBy)
-		if err != nil {
-			log.Printf("⚠️ Failed to fetch creator details for entity %d: %v", entity.ID, err)
-			// Don't fail the request, just log the error
-		}
+var creatorDetails *CreatorDetails
+
+if entity.CreatedBy > 0 {
+	cd, err := h.Service.GetCreatorDetails(entity.CreatedBy)
+	if err == nil && cd != nil {
+		creatorDetails = cd
 	}
+}
+
 
 	// =========================================================
 	// ✅ DEVOTEE SAFE READ-ONLY ACCESS (PUBLIC DETAILS ENDPOINT)
