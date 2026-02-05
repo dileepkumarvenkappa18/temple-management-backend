@@ -129,7 +129,6 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service, opt ...bool) gin.H
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing Authorization header"})
 				return
 			}
-			fmt.Println("1Coming out here")
 			c.Next()
 			return
 		}
@@ -140,7 +139,6 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service, opt ...bool) gin.H
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid Authorization header"})
 				return
 			}
-			fmt.Println("2Coming out here")
 			c.Next()
 			return
 		}
@@ -154,7 +152,6 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service, opt ...bool) gin.H
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 				return
 			}
-			fmt.Println("3Coming out here")
 			c.Next()
 			return
 		}
@@ -165,7 +162,6 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service, opt ...bool) gin.H
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid claims"})
 				return
 			}
-			fmt.Println("4Coming out here")
 			c.Next()
 			return
 		}
@@ -176,7 +172,6 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service, opt ...bool) gin.H
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user_id missing in token"})
 				return
 			}
-			fmt.Println("5Coming out here")
 			c.Next()
 			return
 		}
@@ -188,12 +183,10 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service, opt ...bool) gin.H
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
 				return
 			}
-			fmt.Println("6Coming out here")
 			c.Next()
 			return
 		}
 
-		fmt.Println("No chance here otherwise it will panic")
 		// At this point, user exists. No need for nil check for structs.
 		c.Set("user", user)
 		c.Set("user_id", user.ID)

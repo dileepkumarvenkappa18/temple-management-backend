@@ -23,23 +23,21 @@ import (
 type Handler struct {
 	Service   *Service
 	UploadDir string // filesystem base, e.g. "./uploads"
-	FilesDir  string // filesystem base, e.g. "./files"
 	BaseURL   string // URL base, e.g. "/api/v1/uploads"
 	MaxSize   int64  // 10MB default
 }
 
-func NewHandler(s *Service, uploadDir, filesDir, baseURL string) *Handler {
+func NewHandler(s *Service, uploadDir, baseURL string) *Handler {
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		log.Printf("Failed to create upload directory: %v", err)
 	}
 	// Sensible defaults: BaseURL should point to the secured binary route (/api/v1/uploads)
 	if strings.TrimSpace(baseURL) == "" {
-		baseURL = "/files"
+		baseURL = "/uploads"
 	}
 	return &Handler{
 		Service:   s,
 		UploadDir: uploadDir,
-		FilesDir:  filesDir,
 		BaseURL:   baseURL,
 		MaxSize:   1000 * 1024 * 1024,
 	}
@@ -373,7 +371,6 @@ func (h *Handler) uploadFileToTemp(file *multipart.FileHeader, tempDir, fileType
 	return out, nil
 }
 
-// Giri <-- Changes required here
 func (h *Handler) moveFilesToFinalLocation(c *gin.Context, entity *Entity, tempFiles []TempFileInfo, finalFileInfos *map[string]FileInfo) error {
 	entityDir := filepath.Join(h.UploadDir, strconv.FormatUint(uint64(entity.ID), 10))
 	if err := os.MkdirAll(entityDir, 0755); err != nil {
@@ -388,7 +385,6 @@ func (h *Handler) moveFilesToFinalLocation(c *gin.Context, entity *Entity, tempF
 	// 🆕 Media info to build JSON
 	mediaInfo := MediaInfo{}
 
-	/* Giri Changes required here */
 	var tenantID uint
 	tenantIDHeader := c.GetHeader("X-Tenant-ID")
 
@@ -402,7 +398,6 @@ func (h *Handler) moveFilesToFinalLocation(c *gin.Context, entity *Entity, tempF
 			log.Printf("📁 Using tenant ID from header: %d", tenantID)
 		}
 	}
-	/* Giri Changes required here */
 
 	for _, tf := range tempFiles {
 		finalFileName := tf.FileName
@@ -421,7 +416,7 @@ func (h *Handler) moveFilesToFinalLocation(c *gin.Context, entity *Entity, tempF
 
 		finalPath := filepath.Join(entityDir, finalFileName)
 
-		fmt.Println("---------> finalPath %v", finalPath)
+		fmt.Println("finalPath: ", finalPath)
 		// Prefer rename; fall back to copy+remove
 		if err := os.Rename(tf.TempPath, finalPath); err != nil {
 			if err := copyFile(tf.TempPath, finalPath); err != nil {
@@ -432,11 +427,7 @@ func (h *Handler) moveFilesToFinalLocation(c *gin.Context, entity *Entity, tempF
 		}
 
 		rel := ""
-		//if entityDir == tempEntityDir {
 		rel = filepath.ToSlash(filepath.Join(strconv.FormatUint(uint64(entity.ID), 10), finalFileName))
-		//} else {
-		//	rel = filepath.ToSlash(filepath.Join(strconv.Itoa(int(tenantID)), strconv.FormatUint(uint64(entity.ID), 10), finalFileName))
-		//}
 
 		fileURL := h.buildFileURL(rel)
 		fmt.Println("fileURL: ", fileURL)
@@ -563,13 +554,13 @@ func (h *Handler) cleanupTempFiles(tempFiles []TempFileInfo) {
 	}
 }
 
-// FIXED: Build a file URL from a relative upload path like "<entityID>/<file>"
+// Build a file URL from a relative upload path using BaseURL
 func (h *Handler) buildFileURL(rel string) string {
 	// Clean the relative path
 	rel = strings.TrimLeft(rel, "/")
 
-	// For direct file access (recommended for downloads)
-	return fmt.Sprintf("/uploads/%s", rel)
+	// Use BaseURL from handler configuration
+	return fmt.Sprintf("%s/%s", strings.TrimRight(h.BaseURL, "/"), rel)
 }
 
 // ================= Directory Introspection =================
@@ -1674,6 +1665,7 @@ func (h *Handler) GetTenantByEntityID(c *gin.Context) {
 	})
 }
 
+/*
 // GetTenantInfo is an internal function that returns tenant ID and details
 func (h *Handler) GetTenantInfo(entityID uint) (*TenantInfo, error) {
 	// Get tenant ID from entity
@@ -1699,6 +1691,7 @@ func (h *Handler) GetTenantInfo(entityID uint) (*TenantInfo, error) {
 		Details:  creatorDetails,
 	}, nil
 }
+*/
 
 // GetTenantByEntityID is a standalone helper function to get tenant ID from entity ID
 // This can be called from outside the package without needing a Handler instance

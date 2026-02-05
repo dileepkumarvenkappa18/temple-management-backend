@@ -393,7 +393,7 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 
 		entityService := entity.NewService(entityRepo, profileService, auditSvc)
 		// UPDATED: Use persistent volume path and proper file serving path
-		entityHandler := entity.NewHandler(entityService, "/data/uploads", "/data/files", "/files")
+		entityHandler := entity.NewHandler(entityService, "/data/uploads", "/uploads")
 		// ✅ Devotee can view temple (entity) details by ID – READ ONLY
 		protected.GET("/entities/:id/details",
 			middleware.RBACMiddleware(

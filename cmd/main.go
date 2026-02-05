@@ -186,24 +186,12 @@ func main() {
 		})
 	*/
 
-	// Giri changes
 	// Alternative route: /files/{entityID}/{filename}
 	router.GET("/uploads/:entityID/:filename",
 		middleware.AuthMiddleware(cfg, authSvc, true), // ✅ Add auth middleware
 		func(c *gin.Context) {
-			/*
-				userId, exists := c.Get("user_id")
-				if !exists {
-					c.JSON(401, gin.H{"error": "userId not found in context"})
-					return
-				} else {
-					fmt.Printf("-----> userID: %#v\n", userId)
-				}
-			*/
 
-			/* Giri Changes required here */
 			var tenantID uint = 0
-
 			tenantIDHeader := c.GetHeader("X-Tenant-ID")
 
 			if tenantIDHeader != "" {
@@ -216,27 +204,20 @@ func main() {
 					log.Printf("📁 Using tenant ID from header: %d", tenantID)
 				}
 			}
-			/* Giri Changes required here */
 
 			entityID := c.Param("entityID")
 			filename := c.Param("filename")
 
-			fmt.Printf("-----> entityID: %#v\n", entityID)
-			fmt.Printf("-----> filename: %#v\n", filename)
+			fmt.Printf("entityID: %#v\n", entityID)
+			fmt.Printf("filename: %#v\n", filename)
 
 			userRaw, exists := c.Get("user")
 			if exists {
 				user, _ := userRaw.(auth.User)
 
-				fmt.Printf("-----> user.ID: %#v\n", user.ID)
+				fmt.Printf("user.ID: %#v\n", user.ID)
 				userRole := user.Role.RoleName
-				fmt.Printf("-----> userRole1: %#v\n", userRole)
-				/*
-					if userRole != "superadmin" {
-						c.JSON(http.StatusUnauthorized, gin.H{"error": "2Unauthorized"})
-						return
-					}
-				*/
+				fmt.Printf("userRole1: %#v\n", userRole)
 				serveEntityFile(c, uploadDir, &user, tenantID, entityID, filename)
 			} else {
 				serveEntityFile(c, uploadDir, nil, tenantID, entityID, filename)
@@ -245,7 +226,6 @@ func main() {
 
 	// Secure API endpoint for entity files with authentication
 	router.GET("/api/v1/entities/:id/files/:filename", func(c *gin.Context) {
-		fmt.Printf("-------> Secure API endpoint for entity files with authentication")
 		c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
 		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition")
@@ -527,14 +507,11 @@ func main() {
 	}
 }
 
-// serveeEntityFile handles serving files from entity directories
+// serveEntityFile handles serving files from entity directories
 func serveEntityFile(c *gin.Context, uploadDir string, user *auth.User, tenantID uint, entityID string, filename string) {
 	c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
 	c.Header("Access-Control-Allow-Credentials", "true")
 	c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition")
-
-	//entityID := c.Param("entityID")
-	//filename := c.Param("filename")
 
 	if entityID == "" || filename == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid parameters"})
@@ -548,9 +525,9 @@ func serveEntityFile(c *gin.Context, uploadDir string, user *auth.User, tenantID
 		userId = int(user.ID)
 	}
 
-	fmt.Println("-----> userRole: ", userRole)
-	fmt.Println("-----> user.ID: ", userId)
-	fmt.Println("-----> tenantID: ", tenantID)
+	fmt.Println("userRole: ", userRole)
+	fmt.Println("user.ID: ", userId)
+	fmt.Println("tenantID: ", tenantID)
 
 	fPath := ""
 	if userRole == "superadmin" || user != nil && (user.ID != 0 && tenantID != 0 && user.ID == tenantID) {
@@ -558,7 +535,7 @@ func serveEntityFile(c *gin.Context, uploadDir string, user *auth.User, tenantID
 			tenantID = entity.GetTenantByEntityID(entityID)
 		}
 		fPath = filepath.Join(uploadDir, strconv.Itoa(int(tenantID)), entityID, filename)
-		fmt.Println("------> fPath", fPath)
+		fmt.Println("fPath: ", fPath)
 	} else if tenantID != 0 {
 		c.JSON(http.StatusForbidden, gin.H{
 			"error":   "Access denied",
