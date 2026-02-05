@@ -25,7 +25,7 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/tenant"
 	"github.com/sharath018/temple-management-backend/internal/userprofile"
 	"github.com/sharath018/temple-management-backend/middleware"
-		"github.com/sharath018/temple-management-backend/utils"
+	"github.com/sharath018/temple-management-backend/utils"
 
 	_ "github.com/sharath018/temple-management-backend/docs"
 	swaggerFiles "github.com/swaggo/files"
@@ -95,7 +95,7 @@ func addUploadDebugging(r *gin.Engine) {
 	// Debug route to check specific file - Updated path
 	r.GET("/debug/file/*filepath", func(c *gin.Context) {
 		filePath := c.Param("filepath")
-		fullPath := filepath.Join("/data/uploads", filePath) 
+		fullPath := filepath.Join("/data/uploads", filePath)
 
 		// Check if file exists
 		info, err := os.Stat(fullPath)
@@ -182,22 +182,21 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 		authGroup.POST("/login", authHandler.Login)
 		authGroup.POST("/refresh", authHandler.Refresh)
 		authGroup.GET("/account/details",
-	middleware.AuthMiddleware(cfg, authSvc),
-	middleware.RBACMiddleware(
-		"devotee",
-		"volunteer",
-		"templeadmin",
-		"standarduser",
-		"monitoringuser",
-		"superadmin",
-	),
-	authHandler.GetAccountDetails,
-)
+			middleware.AuthMiddleware(cfg, authSvc),
+			middleware.RBACMiddleware(
+				"devotee",
+				"volunteer",
+				"templeadmin",
+				"standarduser",
+				"monitoringuser",
+				"superadmin",
+			),
+			authHandler.GetAccountDetails,
+		)
 
-	
-	authGroup.PUT("/account/details", 
-		middleware.AuthMiddleware(cfg, authSvc), 
-		authHandler.UpdateAccountDetails)
+		authGroup.PUT("/account/details",
+			middleware.AuthMiddleware(cfg, authSvc),
+			authHandler.UpdateAccountDetails)
 
 		// Forgot/Reset/Logout
 		authGroup.POST("/forgot-password", authHandler.ForgotPassword)
@@ -243,9 +242,9 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 
 	{
 		// In routes.go, inside the superadminRoutes group
-superadminRoutes.POST("/upload/logo", superadminHandler.UploadLogo)
-superadminRoutes.POST("/upload/video", superadminHandler.UploadVideo)
-superadminRoutes.DELETE("/upload/file", superadminHandler.DeleteUploadedFile)
+		superadminRoutes.POST("/upload/logo", superadminHandler.UploadLogo)
+		superadminRoutes.POST("/upload/video", superadminHandler.UploadVideo)
+		superadminRoutes.DELETE("/upload/file", superadminHandler.DeleteUploadedFile)
 
 		// ================ TENANT APPROVAL MANAGEMENT ================
 		// Paginated list of all tenants with optional ?status=pending&limit=10&page=1
@@ -331,13 +330,13 @@ superadminRoutes.DELETE("/upload/file", superadminHandler.DeleteUploadedFile)
 	protected.GET("/tenants/selection",
 		middleware.RBACMiddleware("superadmin", "standarduser", "monitoringuser"),
 		superadminHandler.GetTenantsForSelection)
-		// In your routes setup
-protected.GET("/tenant-details/:id",
-    middleware.RBACMiddleware("superadmin", "templeadmin", "standarduser", "monitoringuser"),
-    superadminHandler.GetTenantDetails)
+	// In your routes setup
+	protected.GET("/tenant-details/:id",
+		middleware.RBACMiddleware("superadmin", "templeadmin", "standarduser", "monitoringuser"),
+		superadminHandler.GetTenantDetails)
 
 	protected.GET("/tenantsInfo",
-		middleware.RBACMiddleware("templeadmin", "standarduser", "monitoringuser", "devotee","superadmin"),
+		middleware.RBACMiddleware("templeadmin", "standarduser", "monitoringuser", "devotee", "superadmin"),
 		superadminHandler.GetTenantsWithFilters)
 	// ========== Seva Routes ==========
 
@@ -394,18 +393,17 @@ protected.GET("/tenant-details/:id",
 
 		entityService := entity.NewService(entityRepo, profileService, auditSvc)
 		// UPDATED: Use persistent volume path and proper file serving path
-		entityHandler := entity.NewHandler(entityService, "/data/uploads", "/files")
+		entityHandler := entity.NewHandler(entityService, "/data/uploads", "/data/files", "/files")
 		// ✅ Devotee can view temple (entity) details by ID – READ ONLY
-protected.GET("/entities/:id/details",
-	middleware.RBACMiddleware(
-		"devotee",
-		"volunteer",
-		"templeadmin",
-		"superadmin",
-	),
-	entityHandler.GetEntityByID,
-)
-
+		protected.GET("/entities/:id/details",
+			middleware.RBACMiddleware(
+				"devotee",
+				"volunteer",
+				"templeadmin",
+				"superadmin",
+			),
+			entityHandler.GetEntityByID,
+		)
 
 		// Add special endpoint for templeadmins to view their created entities
 		protected.GET("/entities/by-creator", middleware.RBACMiddleware("templeadmin"), func(c *gin.Context) {
@@ -472,8 +470,14 @@ protected.GET("/entities/:id/details",
 
 		// GetAllEntities - allowed for templeadmin, superadmin, standarduser, monitoringuser
 		protected.GET("/entities",
-			middleware.RBACMiddleware("templeadmin", "superadmin", "standarduser", "monitoringuser","devotee","volunteer"),
+			middleware.RBACMiddleware("templeadmin", "superadmin", "standarduser", "monitoringuser", "devotee", "volunteer"),
 			entityHandler.GetAllEntities,
+		)
+
+		// NEW: Get tenant information by entity ID (superadmin only)
+		protected.GET("/entities/:id/tenant",
+			middleware.RBACMiddleware("superadmin"),
+			entityHandler.GetTenantByEntityID,
 		)
 	}
 
@@ -562,7 +566,6 @@ protected.GET("/entities/:id/details",
 				devoteeRoutes.GET("/history", donationHandler.GetDonationsByEntity)
 			}
 
-
 			// ========== TEMPLE ADMIN ROUTES (UPDATED PERMISSIONS) ==========
 			templeRoutes := donationRoutes.Group("")
 			templeRoutes.Use(middleware.RequireTempleAccess()) // Allow templeadmin, standarduser, monitoringuser
@@ -580,7 +583,6 @@ protected.GET("/entities/:id/details",
 					writeRoutes.GET("/export", donationHandler.ExportDonations)
 				}
 			}
-			
 
 			// ========== SHARED ROUTES (BOTH DEVOTEE AND TEMPLE ADMIN) ==========
 			// Receipt generation - both devotees and temple admins can access
@@ -653,60 +655,60 @@ protected.GET("/entities/:id/details",
 	eventService.NotifSvc = notifSvc
 	sevaService.SetNotifService(notifSvc)
 
-/// ========== Tenant User Management (Complete Section) ==========
-// Add this section in routes.go around line 580-650
+	/// ========== Tenant User Management (Complete Section) ==========
+	// Add this section in routes.go around line 580-650
 
-// Initialize tenant repository, service, and handler
-tenantRepo := tenant.NewRepository(database.DB)
-tenantService := tenant.NewService(tenantRepo)
-tenantHandler := tenant.NewHandler(tenantService)
+	// Initialize tenant repository, service, and handler
+	tenantRepo := tenant.NewRepository(database.DB)
+	tenantService := tenant.NewService(tenantRepo)
+	tenantHandler := tenant.NewHandler(tenantService)
 
-// ========== Tenant Profile Routes ==========
-tenantProfileRoutes := protected.Group("/tenant/profile")
-// Use RBAC middleware instead of RequireTempleAccess for tenant profile
-tenantProfileRoutes.Use(middleware.RBACMiddleware("templeadmin", "standarduser", "monitoringuser"))
-{
-    // Get tenant profile - all roles can view
-    tenantProfileRoutes.GET("", tenantHandler.GetTenantProfile)
-    
-    // Update tenant profile - only templeadmin and standarduser can edit
-    writeRoutes := tenantProfileRoutes.Group("")
-    writeRoutes.Use(middleware.RequireWriteAccess())
-    {
-        writeRoutes.PUT("", tenantHandler.UpdateTenantProfile)
-    }
-}
+	// ========== Tenant Profile Routes ==========
+	tenantProfileRoutes := protected.Group("/tenant/profile")
+	// Use RBAC middleware instead of RequireTempleAccess for tenant profile
+	tenantProfileRoutes.Use(middleware.RBACMiddleware("templeadmin", "standarduser", "monitoringuser"))
+	{
+		// Get tenant profile - all roles can view
+		tenantProfileRoutes.GET("", tenantHandler.GetTenantProfile)
 
-// Tenant upload routes
-tenantUploadRoutes := protected.Group("/tenant")
-tenantUploadRoutes.Use(middleware.RBACMiddleware("templeadmin", "standarduser", "monitoringuser"))
-{
-    writeRoutes := tenantUploadRoutes.Group("")
-    writeRoutes.Use(middleware.RequireWriteAccess())
-    {
-        writeRoutes.POST("/upload", tenantHandler.UploadFile)
-    }
-}
+		// Update tenant profile - only templeadmin and standarduser can edit
+		writeRoutes := tenantProfileRoutes.Group("")
+		writeRoutes.Use(middleware.RequireWriteAccess())
+		{
+			writeRoutes.PUT("", tenantHandler.UpdateTenantProfile)
+		}
+	}
 
-// ========== Tenant User Management Routes ==========
-// Tenant user routes (templeadmin + standarduser manage, monitoringuser read-only)
-tenantRoutes := protected.Group("/tenants/:id/user")
-tenantRoutes.Use(middleware.RequireTempleAccess()) // restrict to members of this temple
-{
-    // Read operations - all 3 roles can access
-    tenantRoutes.GET("/management", tenantHandler.GetUsers)
-    
-    // Update user status
-    tenantRoutes.PATCH("/:userId/status", tenantHandler.UpdateUserStatus)
+	// Tenant upload routes
+	tenantUploadRoutes := protected.Group("/tenant")
+	tenantUploadRoutes.Use(middleware.RBACMiddleware("templeadmin", "standarduser", "monitoringuser"))
+	{
+		writeRoutes := tenantUploadRoutes.Group("")
+		writeRoutes.Use(middleware.RequireWriteAccess())
+		{
+			writeRoutes.POST("/upload", tenantHandler.UploadFile)
+		}
+	}
 
-    // Write operations - only templeadmin + standarduser
-    writeRoutes := tenantRoutes.Group("")
-    writeRoutes.Use(middleware.RequireWriteAccess())
-    {
-        writeRoutes.POST("/", tenantHandler.CreateOrUpdateUser)
-        writeRoutes.PUT("/:userId", tenantHandler.UpdateUser)
-    }
-}
+	// ========== Tenant User Management Routes ==========
+	// Tenant user routes (templeadmin + standarduser manage, monitoringuser read-only)
+	tenantRoutes := protected.Group("/tenants/:id/user")
+	tenantRoutes.Use(middleware.RequireTempleAccess()) // restrict to members of this temple
+	{
+		// Read operations - all 3 roles can access
+		tenantRoutes.GET("/management", tenantHandler.GetUsers)
+
+		// Update user status
+		tenantRoutes.PATCH("/:userId/status", tenantHandler.UpdateUserStatus)
+
+		// Write operations - only templeadmin + standarduser
+		writeRoutes := tenantRoutes.Group("")
+		writeRoutes.Use(middleware.RequireWriteAccess())
+		{
+			writeRoutes.POST("/", tenantHandler.CreateOrUpdateUser)
+			writeRoutes.PUT("/:userId", tenantHandler.UpdateUser)
+		}
+	}
 
 	// ========== Reports ==========
 	{
@@ -742,7 +744,6 @@ tenantRoutes.Use(middleware.RequireTempleAccess()) // restrict to members of thi
 			*/
 		}
 	}
-
 
 	// Serve the SPA (Single Page Application) for any other route
 	r.NoRoute(func(c *gin.Context) {

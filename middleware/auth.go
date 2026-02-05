@@ -1,9 +1,9 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
-	"fmt"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -13,17 +13,36 @@ import (
 )
 
 // AuthMiddleware handles JWT authentication and sets up access context
-func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
+/*
+func AuthMiddleware(cfg *config.Config, authSvc auth.Service, opt ...bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		optional := false
+		if len(opt) > 0 {
+			optional = opt[0] // if caller passes a value, use it
+		}
+
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing Authorization header"})
-			return
+			if !optional {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing Authorization header"})
+				return
+			} else {
+				c.Next()
+				return
+			}
 		}
 
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid Authorization header"})
+			if !optional {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid Authorization header"})
+				return
+			} else {
+				c.Next()
+				return
+			}
+		} else if optional {
+			c.Next()
 			return
 		}
 
@@ -32,27 +51,47 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 			return []byte(cfg.JWTAccessSecret), nil
 		})
 		if err != nil || !token.Valid {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
-			return
+			if !optional {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+				return
+			} else {
+				c.Next()
+				return
+			}
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid claims"})
-			return
+			if !optional {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid claims"})
+				return
+			} else {
+				c.Next()
+				return
+			}
 		}
 
 		userIDFloat, ok := claims["user_id"].(float64)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user_id missing in token"})
-			return
+			if !optional {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user_id missing in token"})
+				return
+			} else {
+				c.Next()
+				return
+			}
 		}
 
 		userID := uint(userIDFloat)
 		user, err := authSvc.GetUserByID(userID)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
-			return
+			if !optional {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+				return
+			} else {
+				c.Next()
+				return
+			}
 		}
 
 		// Set user in context
@@ -68,6 +107,102 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service) gin.HandlerFunc {
 		c.Set("access_context", accessContext)
 
 		// Set resolved entity ID for quick access
+		if entityID != nil {
+			c.Set("entity_id", *entityID)
+		}
+
+		c.Next()
+	}
+}
+*/
+
+func AuthMiddleware(cfg *config.Config, authSvc auth.Service, opt ...bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		optional := false
+		if len(opt) > 0 {
+			optional = opt[0]
+		}
+
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			if !optional {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing Authorization header"})
+				return
+			}
+			fmt.Println("1Coming out here")
+			c.Next()
+			return
+		}
+
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			if !optional {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid Authorization header"})
+				return
+			}
+			fmt.Println("2Coming out here")
+			c.Next()
+			return
+		}
+
+		tokenStr := parts[1]
+		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+			return []byte(cfg.JWTAccessSecret), nil
+		})
+		if err != nil || !token.Valid {
+			if !optional {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+				return
+			}
+			fmt.Println("3Coming out here")
+			c.Next()
+			return
+		}
+
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			if !optional {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid claims"})
+				return
+			}
+			fmt.Println("4Coming out here")
+			c.Next()
+			return
+		}
+
+		userIDFloat, ok := claims["user_id"].(float64)
+		if !ok {
+			if !optional {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user_id missing in token"})
+				return
+			}
+			fmt.Println("5Coming out here")
+			c.Next()
+			return
+		}
+
+		userID := uint(userIDFloat)
+		user, err := authSvc.GetUserByID(userID)
+		if err != nil {
+			if !optional {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+				return
+			}
+			fmt.Println("6Coming out here")
+			c.Next()
+			return
+		}
+
+		fmt.Println("No chance here otherwise it will panic")
+		// At this point, user exists. No need for nil check for structs.
+		c.Set("user", user)
+		c.Set("user_id", user.ID)
+		c.Set("claims", claims)
+
+		// Only resolve entity & access context if a valid user exists
+		entityID := ResolveEntityIDForOperation(c, user, claims)
+		accessContext := CreateAccessContext(c, user, claims, entityID)
+		c.Set("access_context", accessContext)
 		if entityID != nil {
 			c.Set("entity_id", *entityID)
 		}
@@ -218,12 +353,12 @@ func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, e
 	}
 
 	// ✅ Extract TenantID (important for standard & monitoring users)
-// ✅ Extract TenantID (important for standard & monitoring users)
-if tenantIDFloat, ok := claims["tenant_id"].(float64); ok {
-	accessContext.TenantID = uint(tenantIDFloat)
-} else if assignedTenantIDFloat, ok := claims["assigned_tenant_id"].(float64); ok {
-	accessContext.TenantID = uint(assignedTenantIDFloat)
-}
+	// ✅ Extract TenantID (important for standard & monitoring users)
+	if tenantIDFloat, ok := claims["tenant_id"].(float64); ok {
+		accessContext.TenantID = uint(tenantIDFloat)
+	} else if assignedTenantIDFloat, ok := claims["assigned_tenant_id"].(float64); ok {
+		accessContext.TenantID = uint(assignedTenantIDFloat)
+	}
 
 	fmt.Printf("✅ AccessContext initialized: Role=%s, TenantID=%d, EntityID=%v\n",
 		accessContext.RoleName, accessContext.TenantID, accessContext.AssignedEntityID)

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/sharath018/temple-management-backend/internal/event"
 	"github.com/sharath018/temple-management-backend/internal/eventrsvp"
 	"github.com/sharath018/temple-management-backend/internal/notification"
+	"github.com/sharath018/temple-management-backend/middleware"
 	"github.com/sharath018/temple-management-backend/routes"
 	"github.com/sharath018/temple-management-backend/utils"
 	"gorm.io/gorm"
@@ -37,14 +39,14 @@ func main() {
 
 	// Init Kafka
 	utils.InitializeKafka()
-	
+
 	// 🔒 Initialize CAPTCHA service
-   captchaService := utils.LoadCaptchaFromEnv()
-   if captchaService.IsEnabled() {
-       log.Println("✅ CAPTCHA verification is ENABLED")
-   } else {
-       log.Println("⚠️  CAPTCHA verification is DISABLED")
-   }
+	captchaService := utils.LoadCaptchaFromEnv()
+	if captchaService.IsEnabled() {
+		log.Println("✅ CAPTCHA verification is ENABLED")
+	} else {
+		log.Println("⚠️  CAPTCHA verification is DISABLED")
+	}
 
 	// 🔥 Init Firebase - SINGLE INITIALIZATION POINT
 	log.Println("🔄 Initializing Firebase...")
@@ -62,6 +64,10 @@ func main() {
 	auditRepo := auditlog.NewRepository(db)
 	auditSvc := auditlog.NewService(auditRepo)
 
+	// Initialize entity repository for standalone functions
+	entityRepo := entity.NewRepository(db)
+	entity.SetRepository(entityRepo)
+
 	notificationRepo := notification.NewRepository(db)
 	notificationService := notification.NewService(notificationRepo, authRepo, cfg, auditSvc)
 	notification.StartKafkaConsumer(notificationService)
@@ -73,6 +79,9 @@ func main() {
 	if err := auth.SeedSuperAdminUser(db); err != nil {
 		panic(fmt.Sprintf("❌ Failed to seed Super Admin: %v", err))
 	}
+
+	// Create auth service early for middleware (authRepo already declared above)
+	authSvc := auth.NewService(authRepo, cfg)
 
 	// Auto-migrate models
 	log.Println("🔄 Running database migrations...")
@@ -168,15 +177,75 @@ func main() {
 		panic(fmt.Sprintf("❌ Failed to create upload directory: %v", err))
 	}
 
-	router.Static("/uploads", uploadDir)
+	router.Static("/uploads/tenants", "/data/uploads/tenants")
 
+	/*
+		// Alternative route: /files/{entityID}/{filename}
+		router.GET("/files/:entityID/:filename", func(c *gin.Context) {
+			serveEntityFile(c, uploadDir)
+		})
+	*/
+
+	// Giri changes
 	// Alternative route: /files/{entityID}/{filename}
-	router.GET("/files/:entityID/:filename", func(c *gin.Context) {
-		serveEntityFile(c, uploadDir)
-	})
+	router.GET("/uploads/:entityID/:filename",
+		middleware.AuthMiddleware(cfg, authSvc, true), // ✅ Add auth middleware
+		func(c *gin.Context) {
+			/*
+				userId, exists := c.Get("user_id")
+				if !exists {
+					c.JSON(401, gin.H{"error": "userId not found in context"})
+					return
+				} else {
+					fmt.Printf("-----> userID: %#v\n", userId)
+				}
+			*/
+
+			/* Giri Changes required here */
+			var tenantID uint = 0
+
+			tenantIDHeader := c.GetHeader("X-Tenant-ID")
+
+			if tenantIDHeader != "" {
+				// Try to parse tenant ID from header
+				tenantID64, err := strconv.ParseUint(tenantIDHeader, 10, 64)
+				if err != nil {
+					log.Printf("⚠️ Invalid X-Tenant-ID header: %v", err)
+				} else {
+					tenantID = uint(tenantID64)
+					log.Printf("📁 Using tenant ID from header: %d", tenantID)
+				}
+			}
+			/* Giri Changes required here */
+
+			entityID := c.Param("entityID")
+			filename := c.Param("filename")
+
+			fmt.Printf("-----> entityID: %#v\n", entityID)
+			fmt.Printf("-----> filename: %#v\n", filename)
+
+			userRaw, exists := c.Get("user")
+			if exists {
+				user, _ := userRaw.(auth.User)
+
+				fmt.Printf("-----> user.ID: %#v\n", user.ID)
+				userRole := user.Role.RoleName
+				fmt.Printf("-----> userRole1: %#v\n", userRole)
+				/*
+					if userRole != "superadmin" {
+						c.JSON(http.StatusUnauthorized, gin.H{"error": "2Unauthorized"})
+						return
+					}
+				*/
+				serveEntityFile(c, uploadDir, &user, tenantID, entityID, filename)
+			} else {
+				serveEntityFile(c, uploadDir, nil, tenantID, entityID, filename)
+			}
+		})
 
 	// Secure API endpoint for entity files with authentication
 	router.GET("/api/v1/entities/:id/files/:filename", func(c *gin.Context) {
+		fmt.Printf("-------> Secure API endpoint for entity files with authentication")
 		c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
 		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition")
@@ -433,7 +502,7 @@ func main() {
 	})
 
 	// Register existing routes
-routes.Setup(router, cfg, captchaService)
+	routes.Setup(router, cfg, captchaService)
 
 	// Start server
 	fmt.Printf("🚀 Server starting on port %s\n", cfg.Port)
@@ -458,32 +527,64 @@ routes.Setup(router, cfg, captchaService)
 	}
 }
 
-// serveEntityFile handles serving files from entity directories
-func serveEntityFile(c *gin.Context, uploadDir string) {
+// serveeEntityFile handles serving files from entity directories
+func serveEntityFile(c *gin.Context, uploadDir string, user *auth.User, tenantID uint, entityID string, filename string) {
 	c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
 	c.Header("Access-Control-Allow-Credentials", "true")
 	c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition")
 
-	entityID := c.Param("entityID")
-	filename := c.Param("filename")
+	//entityID := c.Param("entityID")
+	//filename := c.Param("filename")
 
 	if entityID == "" || filename == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid parameters"})
 		return
 	}
 
-	filePath := filepath.Join(uploadDir, entityID, filename)
-	cleanPath := filepath.Clean(filePath)
+	userRole := ""
+	userId := 0
+	if user != nil && user.ID != tenantID {
+		userRole = user.Role.RoleName
+		userId = int(user.ID)
+	}
+
+	fmt.Println("-----> userRole: ", userRole)
+	fmt.Println("-----> user.ID: ", userId)
+	fmt.Println("-----> tenantID: ", tenantID)
+
+	fPath := ""
+	if userRole == "superadmin" || user != nil && (user.ID != 0 && tenantID != 0 && user.ID == tenantID) {
+		if userRole == "superadmin" {
+			tenantID = entity.GetTenantByEntityID(entityID)
+		}
+		fPath = filepath.Join(uploadDir, strconv.Itoa(int(tenantID)), entityID, filename)
+		fmt.Println("------> fPath", fPath)
+	} else if tenantID != 0 {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":   "Access denied",
+			"message": "Unauthorized or Invalid file path",
+		})
+		return
+	} else {
+		fPath = filepath.Join(uploadDir, entityID, filename)
+	}
+
+	cleanPath := filepath.Clean(fPath)
+	fileInfo, err := os.Stat(cleanPath)
+	if os.IsNotExist(err) {
+		fPath = filepath.Join(uploadDir, entityID, filename)
+		cleanPath = filepath.Clean(fPath)
+	}
 
 	if !strings.HasPrefix(cleanPath, filepath.Clean(uploadDir)) {
 		c.JSON(http.StatusForbidden, gin.H{
 			"error":   "Access denied",
-			"message": "Invalid file path",
+			"message": "Unauthorized or Invalid file path",
 		})
 		return
 	}
 
-	fileInfo, err := os.Stat(cleanPath)
+	fileInfo, err = os.Stat(cleanPath)
 	if os.IsNotExist(err) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error":   "File not found",

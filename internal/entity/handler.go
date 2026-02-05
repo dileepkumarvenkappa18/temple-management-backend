@@ -23,11 +23,12 @@ import (
 type Handler struct {
 	Service   *Service
 	UploadDir string // filesystem base, e.g. "./uploads"
+	FilesDir  string // filesystem base, e.g. "./files"
 	BaseURL   string // URL base, e.g. "/api/v1/uploads"
 	MaxSize   int64  // 10MB default
 }
 
-func NewHandler(s *Service, uploadDir, baseURL string) *Handler {
+func NewHandler(s *Service, uploadDir, filesDir, baseURL string) *Handler {
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		log.Printf("Failed to create upload directory: %v", err)
 	}
@@ -38,6 +39,7 @@ func NewHandler(s *Service, uploadDir, baseURL string) *Handler {
 	return &Handler{
 		Service:   s,
 		UploadDir: uploadDir,
+		FilesDir:  filesDir,
 		BaseURL:   baseURL,
 		MaxSize:   1000 * 1024 * 1024,
 	}
@@ -160,7 +162,7 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 
 	if len(tempFiles) > 0 {
 		// Move files + build Media JSON
-		if err := h.moveFilesToFinalLocation(&input, tempFiles, &finalFileInfos); err != nil {
+		if err := h.moveFilesToFinalLocation(c, &input, tempFiles, &finalFileInfos); err != nil {
 			log.Printf("File move error for entity %d: %v", input.ID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":     "Temple created but file processing failed",
@@ -201,7 +203,6 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, response)
 }
-
 
 type TempFileInfo struct {
 	TempPath     string
@@ -278,34 +279,34 @@ func (h *Handler) processFileUploadsToTemp(form *multipart.Form, tempFiles *[]Te
 		*tempFiles = append(*tempFiles, info)
 	}
 
-		// First try non-indexed format (multiple files with same name)
-		if additionalDocs := form.File["additional_docs"]; len(additionalDocs) > 0 {
-			log.Printf("📎 Found %d additional docs (non-indexed format)", len(additionalDocs))
-			for idx, file := range additionalDocs {
-				info, err := h.uploadFileToTemp(file, tempSessionDir, "additional_docs")
+	// First try non-indexed format (multiple files with same name)
+	if additionalDocs := form.File["additional_docs"]; len(additionalDocs) > 0 {
+		log.Printf("📎 Found %d additional docs (non-indexed format)", len(additionalDocs))
+		for idx, file := range additionalDocs {
+			info, err := h.uploadFileToTemp(file, tempSessionDir, "additional_docs")
+			if err != nil {
+				log.Printf("Warning: Failed to upload additional document %d: %v", idx, err)
+				continue
+			}
+			*tempFiles = append(*tempFiles, info)
+			log.Printf("✅ Additional doc %d uploaded: %s", idx, file.Filename)
+		}
+	} else {
+		// Fallback to indexed format for backward compatibility
+		log.Printf("📎 Checking for indexed additional docs format...")
+		for i := 0; i < 10; i++ {
+			field := fmt.Sprintf("additional_docs_%d", i)
+			if add := form.File[field]; len(add) > 0 {
+				info, err := h.uploadFileToTemp(add[0], tempSessionDir, "additional_docs")
 				if err != nil {
-					log.Printf("Warning: Failed to upload additional document %d: %v", idx, err)
+					log.Printf("Warning: Failed to upload additional document %d: %v", i, err)
 					continue
 				}
 				*tempFiles = append(*tempFiles, info)
-				log.Printf("✅ Additional doc %d uploaded: %s", idx, file.Filename)
-			}
-		} else {
-			// Fallback to indexed format for backward compatibility
-			log.Printf("📎 Checking for indexed additional docs format...")
-			for i := 0; i < 10; i++ {
-				field := fmt.Sprintf("additional_docs_%d", i)
-				if add := form.File[field]; len(add) > 0 {
-					info, err := h.uploadFileToTemp(add[0], tempSessionDir, "additional_docs")
-					if err != nil {
-						log.Printf("Warning: Failed to upload additional document %d: %v", i, err)
-						continue
-					}
-					*tempFiles = append(*tempFiles, info)
-					log.Printf("✅ Additional doc %d uploaded (indexed): %s", i, add[0].Filename)
-				}
+				log.Printf("✅ Additional doc %d uploaded (indexed): %s", i, add[0].Filename)
 			}
 		}
+	}
 
 	// 🆕 Process temple logo
 	if logoFiles := form.File["temple_logo"]; len(logoFiles) > 0 {
@@ -372,23 +373,55 @@ func (h *Handler) uploadFileToTemp(file *multipart.FileHeader, tempDir, fileType
 	return out, nil
 }
 
-func (h *Handler) moveFilesToFinalLocation(entity *Entity, tempFiles []TempFileInfo, finalFileInfos *map[string]FileInfo) error {
+// Giri <-- Changes required here
+func (h *Handler) moveFilesToFinalLocation(c *gin.Context, entity *Entity, tempFiles []TempFileInfo, finalFileInfos *map[string]FileInfo) error {
 	entityDir := filepath.Join(h.UploadDir, strconv.FormatUint(uint64(entity.ID), 10))
 	if err := os.MkdirAll(entityDir, 0755); err != nil {
 		return fmt.Errorf("failed to create entity directory: %v", err)
 	}
+	tempEntityDir := entityDir
 	log.Printf("Created entity directory: %s for entity %d", entityDir, entity.ID)
 
 	*finalFileInfos = make(map[string]FileInfo)
 	var additionalFiles []FileInfo
-	
+
 	// 🆕 Media info to build JSON
 	mediaInfo := MediaInfo{}
 
+	/* Giri Changes required here */
+	var tenantID uint
+	tenantIDHeader := c.GetHeader("X-Tenant-ID")
+
+	if tenantIDHeader != "" {
+		// Try to parse tenant ID from header
+		tenantID64, err := strconv.ParseUint(tenantIDHeader, 10, 64)
+		if err != nil {
+			log.Printf("⚠️ Invalid X-Tenant-ID header: %v", err)
+		} else {
+			tenantID = uint(tenantID64)
+			log.Printf("📁 Using tenant ID from header: %d", tenantID)
+		}
+	}
+	/* Giri Changes required here */
+
 	for _, tf := range tempFiles {
 		finalFileName := tf.FileName
+
+		if tf.FileType == "registration_cert" ||
+			tf.FileType == "trust_deed" ||
+			tf.FileType == "property_docs" ||
+			tf.FileType == "additional_docs" {
+			entityDir = filepath.Join(h.UploadDir, strconv.Itoa(int(tenantID)), strconv.FormatUint(uint64(entity.ID), 10))
+			if err := os.MkdirAll(entityDir, 0755); err != nil {
+				return fmt.Errorf("failed to create entity directory: %v", err)
+			}
+		} else {
+			entityDir = tempEntityDir
+		}
+
 		finalPath := filepath.Join(entityDir, finalFileName)
 
+		fmt.Println("---------> finalPath %v", finalPath)
 		// Prefer rename; fall back to copy+remove
 		if err := os.Rename(tf.TempPath, finalPath); err != nil {
 			if err := copyFile(tf.TempPath, finalPath); err != nil {
@@ -398,8 +431,15 @@ func (h *Handler) moveFilesToFinalLocation(entity *Entity, tempFiles []TempFileI
 			_ = os.Remove(tf.TempPath)
 		}
 
-		rel := filepath.ToSlash(filepath.Join(strconv.FormatUint(uint64(entity.ID), 10), finalFileName))
+		rel := ""
+		//if entityDir == tempEntityDir {
+		rel = filepath.ToSlash(filepath.Join(strconv.FormatUint(uint64(entity.ID), 10), finalFileName))
+		//} else {
+		//	rel = filepath.ToSlash(filepath.Join(strconv.Itoa(int(tenantID)), strconv.FormatUint(uint64(entity.ID), 10), finalFileName))
+		//}
+
 		fileURL := h.buildFileURL(rel)
+		fmt.Println("fileURL: ", fileURL)
 
 		fi := FileInfo{
 			FileName:     finalFileName,
@@ -431,13 +471,13 @@ func (h *Handler) moveFilesToFinalLocation(entity *Entity, tempFiles []TempFileI
 			}
 		case "additional_docs":
 			additionalFiles = append(additionalFiles, fi)
-		
+
 		// 🆕 Handle temple logo
 		case "temple_logo":
 			(*finalFileInfos)["temple_logo"] = fi
 			mediaInfo.Logo = fileURL
 			log.Printf("✅ Temple logo URL set: %s", fileURL)
-		
+
 		// 🆕 Handle temple video
 		case "temple_video":
 			(*finalFileInfos)["temple_video"] = fi
@@ -529,7 +569,7 @@ func (h *Handler) buildFileURL(rel string) string {
 	rel = strings.TrimLeft(rel, "/")
 
 	// For direct file access (recommended for downloads)
-	return fmt.Sprintf("/files/%s", rel)
+	return fmt.Sprintf("/uploads/%s", rel)
 }
 
 // ================= Directory Introspection =================
@@ -872,15 +912,14 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 	}
 
 	// ================= FETCH CREATOR DETAILS =================
-var creatorDetails *CreatorDetails
+	var creatorDetails *CreatorDetails
 
-if entity.CreatedBy > 0 {
-	cd, err := h.Service.GetCreatorDetails(entity.CreatedBy)
-	if err == nil && cd != nil {
-		creatorDetails = cd
+	if entity.CreatedBy > 0 {
+		cd, err := h.Service.GetCreatorDetails(entity.CreatedBy)
+		if err == nil && cd != nil {
+			creatorDetails = cd
+		}
 	}
-}
-
 
 	// =========================================================
 	// ✅ DEVOTEE SAFE READ-ONLY ACCESS (PUBLIC DETAILS ENDPOINT)
@@ -983,7 +1022,6 @@ if entity.CreatedBy > 0 {
 
 	c.JSON(http.StatusOK, response)
 }
-
 
 func (h *Handler) UpdateEntity(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
@@ -1099,7 +1137,7 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		// delete old files if replacing
 		_ = h.deleteOldEntityFiles(&existingEntity, tempFiles)
 
-		if err := h.moveFilesToFinalLocation(&input, tempFiles, &finalFileInfos); err != nil {
+		if err := h.moveFilesToFinalLocation(c, &input, tempFiles, &finalFileInfos); err != nil {
 			h.cleanupTempFiles(tempFiles)
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to process uploaded files",
@@ -1207,7 +1245,7 @@ func (h *Handler) deleteOldEntityFiles(entity *Entity, newFiles []TempFileInfo) 
 	if (fileTypesBeingReplaced["temple_logo"] || fileTypesBeingReplaced["temple_video"]) && entity.Media != "" {
 		var oldMediaInfo MediaInfo
 		if err := json.Unmarshal([]byte(entity.Media), &oldMediaInfo); err == nil {
-			
+
 			// Delete old logo if being replaced
 			if fileTypesBeingReplaced["temple_logo"] && oldMediaInfo.Logo != "" {
 				// Extract filename from URL (e.g., "/files/123/logo.jpg" -> "logo.jpg")
@@ -1219,7 +1257,7 @@ func (h *Handler) deleteOldEntityFiles(entity *Entity, newFiles []TempFileInfo) 
 					log.Printf("🗑️ Deleted old logo: %s", logoFileName)
 				}
 			}
-			
+
 			// Delete old video if being replaced
 			if fileTypesBeingReplaced["temple_video"] && oldMediaInfo.Video != "" {
 				// Extract filename from URL (e.g., "/files/123/video.mp4" -> "video.mp4")
@@ -1596,3 +1634,99 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 
 	c.JSON(http.StatusOK, summary)
 }
+
+// GetTenantByEntityID retrieves the tenant ID and details for a given entity
+// Note: Authentication/authorization checks are handled at the route/middleware level
+func (h *Handler) GetTenantByEntityID(c *gin.Context) {
+	// Parse entity ID from URL
+	entityIDStr := c.Param("id")
+	entityID, err := strconv.ParseUint(entityIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entity ID"})
+		return
+	}
+
+	// Get tenant ID from entity
+	tenantID, err := h.Service.GetTenantIDByEntityID(uint(entityID))
+	if err != nil {
+		log.Printf("Error fetching tenant ID for entity %d: %v", entityID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tenant information"})
+		return
+	}
+
+	if tenantID == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "No tenant found for this entity"})
+		return
+	}
+
+	// Get tenant/creator details
+	creatorDetails, err := h.Service.GetCreatorDetails(tenantID)
+	if err != nil {
+		log.Printf("Error fetching creator details for tenant %d: %v", tenantID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch creator details"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"entity_id":      entityID,
+		"tenant_id":      tenantID,
+		"tenant_details": creatorDetails,
+	})
+}
+
+// GetTenantInfo is an internal function that returns tenant ID and details
+func (h *Handler) GetTenantInfo(entityID uint) (*TenantInfo, error) {
+	// Get tenant ID from entity
+	tenantID, err := h.Service.GetTenantIDByEntityID(entityID)
+	if err != nil {
+		log.Printf("Error fetching tenant ID for entity %d: %v", entityID, err)
+		return nil, err
+	}
+
+	if tenantID == 0 {
+		return nil, nil
+	}
+
+	// Get tenant/creator details
+	creatorDetails, err := h.Service.GetCreatorDetails(tenantID)
+	if err != nil {
+		log.Printf("Error fetching creator details for tenant %d: %v", tenantID, err)
+		return nil, err
+	}
+
+	return &TenantInfo{
+		TenantID: tenantID,
+		Details:  creatorDetails,
+	}, nil
+}
+
+// GetTenantByEntityID is a standalone helper function to get tenant ID from entity ID
+// This can be called from outside the package without needing a Handler instance
+func GetTenantByEntityID(entityID string) uint {
+	// This will be initialized from main.go via SetRepository
+	if repo == nil {
+		log.Printf("⚠️ Repository not initialized for GetTenantByEntityID")
+		return 0
+	}
+
+	entityIDUint, err := strconv.ParseUint(entityID, 10, 64)
+	if err != nil {
+		log.Printf("⚠️ Invalid entity ID: %s", entityID)
+		return 0
+	}
+
+	tenantID, err := repo.GetTenantIDByEntityID(uint(entityIDUint))
+	if err != nil {
+		log.Printf("⚠️ Error fetching tenant ID for entity %s: %v", entityID, err)
+		return 0
+	}
+
+	return tenantID
+}
+
+// SetRepository initializes the package-level repository for standalone functions
+func SetRepository(r *Repository) {
+	repo = r
+}
+
+var repo *Repository

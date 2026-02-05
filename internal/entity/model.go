@@ -36,7 +36,7 @@ type Entity struct {
 	TrustDeedInfo        string `json:"trust_deed_info"`        // JSON metadata
 	PropertyDocsInfo     string `json:"property_docs_info"`     // JSON metadata
 	AdditionalDocsInfo   string `json:"additional_docs_info"`   // JSON metadata
-	
+
 	// Stores JSON: {"logo": "url/to/logo.jpg", "video": "url/to/video.mp4"}
 	Media string `json:"media" gorm:"type:text"` // JSON string containing logo and video URLs
 
@@ -44,12 +44,12 @@ type Entity struct {
 	AcceptedTerms bool   `gorm:"default:false" json:"accepted_terms"`
 	Status        string `gorm:"default:'pending'" json:"status"`
 	CreatedBy     uint   `gorm:"not null" json:"created_by"`
-	
+
 	// Track the role_id of the user who created this temple
-	CreatorRoleID *uint  `json:"creator_role_id" gorm:"index"` // Role ID of creator (1=superadmin for auto-approval)
+	CreatorRoleID *uint `json:"creator_role_id" gorm:"index"` // Role ID of creator (1=superadmin for auto-approval)
 
 	// Active/Inactive status
-	IsActive bool `gorm:"default:true" json:"isactive"` // Active/Inactive toggle
+	IsActive        bool       `gorm:"default:true" json:"isactive"` // Active/Inactive toggle
 	ApprovedAt      *time.Time `json:"approved_at" gorm:"column:approved_at"`
 	RejectedAt      *time.Time `json:"rejected_at" gorm:"column:rejected_at"`
 	RejectionReason string     `json:"rejection_reason" gorm:"column:rejection_reason;type:text"`
@@ -79,10 +79,10 @@ type MediaInfo struct {
 func (Entity) TableName() string {
 	return "entities"
 }
+
 // Add these structs to entity/model.go
 
 // CreatorDetails represents the temple creator's public information
-
 
 type CreatorTempleInfo struct {
 	TempleName        string `json:"temple_name"`
@@ -105,10 +105,16 @@ type CreatorBankInfo struct {
 	// Note: Account number is intentionally excluded for security
 }
 type CreatorDetails struct {
-	Name              string  `json:"name"`                  // maps to: u.full_name AS name
-	AccountHolderName string  `json:"account_holder_name"`   // b.account_holder_name
-	AccountNumber     string  `json:"account_number"`        // b.account_number
-	IFSCCode          string  `json:"ifsc_code"`             // b.ifsc_code
-	AccountType       string  `json:"account_type"`          // b.account_type
-	UPIID             *string `json:"upi_id,omitempty"`      // b.upi_id
+	Name              string  `json:"name"`                // maps to: u.full_name AS name
+	AccountHolderName string  `json:"account_holder_name"` // b.account_holder_name
+	AccountNumber     string  `json:"account_number"`      // b.account_number
+	IFSCCode          string  `json:"ifsc_code"`           // b.ifsc_code
+	AccountType       string  `json:"account_type"`        // b.account_type
+	UPIID             *string `json:"upi_id,omitempty"`    // b.upi_id
+}
+
+// TenantInfo represents tenant ID and details for an entity
+type TenantInfo struct {
+	TenantID uint            `json:"tenant_id"`
+	Details  *CreatorDetails `json:"details"`
 }

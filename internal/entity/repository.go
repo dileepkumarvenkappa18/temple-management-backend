@@ -1,6 +1,3 @@
-
-
-
 package entity
 
 import (
@@ -32,39 +29,39 @@ func (r *Repository) CreateEntity(e *Entity) error {
 // Get tenant ID for a user from tenant_user_assignments table
 func (r *Repository) GetTenantIDForUser(userID uint) (uint, error) {
 	var tenantID uint
-	
+
 	err := r.DB.Table("tenant_user_assignments").
 		Select("tenant_id").
 		Where("user_id = ? AND status = ?", userID, "active").
 		Limit(1).
 		Scan(&tenantID).
 		Error
-		
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return 0, nil
 		}
 		return 0, err
 	}
-	
+
 	return tenantID, nil
 }
 
 // Get user's role ID
 func (r *Repository) GetUserRoleID(userID uint) (uint, error) {
 	var roleID uint
-	
+
 	err := r.DB.Table("users").
 		Select("role_id").
 		Where("id = ?", userID).
 		Limit(1).
 		Scan(&roleID).
 		Error
-		
+
 	if err != nil {
 		return 0, err
 	}
-	
+
 	return roleID, nil
 }
 
@@ -72,7 +69,7 @@ func (r *Repository) GetUserRoleID(userID uint) (uint, error) {
 func (r *Repository) CloseOldApprovalRequests(entityID uint, requestType string) error {
 	return r.DB.
 		Table("approval_requests").
-		Where("entity_id = ? AND request_type IN (?, ?) AND status IN (?, ?)", 
+		Where("entity_id = ? AND request_type IN (?, ?) AND status IN (?, ?)",
 			entityID, "temple_approval", "temple_reapproval", "pending", "rejected").
 		Updates(map[string]interface{}{
 			"status":     "superseded",
@@ -87,11 +84,11 @@ func (r *Repository) GetLatestApprovalRequest(entityID uint) (*auth.ApprovalRequ
 		Where("entity_id = ? AND request_type IN (?, ?)", entityID, "temple_approval", "temple_reapproval").
 		Order("created_at DESC").
 		First(&req).Error
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &req, nil
 }
 
@@ -102,7 +99,7 @@ func (r *Repository) UpdateApprovalRequestStatus(requestID uint, status string, 
 		"admin_notes": adminNotes,
 		"updated_at":  time.Now(),
 	}
-	
+
 	if status == "approved" {
 		now := time.Now()
 		updates["approved_at"] = &now
@@ -110,7 +107,7 @@ func (r *Repository) UpdateApprovalRequestStatus(requestID uint, status string, 
 		now := time.Now()
 		updates["rejected_at"] = &now
 	}
-	
+
 	return r.DB.
 		Table("approval_requests").
 		Where("id = ?", requestID).
@@ -132,7 +129,7 @@ func (r *Repository) GetAllEntities() ([]Entity, error) {
 // Get entities with creator role information
 func (r *Repository) GetEntitiesWithRoleInfo() ([]map[string]interface{}, error) {
 	var results []map[string]interface{}
-	
+
 	err := r.DB.Table("entities e").
 		Select(`e.*, 
 				ur.role_name as creator_role_name,
@@ -140,7 +137,7 @@ func (r *Repository) GetEntitiesWithRoleInfo() ([]map[string]interface{}, error)
 		Joins("LEFT JOIN user_roles ur ON ur.id = e.creator_role_id").
 		Order("e.created_at DESC").
 		Find(&results).Error
-		
+
 	return results, err
 }
 
@@ -162,9 +159,9 @@ func (r *Repository) GetApprovalStatsByRole() (map[string]interface{}, error) {
 		ApprovedCount int64  `json:"approved_count"`
 		RejectedCount int64  `json:"rejected_count"`
 	}
-	
+
 	var stats []RoleStats
-	
+
 	err := r.DB.Table("entities e").
 		Select(`e.creator_role_id as role_id,
 				ur.role_name,
@@ -176,11 +173,11 @@ func (r *Repository) GetApprovalStatsByRole() (map[string]interface{}, error) {
 		Joins("LEFT JOIN user_roles ur ON ur.id = e.creator_role_id").
 		Group("e.creator_role_id, ur.role_name").
 		Scan(&stats).Error
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return map[string]interface{}{
 		"role_statistics": stats,
 	}, nil
@@ -189,24 +186,24 @@ func (r *Repository) GetApprovalStatsByRole() (map[string]interface{}, error) {
 // Fetch a single temple entity by ID with approval/rejection details
 func (r *Repository) GetEntityByID(id int) (Entity, error) {
 	var entity Entity
-	
+
 	// First, get the basic entity data
 	err := r.DB.
 		Table("entities").
 		Where("id = ?", id).
 		First(&entity).Error
-	
+
 	if err != nil {
 		return entity, err
 	}
-	
+
 	// Then, get the latest approval request data (if exists)
 	var approvalData struct {
 		ApprovedAt      *time.Time
 		RejectedAt      *time.Time
 		RejectionReason string
 	}
-	
+
 	err = r.DB.
 		Table("approval_requests").
 		Select("approved_at, rejected_at, admin_notes as rejection_reason").
@@ -214,7 +211,7 @@ func (r *Repository) GetEntityByID(id int) (Entity, error) {
 		Order("created_at DESC").
 		Limit(1).
 		Scan(&approvalData).Error
-	
+
 	// If approval data exists, attach it to the entity
 	if err == nil {
 		entity.ApprovedAt = approvalData.ApprovedAt
@@ -223,73 +220,74 @@ func (r *Repository) GetEntityByID(id int) (Entity, error) {
 			entity.RejectionReason = approvalData.RejectionReason
 		}
 	}
-	
+
 	log.Printf("📄 Fetched entity %d: additional_docs_urls = %s", entity.ID, entity.AdditionalDocsURLs)
-	
+
 	return entity, nil
 }
+
 // UpdateEntity - Fixed version that properly saves all fields including media
 func (r *Repository) UpdateEntity(e Entity) error {
 	e.UpdatedAt = time.Now()
-	
+
 	// Use Save() to ensure all fields are updated including zero values
 	result := r.DB.Model(&Entity{}).Where("id = ?", e.ID).Save(&e)
-	
+
 	if result.Error != nil {
 		return result.Error
 	}
-	
+
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("no entity found with id %d", e.ID)
 	}
-	
+
 	return nil
 }
 
 // Alternative approach using Updates with all fields explicitly including media
 func (r *Repository) UpdateEntityAlternative(e Entity) error {
 	e.UpdatedAt = time.Now()
-	
+
 	updates := map[string]interface{}{
-		"name":                    e.Name,
-		"main_deity":              e.MainDeity,
-		"temple_type":             e.TempleType,
-		"established_year":        e.EstablishedYear,
-		"email":                   e.Email,
-		"phone":                   e.Phone,
-		"description":             e.Description,
-		"street_address":          e.StreetAddress,
-		"landmark":                e.Landmark,
-		"city":                    e.City,
-		"district":                e.District,
-		"state":                   e.State,
-		"pincode":                 e.Pincode,
-		"map_link":                e.MapLink,
-		"registration_cert_url":   e.RegistrationCertURL,
-		"registration_cert_info":  e.RegistrationCertInfo,
-		"trust_deed_url":          e.TrustDeedURL,
-		"trust_deed_info":         e.TrustDeedInfo,
-		"property_docs_url":       e.PropertyDocsURL,
-		"property_docs_info":      e.PropertyDocsInfo,
-		"additional_docs_urls":    e.AdditionalDocsURLs,
-		"additional_docs_info":    e.AdditionalDocsInfo,
-		"media":                   e.Media,           // 🆕 Add media field
-		"status":                  e.Status,
-		"isactive":                e.IsActive,
-		"accepted_terms":          e.AcceptedTerms,
-		"updated_at":              e.UpdatedAt,
+		"name":                   e.Name,
+		"main_deity":             e.MainDeity,
+		"temple_type":            e.TempleType,
+		"established_year":       e.EstablishedYear,
+		"email":                  e.Email,
+		"phone":                  e.Phone,
+		"description":            e.Description,
+		"street_address":         e.StreetAddress,
+		"landmark":               e.Landmark,
+		"city":                   e.City,
+		"district":               e.District,
+		"state":                  e.State,
+		"pincode":                e.Pincode,
+		"map_link":               e.MapLink,
+		"registration_cert_url":  e.RegistrationCertURL,
+		"registration_cert_info": e.RegistrationCertInfo,
+		"trust_deed_url":         e.TrustDeedURL,
+		"trust_deed_info":        e.TrustDeedInfo,
+		"property_docs_url":      e.PropertyDocsURL,
+		"property_docs_info":     e.PropertyDocsInfo,
+		"additional_docs_urls":   e.AdditionalDocsURLs,
+		"additional_docs_info":   e.AdditionalDocsInfo,
+		"media":                  e.Media,
+		"status":                 e.Status,
+		"isactive":               e.IsActive,
+		"accepted_terms":         e.AcceptedTerms,
+		"updated_at":             e.UpdatedAt,
 	}
-	
+
 	result := r.DB.Model(&Entity{}).Where("id = ?", e.ID).Updates(updates)
-	
+
 	if result.Error != nil {
 		return result.Error
 	}
-	
+
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("no entity found with id %d", e.ID)
 	}
-	
+
 	return nil
 }
 
@@ -299,17 +297,17 @@ func (r *Repository) UpdateEntityStatus(id int, isActive bool) error {
 		"isactive":   isActive,
 		"updated_at": time.Now(),
 	}
-	
+
 	result := r.DB.Model(&Entity{}).Where("id = ?", id).Updates(updates)
-	
+
 	if result.Error != nil {
 		return result.Error
 	}
-	
+
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("no entity found with id %d", id)
 	}
-	
+
 	return nil
 }
 
@@ -516,4 +514,21 @@ func (r *Repository) GetCreatorDetails(entityID uint) (*CreatorDetails, error) {
 		return nil, err
 	}
 	return &out, nil
+}
+
+// GetTenantIDByEntityID retrieves the tenant ID (creator) for a given entity (temple)
+func (r *Repository) GetTenantIDByEntityID(entityID uint) (uint, error) {
+	var tenantID uint
+
+	err := r.DB.Table("entities").
+		Select("created_by").
+		Where("id = ?", entityID).
+		Limit(1).
+		Scan(&tenantID).Error
+
+	if err != nil {
+		return 0, err
+	}
+
+	return tenantID, nil
 }

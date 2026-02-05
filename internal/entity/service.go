@@ -93,7 +93,7 @@ func (s *Service) CreateEntity(e *Entity, userID uint, userRoleID uint, ip strin
 	e.TrustDeedURL = strings.TrimSpace(e.TrustDeedURL)
 	e.PropertyDocsURL = strings.TrimSpace(e.PropertyDocsURL)
 	e.AdditionalDocsURLs = strings.TrimSpace(e.AdditionalDocsURLs)
-	
+
 	// 🆕 Sanitize media field
 	e.Media = strings.TrimSpace(e.Media)
 
@@ -179,6 +179,7 @@ func (s *Service) GetEntitiesByCreator(creatorID uint) ([]Entity, error) {
 func (s *Service) GetEntityByID(id int) (Entity, error) {
 	return s.Repo.GetEntityByID(id)
 }
+
 // Add to entity/service.go
 
 // GetCreatorDetails retrieves creator information for an entity
@@ -186,6 +187,10 @@ func (s *Service) GetCreatorDetails(userID uint) (*CreatorDetails, error) {
 	return s.Repo.GetCreatorDetails(userID)
 }
 
+// GetTenantIDByEntityID retrieves the tenant ID (creator) for a given entity (temple)
+func (s *Service) GetTenantIDByEntityID(entityID uint) (uint, error) {
+	return s.Repo.GetTenantIDByEntityID(entityID)
+}
 
 // UpdateEntity - Temple Admin → Update temple with re-approval logic for rejected temples
 func (s *Service) UpdateEntity(e Entity, userID uint, userRoleID uint, ip string, wasRejected bool) error {
@@ -215,12 +220,12 @@ func (s *Service) UpdateEntity(e Entity, userID uint, userRoleID uint, ip string
 	// 🆕 CREATE NEW APPROVAL REQUEST IF TEMPLE WAS REJECTED AND NOW PENDING
 	if wasRejected && e.Status == "pending" {
 		now := time.Now()
-		
+
 		// First, close any old approval requests for this entity
 		if err := s.Repo.CloseOldApprovalRequests(e.ID, "temple_approval"); err != nil {
 			log.Printf("⚠️ Failed to close old approval requests for temple ID %d: %v", e.ID, err)
 		}
-		
+
 		// Create new approval request for superadmin review
 		req := &auth.ApprovalRequest{
 			UserID:      userID,
@@ -239,11 +244,11 @@ func (s *Service) UpdateEntity(e Entity, userID uint, userRoleID uint, ip string
 				"action":      "Failed to create re-approval request",
 			}
 			s.AuditService.LogAction(context.Background(), &userID, &e.ID, "TEMPLE_REAPPROVAL_REQUEST_FAILED", auditDetails, ip, "failure")
-			
+
 			log.Printf("⚠️ Failed to create re-approval request for temple ID %d: %v", e.ID, err)
 		} else {
 			log.Printf("✅ Re-approval request created for previously rejected temple ID: %d", e.ID)
-			
+
 			auditDetails := map[string]interface{}{
 				"temple_id":       e.ID,
 				"temple_name":     e.Name,
@@ -257,27 +262,27 @@ func (s *Service) UpdateEntity(e Entity, userID uint, userRoleID uint, ip string
 
 	// Log successful temple update
 	auditDetails := map[string]interface{}{
-		"temple_id":       e.ID,
-		"temple_name":     e.Name,
-		"previous_name":   existingEntity.Name,
-		"temple_type":     e.TempleType,
-		"email":           e.Email,
-		"phone":           e.Phone,
-		"city":            e.City,
-		"state":           e.State,
-		"main_deity":      e.MainDeity,
-		"description":     e.Description,
-		"updated_fields":  getUpdatedFields(existingEntity, e),
-		"was_rejected":    wasRejected,
-		"status":          e.Status,
-		"media_updated":   existingEntity.Media != e.Media, // 🆕 Track media changes
+		"temple_id":      e.ID,
+		"temple_name":    e.Name,
+		"previous_name":  existingEntity.Name,
+		"temple_type":    e.TempleType,
+		"email":          e.Email,
+		"phone":          e.Phone,
+		"city":           e.City,
+		"state":          e.State,
+		"main_deity":     e.MainDeity,
+		"description":    e.Description,
+		"updated_fields": getUpdatedFields(existingEntity, e),
+		"was_rejected":   wasRejected,
+		"status":         e.Status,
+		"media_updated":  existingEntity.Media != e.Media, // 🆕 Track media changes
 	}
-	
+
 	actionType := "TEMPLE_UPDATED"
 	if wasRejected && e.Status == "pending" {
 		actionType = "TEMPLE_UPDATED_RESUBMITTED"
 	}
-	
+
 	s.AuditService.LogAction(context.Background(), &userID, &e.ID, actionType, auditDetails, ip, "success")
 
 	return nil
