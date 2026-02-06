@@ -28,6 +28,31 @@ import (
 	"gorm.io/gorm"
 )
 
+// Global variables for cross-function access
+var globalAuthRepo auth.Repository
+
+// GetAssignedTenantID retrieves the assigned tenant ID for a user
+// This is a wrapper around auth.Repository.GetAssignedTenantID
+func GetAssignedTenantID(userID int) int {
+	if globalAuthRepo == nil {
+		log.Printf("⚠️ GetAssignedTenantID: globalAuthRepo is nil")
+		return 0
+	}
+
+	tenantID, err := globalAuthRepo.GetAssignedTenantID(uint(userID))
+	if err != nil {
+		log.Printf("⚠️ GetAssignedTenantID failed for userID %d: %v", userID, err)
+		return 0
+	}
+
+	if tenantID == nil {
+		log.Printf("⚠️ GetAssignedTenantID: no tenant assigned for userID %d", userID)
+		return 0
+	}
+
+	return int(*tenantID)
+}
+
 func main() {
 	cfg := config.Load()
 	db := database.Connect(cfg)
@@ -61,6 +86,7 @@ func main() {
 
 	// Init repositories & services
 	authRepo := auth.NewRepository(db)
+	globalAuthRepo = authRepo
 	auditRepo := auditlog.NewRepository(db)
 	auditSvc := auditlog.NewService(auditRepo)
 
@@ -191,36 +217,18 @@ func main() {
 		middleware.AuthMiddleware(cfg, authSvc, true), // ✅ Add auth middleware
 		func(c *gin.Context) {
 
-			var tenantID uint = 0
-			tenantIDHeader := c.GetHeader("X-Tenant-ID")
-
-			if tenantIDHeader != "" {
-				// Try to parse tenant ID from header
-				tenantID64, err := strconv.ParseUint(tenantIDHeader, 10, 64)
-				if err != nil {
-					log.Printf("⚠️ Invalid X-Tenant-ID header: %v", err)
-				} else {
-					tenantID = uint(tenantID64)
-					log.Printf("📁 Using tenant ID from header: %d", tenantID)
-				}
-			}
-
 			entityID := c.Param("entityID")
 			filename := c.Param("filename")
 
-			fmt.Printf("entityID: %#v\n", entityID)
-			fmt.Printf("filename: %#v\n", filename)
+			fmt.Println("entityID: ", entityID)
+			fmt.Println("filename: ", filename)
 
 			userRaw, exists := c.Get("user")
 			if exists {
 				user, _ := userRaw.(auth.User)
-
-				fmt.Printf("user.ID: %#v\n", user.ID)
-				userRole := user.Role.RoleName
-				fmt.Printf("userRole1: %#v\n", userRole)
-				serveEntityFile(c, uploadDir, &user, tenantID, entityID, filename)
+				serveEntityFile(c, uploadDir, &user, entityID, filename)
 			} else {
-				serveEntityFile(c, uploadDir, nil, tenantID, entityID, filename)
+				serveEntityFile(c, uploadDir, nil, entityID, filename)
 			}
 		})
 
@@ -508,7 +516,7 @@ func main() {
 }
 
 // serveEntityFile handles serving files from entity directories
-func serveEntityFile(c *gin.Context, uploadDir string, user *auth.User, tenantID uint, entityID string, filename string) {
+func serveEntityFile(c *gin.Context, uploadDir string, user *auth.User, entityID string, filename string) {
 	c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
 	c.Header("Access-Control-Allow-Credentials", "true")
 	c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition")
@@ -519,35 +527,37 @@ func serveEntityFile(c *gin.Context, uploadDir string, user *auth.User, tenantID
 	}
 
 	userRole := ""
-	userId := 0
-	if user != nil && user.ID != tenantID {
+	tenantID := 0
+	if user != nil {
 		userRole = user.Role.RoleName
-		userId = int(user.ID)
+
 	}
 
 	fmt.Println("userRole: ", userRole)
-	fmt.Println("user.ID: ", userId)
-	fmt.Println("tenantID: ", tenantID)
 
 	fPath := ""
-	if userRole == "superadmin" || user != nil && (user.ID != 0 && tenantID != 0 && user.ID == tenantID) {
+	if (userRole == "superadmin") ||
+		(userRole == "standarduser") ||
+		(userRole == "monitoring user") ||
+		((user != nil) && (user.ID != 0)) {
 		if userRole == "superadmin" {
-			tenantID = entity.GetTenantByEntityID(entityID)
+			tenantID = int(entity.GetTenantByEntityID(entityID))
+		} else if (userRole == "standarduser") || (userRole == "monitoringuser") {
+			tenantID = GetAssignedTenantID(int(user.ID))
+		} else {
+			tenantID = int(user.ID)
 		}
-		fPath = filepath.Join(uploadDir, strconv.Itoa(int(tenantID)), entityID, filename)
+		fmt.Println("tenantID: ", tenantID)
+
+		fPath = filepath.Join(uploadDir, strconv.Itoa(tenantID), entityID, filename)
 		fmt.Println("fPath: ", fPath)
-	} else if tenantID != 0 {
-		c.JSON(http.StatusForbidden, gin.H{
-			"error":   "Access denied",
-			"message": "Unauthorized or Invalid file path",
-		})
-		return
 	} else {
 		fPath = filepath.Join(uploadDir, entityID, filename)
 	}
 
 	cleanPath := filepath.Clean(fPath)
 	fileInfo, err := os.Stat(cleanPath)
+
 	if os.IsNotExist(err) {
 		fPath = filepath.Join(uploadDir, entityID, filename)
 		cleanPath = filepath.Clean(fPath)

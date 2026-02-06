@@ -464,7 +464,7 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 		)
 
 		protected.GET("/entities/:id",
-			middleware.RBACMiddleware("templeadmin", "superadmin", "devotee"),
+            middleware.RBACMiddleware("templeadmin", "superadmin", "devotee", "standarduser", "monitoringuser"),
 			entityHandler.GetEntityByID,
 		)
 
