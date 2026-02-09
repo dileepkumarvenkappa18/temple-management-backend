@@ -63,7 +63,7 @@ func main() {
 	}
 
 	// Init Kafka
-	utils.InitializeKafka()
+	//utils.InitializeKafka()
 
 	// 🔒 Initialize CAPTCHA service
 	captchaService := utils.LoadCaptchaFromEnv()
@@ -95,8 +95,8 @@ func main() {
 	entity.SetRepository(entityRepo)
 
 	notificationRepo := notification.NewRepository(db)
-	notificationService := notification.NewService(notificationRepo, authRepo, cfg, auditSvc)
-	notification.StartKafkaConsumer(notificationService)
+	_ = notification.NewService(notificationRepo, authRepo, cfg, auditSvc)
+	//notification.StartKafkaConsumer(notificationService)
 
 	// Seed roles & super admin
 	if err := auth.SeedUserRoles(db); err != nil {

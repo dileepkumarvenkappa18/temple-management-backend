@@ -34,8 +34,16 @@ func NewEmailSender(cfg *config.Config) *EmailSender {
 	}
 }
 
-// Send renders the HTML template and sends the email
+// Send sends ONE email with sender in To field and all recipients in BCC
+// - Sender sees all recipients in their sent folder
+// - Each recipient only sees their own email in "To: bcc: their-email@example.com"
 func (e *EmailSender) Send(to []string, subject string, body string) error {
+	if len(to) == 0 {
+		return fmt.Errorf("no recipients provided")
+	}
+
+	fmt.Printf("📧 Sending one email to %d BCC recipients\n", len(to))
+
 	// Step 1: Load and parse the template
 	tmplPath := filepath.Join("templates", "example.html")
 	tmpl, err := template.ParseFiles(tmplPath)
@@ -55,15 +63,16 @@ func (e *EmailSender) Send(to []string, subject string, body string) error {
 		return fmt.Errorf("failed to render email template: %w", err)
 	}
 
-	// Step 3: Build headers
-	from := fmt.Sprintf("%s <%s>", e.FromName, e.FromAddr)
-	toHeader := strings.Join(to, ", ")
+	// Step 3: Build headers with sender in To field
+	from := "Temple Management System <noreply@templemanagement.com>"
+	
 	headers := map[string]string{
 		"From":         from,
-		"To":           toHeader,
+		"To":           e.FromAddr,  // ✅ Your email goes in To field - you'll see all recipients in sent folder
 		"Subject":      subject,
 		"MIME-Version": "1.0",
 		"Content-Type": "text/html; charset=\"UTF-8\"",
+		// NO Bcc header - keeps recipients hidden from each other
 	}
 
 	var msgBuilder strings.Builder
@@ -73,25 +82,27 @@ func (e *EmailSender) Send(to []string, subject string, body string) error {
 	msgBuilder.WriteString("\r\n" + htmlBody.String())
 	message := []byte(msgBuilder.String())
 
-	// Step 4: Send email with custom TLS config
+	// Step 4: Send to all recipients via SMTP envelope
 	addr := fmt.Sprintf("%s:%s", e.Host, e.Port)
-	fmt.Println("📤 Sending email to:", to, "via", addr)
+	
+	fmt.Printf("📤 Sending via %s to %d BCC recipients\n", addr, len(to))
+	fmt.Printf("📝 From display: %s\n", from)
+	fmt.Printf("📧 To field: %s (will appear in Sent folder)\n", e.FromAddr)
+	fmt.Printf("🔐 SMTP auth: %s\n", e.Username)
 
-	// ✅ FIX: Use custom SMTP client with TLS config
 	err = e.sendMailWithTLS(addr, to, message)
 	if err != nil {
 		fmt.Println("❌ Email send failed:", err)
 		return fmt.Errorf("failed to send email: %w", err)
 	}
 
-	fmt.Println("✅ Email sent successfully to:", to)
+	fmt.Printf("✅ Email sent - check your Sent folder to see all %d BCC recipients\n", len(to))
 	return nil
 }
 
-// ✅ NEW: Custom send function with proper TLS handling
+// ✅ Custom send function with proper TLS handling
 func (e *EmailSender) sendMailWithTLS(addr string, to []string, message []byte) error {
 	// Create TLS config - skip verification for Docker environments
-	// This is safe because we're connecting to smtp.gmail.com
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
 		ServerName:         e.Host,
@@ -109,22 +120,34 @@ func (e *EmailSender) sendMailWithTLS(addr string, to []string, message []byte) 
 		return fmt.Errorf("failed to start TLS: %w", err)
 	}
 
-	// Authenticate
+	// Authenticate with REAL email (must match Gmail account)
 	auth := smtp.PlainAuth("", e.Username, e.Password, e.Host)
 	if err = client.Auth(auth); err != nil {
 		return fmt.Errorf("authentication failed: %w", err)
 	}
 
-	// Set sender
+	// ✅ CRITICAL: MAIL FROM must be the authenticated email
+	// You CANNOT change this - Gmail requires it to match your account
 	if err = client.Mail(e.FromAddr); err != nil {
 		return fmt.Errorf("failed to set sender: %w", err)
 	}
 
-	// Set recipients
+	// Add all recipients to SMTP envelope (sender + BCC list)
+	successCount := 0
 	for _, recipient := range to {
 		if err = client.Rcpt(recipient); err != nil {
-			return fmt.Errorf("failed to set recipient %s: %w", recipient, err)
+			fmt.Printf("⚠️  Failed to add recipient %s: %v\n", recipient, err)
+			continue
 		}
+		successCount++
+	}
+
+	if successCount == 0 {
+		return fmt.Errorf("failed to add any recipients")
+	}
+
+	if successCount < len(to) {
+		fmt.Printf("⚠️  Partial delivery: %d/%d recipients added\n", successCount, len(to))
 	}
 
 	// Send message body
@@ -144,6 +167,5 @@ func (e *EmailSender) sendMailWithTLS(addr string, to []string, message []byte) 
 		return fmt.Errorf("failed to close writer: %w", err)
 	}
 
-	// Send QUIT command
 	return client.Quit()
 }

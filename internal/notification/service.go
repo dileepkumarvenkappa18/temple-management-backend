@@ -185,7 +185,7 @@ func (s *service) SendNotification(
 	
 	switch channel {
 	case "email":
-		sendErr = s.sendEmailInBatches(recipients, subject, body, batchSize)
+    sendErr = s.email.Send(recipients, subject, body)
 	case "sms":
 		sendErr = s.sendSMSInBatches(recipients, subject, body, batchSize)
 	case "whatsapp":

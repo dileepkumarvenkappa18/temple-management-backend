@@ -98,11 +98,72 @@ func (s *Service) GetTenantIDForUser(ctx context.Context, userIDInterface interf
 }
 // ================== TENANT ==================
 
+func (s *Service) RejectTenant(ctx context.Context, userID uint, adminID uint, reason string, ip string) error {
+	if reason == "" {
+		return errors.New("rejection reason is required")
+	}
+
+	// Get user details BEFORE deletion (we need email and name for notification)
+	user, err := s.repo.GetUserByID(ctx, userID)
+	if err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_REJECTION_FAILED", map[string]interface{}{
+			"target_user_id": userID,
+			"reason":         "tenant not found",
+		}, ip, "failure")
+		return errors.New("tenant not found")
+	}
+
+	// Prevent rejecting already approved tenants
+	if user.Status == "active" {
+		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_REJECTION_FAILED", map[string]interface{}{
+			"target_user_id":    userID,
+			"target_user_email": user.Email,
+			"reason":            "already approved - cannot reject approved tenant",
+		}, ip, "failure")
+		return errors.New("cannot reject an already approved tenant")
+	}
+
+	// Store email and name before deletion
+	userEmail := user.Email
+	userFullName := user.FullName
+
+	log.Printf("🔄 Rejecting tenant: user_id=%d, email=%s, name=%s", userID, userEmail, userFullName)
+
+	// ✅ Delete tenant and all related records (this allows re-registration)
+	if err := s.repo.DeleteTenantAndRelatedRecords(ctx, userID); err != nil {
+		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_REJECTION_FAILED", map[string]interface{}{
+			"target_user_id":    userID,
+			"target_user_email": userEmail,
+			"reason":            "failed to delete records",
+			"error":             err.Error(),
+		}, ip, "failure")
+		return fmt.Errorf("failed to delete tenant records: %w", err)
+	}
+
+	log.Printf("✅ Deleted all records for rejected tenant user_id: %d, email: %s", userID, userEmail)
+
+	// ✅ Send rejection email
+	log.Printf("📧 Sending rejection email to: %s", userEmail)
+	utils.SendTenantRejectionEmail(userEmail, userFullName, reason)
+	// Note: Using the existing function that doesn't return error
+	log.Printf("✅ Rejection email sent to %s", userEmail)
+
+	// Log successful rejection with deletion
+	s.auditService.LogAction(ctx, &adminID, nil, "TENANT_REJECTED_AND_DELETED", map[string]interface{}{
+		"target_user_id":    userID,
+		"target_user_email": userEmail,
+		"target_user_name":  userFullName,
+		"rejection_reason":  reason,
+		"records_deleted":   true,
+		"can_reregister":    true,
+	}, ip, "success")
+
+	return nil
+}
 func (s *Service) ApproveTenant(ctx context.Context, userID uint, adminID uint, ip string) error {
 	// Check existence and current status
 	user, err := s.repo.GetUserByID(ctx, userID)
 	if err != nil {
-		// Log failed approval attempt
 		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_APPROVAL_FAILED", map[string]interface{}{
 			"target_user_id": userID,
 			"reason":         "tenant not found",
@@ -117,14 +178,6 @@ func (s *Service) ApproveTenant(ctx context.Context, userID uint, adminID uint, 
 			"reason":            "already approved",
 		}, ip, "failure")
 		return errors.New("tenant already approved")
-	}
-	if user.Status == "rejected" {
-		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_APPROVAL_FAILED", map[string]interface{}{
-			"target_user_id":    userID,
-			"target_user_email": user.Email,
-			"reason":            "already rejected",
-		}, ip, "failure")
-		return errors.New("tenant already rejected")
 	}
 
 	if err := s.repo.ApproveTenant(ctx, userID, adminID); err != nil {
@@ -145,62 +198,17 @@ func (s *Service) ApproveTenant(ctx context.Context, userID uint, adminID uint, 
 		return err
 	}
 
+	// ✅ Send approval email
+	log.Printf("📧 Sending approval email to: %s", user.Email)
+	utils.SendTenantApprovalEmail(user.Email, user.FullName)
+	log.Printf("✅ Approval email sent to %s", user.Email)
+
 	// Log successful approval
 	s.auditService.LogAction(ctx, &adminID, nil, "TENANT_APPROVED", map[string]interface{}{
 		"target_user_id":    userID,
 		"target_user_email": user.Email,
 		"target_user_name":  user.FullName,
-	}, ip, "success")
-
-	return nil
-}
-
-func (s *Service) RejectTenant(ctx context.Context, userID uint, adminID uint, reason string, ip string) error {
-	if reason == "" {
-		return errors.New("rejection reason is required")
-	}
-
-	user, err := s.repo.GetUserByID(ctx, userID)
-	if err != nil {
-		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_REJECTION_FAILED", map[string]interface{}{
-			"target_user_id": userID,
-			"reason":         "tenant not found",
-		}, ip, "failure")
-		return errors.New("tenant not found")
-	}
-
-	if user.Status == "rejected" {
-		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_REJECTION_FAILED", map[string]interface{}{
-			"target_user_id":    userID,
-			"target_user_email": user.Email,
-			"reason":            "already rejected",
-		}, ip, "failure")
-		return errors.New("tenant already rejected")
-	}
-	if user.Status == "active" {
-		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_REJECTION_FAILED", map[string]interface{}{
-			"target_user_id":    userID,
-			"target_user_email": user.Email,
-			"reason":            "already approved",
-		}, ip, "failure")
-		return errors.New("tenant already approved")
-	}
-
-	if err := s.repo.RejectTenant(ctx, userID, adminID, reason); err != nil {
-		s.auditService.LogAction(ctx, &adminID, nil, "TENANT_REJECTION_FAILED", map[string]interface{}{
-			"target_user_id":    userID,
-			"target_user_email": user.Email,
-			"reason":            "database error",
-		}, ip, "failure")
-		return err
-	}
-
-	// Log successful rejection
-	s.auditService.LogAction(ctx, &adminID, nil, "TENANT_REJECTED", map[string]interface{}{
-		"target_user_id":    userID,
-		"target_user_email": user.Email,
-		"target_user_name":  user.FullName,
-		"rejection_reason":  reason,
+		"email_sent":        true,
 	}, ip, "success")
 
 	return nil

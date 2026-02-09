@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/sharath018/temple-management-backend/internal/auth"
@@ -1274,6 +1275,49 @@ func (r *Repository) BulkCreateUsers(ctx context.Context, users []auth.User) err
 		}
 
 		fmt.Printf("Transaction completed. Created %d users out of %d\n", createdCount, len(users))
+		return nil
+	})
+}
+// DeleteTenantAndRelatedRecords deletes tenant user and all related records
+// This allows the email/phone to be reused for re-registration
+func (r *Repository) DeleteTenantAndRelatedRecords(ctx context.Context, userID uint) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		log.Printf("🗑️  Starting deletion of tenant and related records for user_id: %d", userID)
+
+		// 1. Delete bank account details
+		result := tx.Unscoped().Where("user_id = ?", userID).Delete(&auth.Tenant_BankAccountDetails{})
+		if result.Error != nil {
+			log.Printf("❌ Failed to delete bank details: %v", result.Error)
+			return fmt.Errorf("failed to delete bank details: %w", result.Error)
+		}
+		log.Printf("✅ Deleted %d bank account record(s) for user_id: %d", result.RowsAffected, userID)
+
+		// 2. Delete tenant details (including logo/video references)
+		result = tx.Unscoped().Where("user_id = ?", userID).Delete(&auth.TenantDetails{})
+		if result.Error != nil {
+			log.Printf("❌ Failed to delete tenant details: %v", result.Error)
+			return fmt.Errorf("failed to delete tenant details: %w", result.Error)
+		}
+		log.Printf("✅ Deleted %d tenant detail record(s) for user_id: %d", result.RowsAffected, userID)
+
+		// 3. Delete approval requests
+		result = tx.Unscoped().Where("user_id = ?", userID).Delete(&auth.ApprovalRequest{})
+		if result.Error != nil {
+			log.Printf("❌ Failed to delete approval requests: %v", result.Error)
+			return fmt.Errorf("failed to delete approval requests: %w", result.Error)
+		}
+		log.Printf("✅ Deleted %d approval request(s) for user_id: %d", result.RowsAffected, userID)
+
+		// 4. Hard delete user record (using Unscoped to bypass soft delete)
+		// This is crucial to allow re-registration with the same email/phone
+		result = tx.Unscoped().Delete(&auth.User{}, userID)
+		if result.Error != nil {
+			log.Printf("❌ Failed to delete user: %v", result.Error)
+			return fmt.Errorf("failed to delete user: %w", result.Error)
+		}
+		log.Printf("✅ Hard deleted user record for user_id: %d (rows affected: %d)", userID, result.RowsAffected)
+
+		log.Printf("✅✅ Successfully deleted ALL records for user_id: %d - can now re-register", userID)
 		return nil
 	})
 }
