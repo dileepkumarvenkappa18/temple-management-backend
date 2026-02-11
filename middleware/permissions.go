@@ -1,9 +1,8 @@
 package middleware
 
 import (
-	"strconv"
 	"fmt"
-	
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -24,15 +23,18 @@ type AccessContext struct {
 	DirectEntityID   *uint  // User's own entity (for templeadmin)
 	AssignedEntityID *uint  // Assigned tenant entity (for standarduser/monitoringuser)
 	PermissionType   string // "full" or "readonly"
-	TenantID        uint 
+	TenantID         uint
 }
 
 // GetAccessibleEntityID returns the entity ID the user can access
+// FIX: Also check AssignedEntityID for standard/monitoring users
 func (ac *AccessContext) GetAccessibleEntityID() *uint {
-	if ac.AssignedEntityID != nil {
-		return ac.AssignedEntityID
+	// First try DirectEntityID (for templeadmin)
+	if ac.DirectEntityID != nil {
+		return ac.DirectEntityID
 	}
-	return ac.DirectEntityID
+	// Fall back to AssignedEntityID (for standard/monitoring users)
+	return ac.AssignedEntityID
 }
 
 // GetEntityIDForOperation returns the entity ID to use for operations like create/update
@@ -63,15 +65,16 @@ func (ac *AccessContext) CanAccessEntity(entityID uint) bool {
 	if ac.RoleName == RoleSuperAdmin {
 		return true
 	}
-	
+
 	// Check if this entity matches user's accessible entity
 	accessibleEntityID := ac.GetAccessibleEntityID()
 	if accessibleEntityID != nil && *accessibleEntityID == entityID {
 		return true
 	}
-	
+
 	return false
 }
+
 /*
 // ResolveAccessContext helper to create access context from user and assignment
 func ResolveAccessContext(user interface{}, assignedTenantID *uint) AccessContext {
@@ -79,7 +82,7 @@ func ResolveAccessContext(user interface{}, assignedTenantID *uint) AccessContex
 	var userID uint
 	var roleName string
 	var entityID *uint
-	
+
 	// This approach allows the function to work without directly importing auth
 	// which helps prevent import cycles
 	switch u := user.(type) {
@@ -104,7 +107,7 @@ func ResolveAccessContext(user interface{}, assignedTenantID *uint) AccessContex
 		RoleName:       roleName,
 		DirectEntityID: entityID,
 		PermissionType: "full", // default
-		
+
 	}
 
 	// If user is standarduser or monitoringuser with assigned tenant
@@ -120,20 +123,18 @@ func ResolveAccessContext(user interface{}, assignedTenantID *uint) AccessContex
 	return accessContext
 }*/
 
-// ExtractTenantIDFromContext extracts tenant ID from request headers
+// ExtractTenantIDFromContext extracts tenant ID from the access context
 func ExtractTenantIDFromContext(c *gin.Context) *uint {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
-	if tenantIDStr == "" {
-		return nil
+	// Use access context instead of header
+	if accessCtxVal, exists := c.Get("access_context"); exists {
+		if ctx, ok := accessCtxVal.(AccessContext); ok {
+			if ctx.TenantID > 0 {
+				return &ctx.TenantID
+			}
+		}
 	}
 
-	tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
-	if err != nil {
-		return nil
-	}
-
-	id := uint(tenantID)
-	return &id
+	return nil
 }
 
 // GetEntityIDFromContext is a utility function to get the current entity ID from context
@@ -144,14 +145,14 @@ func GetEntityIDFromContext(c *gin.Context) *uint {
 			return &id
 		}
 	}
-	
+
 	// Try to get from access context
 	if accessCtx, exists := c.Get("access_context"); exists {
 		if ctx, ok := accessCtx.(AccessContext); ok {
 			return ctx.GetEntityIDForOperation()
 		}
 	}
-	
+
 	return nil
 }
 
@@ -170,8 +171,8 @@ func LogEntityResolution(c *gin.Context, operation string) {
 	entityID := GetEntityIDFromContext(c)
 	if accessCtx, exists := c.Get("access_context"); exists {
 		if ctx, ok := accessCtx.(AccessContext); ok {
-			fmt.Printf("[%s] Entity Resolution - UserID: %d, Role: %s, EntityID: %v, DirectEntityID: %v, AssignedEntityID: %v\n",
-				operation, ctx.UserID, ctx.RoleName, entityID, ctx.DirectEntityID, ctx.AssignedEntityID)
+			fmt.Printf("[%s] Entity Resolution - UserID: %d, Role: %s, EntityID: %v, DirectEntityID: %v, TenantID: %v\n",
+				operation, ctx.UserID, ctx.RoleName, entityID, ctx.DirectEntityID, ctx.TenantID)
 		}
 	}
 }

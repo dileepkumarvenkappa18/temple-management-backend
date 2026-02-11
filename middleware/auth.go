@@ -13,110 +13,8 @@ import (
 )
 
 // AuthMiddleware handles JWT authentication and sets up access context
-/*
-func AuthMiddleware(cfg *config.Config, authSvc auth.Service, opt ...bool) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		optional := false
-		if len(opt) > 0 {
-			optional = opt[0] // if caller passes a value, use it
-		}
-
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			if !optional {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing Authorization header"})
-				return
-			} else {
-				c.Next()
-				return
-			}
-		}
-
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			if !optional {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid Authorization header"})
-				return
-			} else {
-				c.Next()
-				return
-			}
-		} else if optional {
-			c.Next()
-			return
-		}
-
-		tokenStr := parts[1]
-		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
-			return []byte(cfg.JWTAccessSecret), nil
-		})
-		if err != nil || !token.Valid {
-			if !optional {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
-				return
-			} else {
-				c.Next()
-				return
-			}
-		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			if !optional {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid claims"})
-				return
-			} else {
-				c.Next()
-				return
-			}
-		}
-
-		userIDFloat, ok := claims["user_id"].(float64)
-		if !ok {
-			if !optional {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user_id missing in token"})
-				return
-			} else {
-				c.Next()
-				return
-			}
-		}
-
-		userID := uint(userIDFloat)
-		user, err := authSvc.GetUserByID(userID)
-		if err != nil {
-			if !optional {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
-				return
-			} else {
-				c.Next()
-				return
-			}
-		}
-
-		// Set user in context
-		c.Set("user", user)
-		c.Set("user_id", user.ID)
-		c.Set("claims", claims)
-
-		// Determine correct entity ID
-		entityID := ResolveEntityIDForOperation(c, user, claims)
-
-		// Create access context (now includes TenantID)
-		accessContext := CreateAccessContext(c, user, claims, entityID)
-		c.Set("access_context", accessContext)
-
-		// Set resolved entity ID for quick access
-		if entityID != nil {
-			c.Set("entity_id", *entityID)
-		}
-
-		c.Next()
-	}
-}
-*/
-
-func AuthMiddleware(cfg *config.Config, authSvc auth.Service, opt ...bool) gin.HandlerFunc {
+// UPDATED: Accepts repository parameter for backend-based tenant resolution
+func AuthMiddleware(cfg *config.Config, authSvc auth.Service, authRepo auth.Repository, opt ...bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		optional := false
 		if len(opt) > 0 {
@@ -194,7 +92,7 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service, opt ...bool) gin.H
 
 		// Only resolve entity & access context if a valid user exists
 		entityID := ResolveEntityIDForOperation(c, user, claims)
-		accessContext := CreateAccessContext(c, user, claims, entityID)
+		accessContext := CreateAccessContext(c, user, claims, entityID, authRepo)
 		c.Set("access_context", accessContext)
 		if entityID != nil {
 			c.Set("entity_id", *entityID)
@@ -285,6 +183,7 @@ func ResolveTenantIDFromRequest(c *gin.Context, claims jwt.MapClaims) *uint {
 		}
 	}
 	if tenantHeader := c.GetHeader("X-Tenant-ID"); tenantHeader != "" && tenantHeader != "all" {
+		fmt.Println("Hope we don't hit this.. A problem for SuperAdmin. Don't like headers.")
 		if tid, err := strconv.ParseUint(tenantHeader, 10, 32); err == nil {
 			id := uint(tid)
 			return &id
@@ -312,7 +211,8 @@ func ExtractEntityIDFromPath(c *gin.Context) *uint {
 }
 
 // CreateAccessContext creates the access context with proper entity + tenant resolution
-func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, entityID *uint) AccessContext {
+// UPDATED: Now accepts authRepo to call GetAssignedTenantID() for standard/monitoring users
+func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, entityID *uint, authRepo auth.Repository) AccessContext {
 	accessContext := AccessContext{
 		UserID:   user.ID,
 		RoleName: user.Role.RoleName,
@@ -331,10 +231,29 @@ func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, e
 	case RoleStandardUser:
 		accessContext.PermissionType = "full"
 		accessContext.AssignedEntityID = entityID
+		// NEW: Call GetAssignedTenantID() from repository
+		if authRepo != nil {
+			if assignedTenantID, err := authRepo.GetAssignedTenantID(user.ID); err == nil && assignedTenantID != nil {
+				accessContext.TenantID = *assignedTenantID
+				fmt.Printf("✅ StandardUser %d assigned to tenant: %d\n", user.ID, accessContext.TenantID)
+			} else {
+				fmt.Printf("⚠️ No tenant assigned to StandardUser %d\n", user.ID)
+			}
+		}
 
 	case RoleMonitoringUser:
 		accessContext.PermissionType = "readonly"
-		accessContext.AssignedEntityID = entityID
+		accessContext.DirectEntityID = user.EntityID
+		// NEW: Call GetAssignedTenantID() from repository
+		if authRepo != nil {
+			if assignedTenantID, err := authRepo.GetAssignedTenantID(user.ID); err == nil && assignedTenantID != nil {
+				accessContext.TenantID = *assignedTenantID
+				accessContext.AssignedEntityID = entityID
+				fmt.Printf("✅ MonitoringUser %d assigned to tenant: %d\n", user.ID, accessContext.TenantID)
+			} else {
+				fmt.Printf("⚠️ No tenant assigned to MonitoringUser %d\n", user.ID)
+			}
+		}
 
 	case RoleDevotee, RoleVolunteer:
 		accessContext.PermissionType = "readonly"
@@ -345,16 +264,19 @@ func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, e
 		}
 	}
 
-	// ✅ Extract TenantID (important for standard & monitoring users)
-	// ✅ Extract TenantID (important for standard & monitoring users)
-	if tenantIDFloat, ok := claims["tenant_id"].(float64); ok {
-		accessContext.TenantID = uint(tenantIDFloat)
-	} else if assignedTenantIDFloat, ok := claims["assigned_tenant_id"].(float64); ok {
-		accessContext.TenantID = uint(assignedTenantIDFloat)
-	}
-
 	fmt.Printf("✅ AccessContext initialized: Role=%s, TenantID=%d, EntityID=%v\n",
 		accessContext.RoleName, accessContext.TenantID, accessContext.AssignedEntityID)
 
 	return accessContext
+}
+
+// GetTenantIDFromAccessContext is a helper to get tenant ID from the access context
+// This is used by handlers that need to resolve tenant ID
+func GetTenantIDFromAccessContext(c *gin.Context) uint {
+	if accessCtxVal, exists := c.Get("access_context"); exists {
+		if accessCtx, ok := accessCtxVal.(AccessContext); ok {
+			return accessCtx.TenantID
+		}
+	}
+	return 0
 }

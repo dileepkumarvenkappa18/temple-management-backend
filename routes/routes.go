@@ -182,7 +182,7 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 		authGroup.POST("/login", authHandler.Login)
 		authGroup.POST("/refresh", authHandler.Refresh)
 		authGroup.GET("/account/details",
-			middleware.AuthMiddleware(cfg, authSvc),
+			middleware.AuthMiddleware(cfg, authSvc, authRepo),
 			middleware.RBACMiddleware(
 				"devotee",
 				"volunteer",
@@ -195,7 +195,7 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 		)
 
 		authGroup.PUT("/account/details",
-			middleware.AuthMiddleware(cfg, authSvc),
+			middleware.AuthMiddleware(cfg, authSvc, authRepo),
 			authHandler.UpdateAccountDetails)
 
 		// Forgot/Reset/Logout
@@ -206,11 +206,11 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 		authGroup.GET("/public-roles", authHandler.GetPublicRoles)
 
 		// Logout requires Auth Middleware
-		authGroup.POST("/logout", middleware.AuthMiddleware(cfg, authSvc), authHandler.Logout)
+		authGroup.POST("/logout", middleware.AuthMiddleware(cfg, authSvc, authRepo), authHandler.Logout)
 	}
 
 	protected := api.Group("/")
-	protected.Use(middleware.AuthMiddleware(cfg, authSvc))
+	protected.Use(middleware.AuthMiddleware(cfg, authSvc, authRepo))
 
 	// Dashboards
 	protected.GET("/tenant/dashboard", middleware.RBACMiddleware("templeadmin"), func(c *gin.Context) {
@@ -255,9 +255,6 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 		// Paginated list of entities with optional ?status=pending&limit=10&page=1
 		superadminRoutes.GET("/entities", superadminHandler.GetEntitiesWithFilters)
 		superadminRoutes.PATCH("/entities/:id/approval", superadminHandler.UpdateEntityApprovalStatus)
-
-		superadminRoutes.GET("/tenant-details/:id", superadminHandler.GetTenantDetails)
-		superadminRoutes.GET("/tenant-details", superadminHandler.GetTenantDetails)
 
 		// ================ DASHBOARD METRICS ================
 		superadminRoutes.GET("/tenant-approval-count", superadminHandler.GetTenantApprovalCounts)
@@ -399,14 +396,17 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 			middleware.RBACMiddleware(
 				"devotee",
 				"volunteer",
+				"monitoringuser",
+				"standarduser",
 				"templeadmin",
 				"superadmin",
 			),
+			middleware.RequireTempleAccess(),
 			entityHandler.GetEntityByID,
 		)
 
-		// Add special endpoint for templeadmins to view their created entities
-		protected.GET("/entities/by-creator", middleware.RBACMiddleware("templeadmin"), func(c *gin.Context) {
+		// Add special endpoint for templeadmins and superadmin to view their created entities
+		protected.GET("/entities/by-creator", middleware.RBACMiddleware("templeadmin", "superadmin"), func(c *gin.Context) {
 			// Get user ID from context
 			userVal, exists := c.Get("user")
 			if !exists {
@@ -420,8 +420,21 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 				return
 			}
 
-			// Call repository to get entities created by this user
-			entities, err := entityRepo.GetEntitiesByCreator(user.ID)
+			creatorID := user.ID
+
+			// For superadmin, allow optional ?tenant_id= query parameter
+			if user.Role.RoleName == "superadmin" {
+				if tenantIDStr := c.Query("tenant_id"); tenantIDStr != "" {
+					var tenantID uint
+					if _, err := fmt.Sscanf(tenantIDStr, "%d", &tenantID); err == nil && tenantID > 0 {
+						creatorID = tenantID
+						fmt.Printf("🔍 Superadmin fetching entities for tenant_id: %d\n", tenantID)
+					}
+				}
+			}
+
+			// Call repository to get entities created by this user/tenant
+			entities, err := entityRepo.GetEntitiesByCreator(creatorID)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch temples", "details": err.Error()})
 				return
@@ -464,7 +477,7 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 		)
 
 		protected.GET("/entities/:id",
-            middleware.RBACMiddleware("templeadmin", "superadmin", "devotee", "standarduser", "monitoringuser"),
+			middleware.RBACMiddleware("templeadmin", "superadmin", "devotee", "standarduser", "monitoringuser"),
 			entityHandler.GetEntityByID,
 		)
 

@@ -1,7 +1,6 @@
 package userprofile
 
 import (
-
 	"net/http"
 	"strconv"
 
@@ -227,9 +226,9 @@ func (h *Handler) ListMemberships(c *gin.Context) {
 
 // GET /temples/search?query=&state=&temple_type=
 func (h *Handler) SearchTemples(c *gin.Context) {
-	query := c.Query("query")             // name/city/state search text
-	state := c.Query("state")             // optional filter
-	templeType := c.Query("temple_type")  // optional filter
+	query := c.Query("query")            // name/city/state search text
+	state := c.Query("state")            // optional filter
+	templeType := c.Query("temple_type") // optional filter
 
 	results, err := h.service.SearchTemples(query, state, templeType)
 	if err != nil {

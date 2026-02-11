@@ -72,30 +72,11 @@ func (h *Handler) GetActivities(c *gin.Context) {
 	if strings.ToLower(entityParam) == "all" {
 		fmt.Println("all")
 		actualEntityParam = "all" // Keep "all" for request tracking
-		
+
 		// Handle based on role
 		switch ctx.RoleName {
-case "superadmin":
-			// When superadmin logs in as tenant, they should have AssignedEntityID set
-			if ctx.AssignedEntityID != nil {
-				tenantID = *ctx.AssignedEntityID
-				ids, err := h.repo.GetEntitiesByTenant(tenantID)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch tenant entities"})
-					return
-				}
-				if len(ids) == 0 {
-					c.JSON(http.StatusOK, gin.H{"data": ReportData{}, "message": "No entities found for tenant"})
-					return
-				}
-				for _, id := range ids {
-					entityIDs = append(entityIDs, fmt.Sprint(id))
-				}
-			} else {
-				// Pure superadmin without tenant context - should not happen for this endpoint
-				c.JSON(http.StatusBadRequest, gin.H{"error": "superadmin must specify tenant context or use superadmin endpoints"})
-				return
-			}
+		
+			
 		case "templeadmin":
 			// Templeadmin can access their own entities - use their user ID as tenant ID
 			tenantID = ctx.UserID
@@ -113,11 +94,16 @@ case "superadmin":
 			}
 		case "standarduser", "monitoringuser":
 			// standarduser/monitoringuser get all entities for their assigned tenant
-			if ctx.AssignedEntityID == nil {
+
+			if ctx.TenantID == 0 && ctx.AssignedEntityID == nil {
 				c.JSON(http.StatusForbidden, gin.H{"error": "no accessible entity"})
 				return
 			}
-			tenantID = *ctx.AssignedEntityID
+			if ctx.TenantID != 0 {
+				tenantID = ctx.TenantID
+			} else {
+				tenantID = *ctx.AssignedEntityID
+			}
 			ids, err := h.repo.GetEntitiesByTenant(tenantID)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch tenant entities"})
@@ -197,6 +183,7 @@ case "superadmin":
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
 	c.Data(http.StatusOK, mime, bytes)
 }
+
 // GetSuperAdminActivities handles activities reports with multiple tenant IDs
 func (h *Handler) GetSuperAdminActivities(c *gin.Context) {
 	// Get access context from middleware
@@ -512,11 +499,12 @@ func (h *Handler) GetTempleRegisteredReport(c *gin.Context) {
 	if strings.ToLower(entityParam) == "all" {
 		fmt.Println("all")
 		actualEntityID = "all" // Keep "all" for request tracking
-		
+
 		// Handle based on role
 		switch ctx.RoleName {
-case "superadmin":
+		/*case "superadmin":
 			// When superadmin logs in as tenant, they should have AssignedEntityID set
+			// TODO. Don't agree with code
 			if ctx.AssignedEntityID != nil {
 				tenantID = *ctx.AssignedEntityID
 				ids, err := h.repo.GetEntitiesByTenant(tenantID)
@@ -535,7 +523,7 @@ case "superadmin":
 				// Pure superadmin without tenant context - should not happen for this endpoint
 				c.JSON(http.StatusBadRequest, gin.H{"error": "superadmin must specify tenant context or use superadmin endpoints"})
 				return
-			}
+			}*/
 		case "templeadmin":
 			// For templeadmin, use their user ID as tenant ID
 			tenantID = ctx.UserID
@@ -553,7 +541,11 @@ case "superadmin":
 			}
 		case "standarduser", "monitoringuser":
 			// standarduser/monitoringuser use their assigned entity as tenant
-			tenantID = *ctx.AssignedEntityID
+			if ctx.TenantID != 0 {
+				tenantID = ctx.TenantID
+			} else {
+				tenantID = *ctx.AssignedEntityID
+			}
 			ids, err := h.repo.GetEntitiesByTenant(tenantID)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user entities"})
@@ -639,6 +631,7 @@ case "superadmin":
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
 	c.Data(http.StatusOK, mime, bytes)
 }
+
 // GetSuperAdminTempleRegisteredReport handles temple registered report for superadmin with multiple tenants
 func (h *Handler) GetSuperAdminTempleRegisteredReport(c *gin.Context) {
 	// Get access context from middleware
@@ -923,7 +916,7 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 	}
 
 	// DEBUG: Log date range
-	fmt.Printf("[BIRTHDAY REPORT] Date Range: %s, Start: %s, End: %s\n", 
+	fmt.Printf("[BIRTHDAY REPORT] Date Range: %s, Start: %s, End: %s\n",
 		dateRange, start.Format("2006-01-02"), end.Format("2006-01-02"))
 
 	// Resolve entity IDs based on access context
@@ -935,18 +928,23 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 		actualEntityParam = "all"
 		switch ctx.RoleName {
 		case "superadmin":
-			// When superadmin logs in as tenant, use assigned tenant
-			if ctx.AssignedEntityID != nil {
-				ids, err = h.repo.GetEntitiesByTenant(*ctx.AssignedEntityID)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch tenant entities"})
-					return
-				}
-			} else {
-				// Pure superadmin without tenant context - should not happen for this endpoint
-				c.JSON(http.StatusBadRequest, gin.H{"error": "superadmin must specify tenant context or use superadmin endpoints"})
-				return
-			}
+	if ctx.AssignedEntityID != nil {
+		ids, err = h.repo.GetEntitiesByTenant(*ctx.AssignedEntityID)
+	} else {
+		ids, err = h.repo.GetAllEntityIDs()
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch entities"})
+		return
+	}
+	if len(ids) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": []DevoteeBirthdayReportRow{}})
+		return
+	}
+	for _, id := range ids {
+		entityIDs = append(entityIDs, fmt.Sprint(id))
+	}
+
 		case "templeadmin":
 			ids, err = h.repo.GetEntitiesByTenant(ctx.UserID)
 			if err != nil {
@@ -954,11 +952,15 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 				return
 			}
 		case "standarduser", "monitoringuser":
-			if ctx.AssignedEntityID == nil {
+			if ctx.TenantID == 0 && ctx.AssignedEntityID == nil {
 				c.JSON(http.StatusForbidden, gin.H{"error": "no assigned entity"})
 				return
 			}
-			ids, err = h.repo.GetEntitiesByTenant(*ctx.AssignedEntityID)
+			if ctx.TenantID == 0 {
+				ids, err = h.repo.GetEntitiesByTenant(ctx.TenantID)
+			} else {
+				ids, err = h.repo.GetEntitiesByTenant(*ctx.AssignedEntityID)
+			}
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch tenant entities"})
 				return
@@ -996,7 +998,7 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 	}
 
 	// DEBUG: Log entity IDs
-	fmt.Printf("[BIRTHDAY REPORT] Entity IDs: %v, Role: %s, Format: %s\n", 
+	fmt.Printf("[BIRTHDAY REPORT] Entity IDs: %v, Role: %s, Format: %s\n",
 		entityIDs, ctx.RoleName, format)
 
 	req := DevoteeBirthdaysReportRequest{
@@ -1054,9 +1056,9 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 
 	// Export report file
 	fmt.Printf("[BIRTHDAY REPORT] Exporting file - Format: %s, ReportType: %s\n", format, reportType)
-	fmt.Printf("[BIRTHDAY REPORT] Export request - EntityIDs: %v, DateRange: %s to %s\n", 
+	fmt.Printf("[BIRTHDAY REPORT] Export request - EntityIDs: %v, DateRange: %s to %s\n",
 		entityIDs, start.Format("2006-01-02"), end.Format("2006-01-02"))
-	
+
 	bytes, fname, mime, err := h.service.ExportDevoteeBirthdaysReport(c.Request.Context(), req, entityIDs, reportType, &ctx.UserID, ip)
 	if err != nil {
 		fmt.Printf("[BIRTHDAY REPORT] Export error: %v\n", err)
@@ -1064,7 +1066,7 @@ func (h *Handler) GetDevoteeBirthdaysReport(c *gin.Context) {
 		return
 	}
 
-	fmt.Printf("[BIRTHDAY REPORT] Export successful - Filename: %s, Size: %d bytes, MIME: %s\n", 
+	fmt.Printf("[BIRTHDAY REPORT] Export successful - Filename: %s, Size: %d bytes, MIME: %s\n",
 		fname, len(bytes), mime)
 
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
@@ -1344,6 +1346,7 @@ func (h *Handler) GetSuperAdminTenantDevoteeBirthdaysReport(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
 	c.Data(http.StatusOK, mime, bytes)
 }
+
 // GetDevoteeListReport handles requests for devotee list report
 func (h *Handler) GetDevoteeListReport(c *gin.Context) {
 	// Get access context from middleware
@@ -1380,30 +1383,35 @@ func (h *Handler) GetDevoteeListReport(c *gin.Context) {
 
 	if strings.ToLower(entityParam) == "all" {
 		actualEntityParam = "all"
-		
+
 		// Handle based on role
 		switch ctx.RoleName {
-case "superadmin":
-			// When superadmin logs in as tenant, they should have AssignedEntityID set
-			if ctx.AssignedEntityID != nil {
-				tenantID = *ctx.AssignedEntityID
-				ids, err := h.repo.GetEntitiesByTenant(tenantID)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch tenant entities"})
-					return
-				}
-				if len(ids) == 0 {
-					c.JSON(http.StatusOK, gin.H{"data": []DevoteeListReportRow{}})
-					return
-				}
-				for _, id := range ids {
-					entityIDs = append(entityIDs, fmt.Sprint(id))
-				}
-			} else {
-				// Pure superadmin without tenant context - should not happen for this endpoint
-				c.JSON(http.StatusBadRequest, gin.H{"error": "superadmin must specify tenant context or use superadmin endpoints"})
-				return
-			}
+		case "superadmin":
+	var ids []uint
+	var err error
+
+	if ctx.AssignedEntityID != nil {
+		// Superadmin acting as a tenant (impersonation)
+		ids, err = h.repo.GetEntitiesByTenant(*ctx.AssignedEntityID)
+	} else {
+		// Pure superadmin → fetch all entities
+		ids, err = h.repo.GetAllEntityIDs()
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch entities"})
+		return
+	}
+
+	if len(ids) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": []DevoteeListReportRow{}})
+		return
+	}
+
+	for _, id := range ids {
+		entityIDs = append(entityIDs, fmt.Sprint(id))
+	}
+
 		case "templeadmin":
 			// Templeadmin uses their user ID as tenant ID
 			tenantID = ctx.UserID
@@ -1421,11 +1429,15 @@ case "superadmin":
 			}
 		case "standarduser", "monitoringuser":
 			// standarduser/monitoringuser use their assigned entity as tenant
-			if ctx.AssignedEntityID == nil {
+			if ctx.TenantID == 0 && ctx.AssignedEntityID == nil {
 				c.JSON(http.StatusForbidden, gin.H{"error": "no accessible entity"})
 				return
 			}
-			tenantID = *ctx.AssignedEntityID
+			if ctx.TenantID != 0 {
+				tenantID = ctx.TenantID
+			} else {
+				tenantID = *ctx.AssignedEntityID
+			}
 			ids, err := h.repo.GetEntitiesByTenant(tenantID)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch tenant entities"})
@@ -1786,30 +1798,35 @@ func (h *Handler) GetDevoteeProfileReport(c *gin.Context) {
 
 	if strings.ToLower(entityParam) == "all" {
 		actualEntityParam = "all"
-		
+
 		// Handle based on role
 		switch ctx.RoleName {
-case "superadmin":
-			// When superadmin logs in as tenant, they should have AssignedEntityID set
-			if ctx.AssignedEntityID != nil {
-				tenantID = *ctx.AssignedEntityID
-				ids, err := h.repo.GetEntitiesByTenant(tenantID)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch tenant entities"})
-					return
-				}
-				if len(ids) == 0 {
-					c.JSON(http.StatusOK, gin.H{"data": []DevoteeProfileReportRow{}})
-					return
-				}
-				for _, id := range ids {
-					entityIDs = append(entityIDs, fmt.Sprint(id))
-				}
-			} else {
-				// Pure superadmin without tenant context - should not happen for this endpoint
-				c.JSON(http.StatusBadRequest, gin.H{"error": "superadmin must specify tenant context or use superadmin endpoints"})
-				return
-			}
+		case "superadmin":
+	var ids []uint
+	var err error
+
+	if ctx.AssignedEntityID != nil {
+		// Superadmin acting as tenant (impersonation)
+		ids, err = h.repo.GetEntitiesByTenant(*ctx.AssignedEntityID)
+	} else {
+		// Pure superadmin → fetch all entities
+		ids, err = h.repo.GetAllEntityIDs()
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch entities"})
+		return
+	}
+
+	if len(ids) == 0 {
+		c.JSON(http.StatusOK, gin.H{"data": []DevoteeProfileReportRow{}})
+		return
+	}
+
+	for _, id := range ids {
+		entityIDs = append(entityIDs, fmt.Sprint(id))
+	}
+
 		case "templeadmin":
 			// Templeadmin uses their user ID as tenant ID
 			tenantID = ctx.UserID
@@ -1827,11 +1844,16 @@ case "superadmin":
 			}
 		case "standarduser", "monitoringuser":
 			// standarduser/monitoringuser use their assigned entity as tenant
-			if ctx.AssignedEntityID == nil {
+			if ctx.TenantID == 0 && ctx.AssignedEntityID == nil {
 				c.JSON(http.StatusForbidden, gin.H{"error": "no accessible entity"})
 				return
 			}
-			tenantID = *ctx.AssignedEntityID
+
+			if ctx.TenantID != 0 {
+				tenantID = ctx.TenantID
+			} else {
+				tenantID = *ctx.AssignedEntityID
+			}
 			ids, err := h.repo.GetEntitiesByTenant(tenantID)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch tenant entities"})
@@ -1911,6 +1933,7 @@ case "superadmin":
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
 	c.Data(http.StatusOK, mime, bytes)
 }
+
 // GetSuperAdminDevoteeProfileReport handles devotee profile report for superadmin with multiple tenants
 func (h *Handler) GetSuperAdminDevoteeProfileReport(c *gin.Context) {
 	// Get access context from middleware
@@ -2374,7 +2397,6 @@ func (h *Handler) GetAuditLogsReport(c *gin.Context) {
 	c.Data(http.StatusOK, mime, bytes)
 }
 
-
 // GetSuperAdminAuditLogsReport handles audit logs report for superadmin with multiple tenants
 func (h *Handler) GetSuperAdminAuditLogsReport(c *gin.Context) {
 	// Get access context from middleware
@@ -2625,6 +2647,7 @@ func (h *Handler) GetSuperAdminTenantAuditLogsReport(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
 	c.Data(http.StatusOK, mime, bytes)
 }
+
 // GetApprovalStatusReport handles requests for approval status reports
 func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
 	// Access context from middleware
@@ -2689,7 +2712,7 @@ func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
 		// Superadmin can access all entities
 		fmt.Printf("   👑 SuperAdmin: No entity filter (access all)\n")
 		// Keep entityIDs empty for all access
-		
+
 	case "templeadmin":
 		// Temple admin can only see their own entities
 		ids, err := h.repo.GetEntitiesByTenant(ctx.UserID)
@@ -2701,7 +2724,7 @@ func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
 			entityIDs = append(entityIDs, fmt.Sprint(id))
 		}
 		fmt.Printf("   🛕 TempleAdmin: Entity filter = %v\n", entityIDs)
-		
+
 	default:
 		c.JSON(http.StatusForbidden, gin.H{"error": "role not allowed for approval reports"})
 		return
@@ -2778,6 +2801,7 @@ func (h *Handler) GetApprovalStatusReport(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fname))
 	c.Data(http.StatusOK, mime, bytes)
 }
+
 // ==============================
 // User Details Report Handler
 // ==============================

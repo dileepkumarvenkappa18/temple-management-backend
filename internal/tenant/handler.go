@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sharath018/temple-management-backend/middleware"
 	//"github.com/google/uuid"
 	//"github.com/google/uuid"
 	//"github.com/aws/aws-sdk-go/aws"
@@ -56,7 +57,6 @@ func getUserIDFromContext(c *gin.Context) (uint, bool) {
 
 	return 0, false
 }
-
 
 // =========================
 // GET TENANT PROFILE
@@ -131,264 +131,261 @@ func (h *Handler) UpdateTenantProfile(c *gin.Context) {
 
 // UpdateUser handles the PUT request to update a user
 func (h *Handler) UpdateUser(c *gin.Context) {
-    // Get tenant ID and user ID from route parameters
-    tenantIDStr := c.Param("id")
-    userIDStr := c.Param("userId")
-    
-    log.Printf("🔵 Updating user %s for tenant %s", userIDStr, tenantIDStr)
-    
-    tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tenant ID"})
-        return
-    }
-    
-    userID, err := strconv.ParseUint(userIDStr, 10, 64)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
-        return
-    }
-    
-    // First log raw data for debugging
-    var rawData map[string]interface{}
-    if err := c.ShouldBindJSON(&rawData); err != nil {
-        log.Printf("🔴 Error binding raw JSON: %v", err)
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON format"})
-        return
-    }
-    
-    log.Printf("🔵 Received raw update data: %+v", rawData)
-    
-    // Check if this is a status-only update
-    if status, exists := rawData["Status"].(string); exists && len(rawData) <= 2 {
-        log.Printf("🔵 Processing as status update: %s for user %d", status, userID)
-        
-        // Check if user belongs to this tenant
-        exists, err := h.service.repo.CheckUserBelongsToTenant(uint(userID), uint(tenantID))
-        if err != nil {
-            log.Printf("🔴 Error checking user-tenant relationship: %v", err)
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify user-tenant relationship"})
-            return
-        }
-        
-        if !exists {
-            c.JSON(http.StatusBadRequest, gin.H{"error": "User does not belong to this tenant"})
-            return
-        }
-        
-        // Update status in both tables
-        err = h.service.repo.UpdateUserStatus(uint(userID), uint(tenantID), status)
-        if err != nil {
-            log.Printf("🔴 Error updating status: %v", err)
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update status: " + err.Error()})
-            return
-        }
-        
-        c.JSON(http.StatusOK, gin.H{
-            "message": "Status updated successfully",
-        })
-        return
-    }
-    
-    // Handle as a full user update
-    input := UserInput{}
-    
-    if name, ok := rawData["Name"].(string); ok {
-        input.Name = name
-    }
-    if email, ok := rawData["Email"].(string); ok {
-        input.Email = email
-    }
-    if phone, ok := rawData["Phone"].(string); ok {
-        input.Phone = phone
-    }
-    if role, ok := rawData["Role"].(string); ok {
-        input.Role = role
-    }
-    if password, ok := rawData["Password"].(string); ok {
-        input.Password = password
-    }
-    if status, ok := rawData["Status"].(string); ok {
-        input.Status = status
-    }
-    
-    log.Printf("🔵 Updating user %d for tenant %d: %s (%s), Role: %s, Status: %s", 
-        userID, tenantID, input.Name, input.Email, input.Role, input.Status)
-    
-    if input.Name == "" || input.Email == "" {
-        log.Printf("🔴 Missing required fields: Name or Email")
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Name and Email are required fields"})
-        return
-    }
-    
-    user, err := h.service.UpdateUser(uint(tenantID), uint(userID), input, input.Status)
-    if err != nil {
-        log.Printf("🔴 Error updating user: %v", err)
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user: " + err.Error()})
-        return
-    }
-    
-    log.Printf("✅ User updated successfully: %+v", user)
-    c.JSON(http.StatusOK, gin.H{
-        "message": "User updated successfully",
-        "user": user,
-    })
+	// Get tenant ID and user ID from route parameters
+	tenantIDStr := c.Param("id")
+	userIDStr := c.Param("userId")
+
+	log.Printf("🔵 Updating user %s for tenant %s", userIDStr, tenantIDStr)
+
+	tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tenant ID"})
+		return
+	}
+
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	// First log raw data for debugging
+	var rawData map[string]interface{}
+	if err := c.ShouldBindJSON(&rawData); err != nil {
+		log.Printf("🔴 Error binding raw JSON: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON format"})
+		return
+	}
+
+	log.Printf("🔵 Received raw update data: %+v", rawData)
+
+	// Check if this is a status-only update
+	if status, exists := rawData["Status"].(string); exists && len(rawData) <= 2 {
+		log.Printf("🔵 Processing as status update: %s for user %d", status, userID)
+
+		// Check if user belongs to this tenant
+		exists, err := h.service.repo.CheckUserBelongsToTenant(uint(userID), uint(tenantID))
+		if err != nil {
+			log.Printf("🔴 Error checking user-tenant relationship: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify user-tenant relationship"})
+			return
+		}
+
+		if !exists {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "User does not belong to this tenant"})
+			return
+		}
+
+		// Update status in both tables
+		err = h.service.repo.UpdateUserStatus(uint(userID), uint(tenantID), status)
+		if err != nil {
+			log.Printf("🔴 Error updating status: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update status: " + err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Status updated successfully",
+		})
+		return
+	}
+
+	// Handle as a full user update
+	input := UserInput{}
+
+	if name, ok := rawData["Name"].(string); ok {
+		input.Name = name
+	}
+	if email, ok := rawData["Email"].(string); ok {
+		input.Email = email
+	}
+	if phone, ok := rawData["Phone"].(string); ok {
+		input.Phone = phone
+	}
+	if role, ok := rawData["Role"].(string); ok {
+		input.Role = role
+	}
+	if password, ok := rawData["Password"].(string); ok {
+		input.Password = password
+	}
+	if status, ok := rawData["Status"].(string); ok {
+		input.Status = status
+	}
+
+	log.Printf("🔵 Updating user %d for tenant %d: %s (%s), Role: %s, Status: %s",
+		userID, tenantID, input.Name, input.Email, input.Role, input.Status)
+
+	if input.Name == "" || input.Email == "" {
+		log.Printf("🔴 Missing required fields: Name or Email")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Name and Email are required fields"})
+		return
+	}
+
+	user, err := h.service.UpdateUser(uint(tenantID), uint(userID), input, input.Status)
+	if err != nil {
+		log.Printf("🔴 Error updating user: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user: " + err.Error()})
+		return
+	}
+
+	log.Printf("✅ User updated successfully: %+v", user)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "User updated successfully",
+		"user":    user,
+	})
 }
 
 // UpdateUserStatus updates only a user's status
 func (h *Handler) UpdateUserStatus(c *gin.Context) {
-    tenantIDStr := c.Param("id")
-    userIDStr := c.Param("userId")
+	tenantIDStr := c.Param("id")
+	userIDStr := c.Param("userId")
 
-    log.Printf("🔵 Updating status for user %s in tenant %s", userIDStr, tenantIDStr)
+	log.Printf("🔵 Updating status for user %s in tenant %s", userIDStr, tenantIDStr)
 
-    tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tenant ID"})
-        return
-    }
+	tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tenant ID"})
+		return
+	}
 
-    userID, err := strconv.ParseUint(userIDStr, 10, 64)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
-        return
-    }
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
 
-    var statusData struct {
-        Status string `json:"Status"`
-    }
+	var statusData struct {
+		Status string `json:"Status"`
+	}
 
-    if err := c.ShouldBindJSON(&statusData); err == nil && statusData.Status != "" {
-        log.Printf("🔵 Received status update: %s for user %d", statusData.Status, userID)
+	if err := c.ShouldBindJSON(&statusData); err == nil && statusData.Status != "" {
+		log.Printf("🔵 Received status update: %s for user %d", statusData.Status, userID)
 
-        user, err := h.service.UpdateUser(uint(tenantID), uint(userID), UserInput{}, statusData.Status)
-        if err != nil {
-            log.Printf("🔴 Error updating status: %v", err)
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update status: " + err.Error()})
-            return
-        }
+		user, err := h.service.UpdateUser(uint(tenantID), uint(userID), UserInput{}, statusData.Status)
+		if err != nil {
+			log.Printf("🔴 Error updating status: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update status: " + err.Error()})
+			return
+		}
 
-        c.JSON(http.StatusOK, gin.H{
-            "message": "Status updated successfully",
-            "user": user,
-        })
-        return
-    }
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Status updated successfully",
+			"user":    user,
+		})
+		return
+	}
 }
 
 // GetUsers handles the GET request to fetch tenant users
 func (h *Handler) GetUsers(c *gin.Context) {
-    log.Printf("🔴 GET USERS - Request path: %s", c.Request.URL.Path)
-    log.Printf("🔴 GET USERS - All params: %v", c.Params)
-    
-    tenantIDStr := c.Param("id")
-    log.Printf("🔴 GET USERS - Raw tenant ID from route param: %s", tenantIDStr)
-    
-    tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
-    if err != nil {
-        log.Printf("🔴 ERROR - Invalid tenant ID: %v", err)
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tenant ID"})
-        return
-    }
-    
-    log.Printf("🔴 GET USERS - Using tenant ID: %d", tenantID)
-    
-    role := c.Query("role")
-    
-    users, err := h.service.GetTenantUsers(uint(tenantID), role)
-    if err != nil {
-        log.Printf("Failed to fetch users: %v", err)
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users: " + err.Error()})
-        return
-    }
-    
-    if users == nil {
-        users = []UserResponse{}
-    }
-    
-    log.Printf("Returning %d users for tenant %d", len(users), tenantID)
-    c.JSON(http.StatusOK, users)
+	log.Printf("🔴 GET USERS - Request path: %s", c.Request.URL.Path)
+	log.Printf("🔴 GET USERS - All params: %v", c.Params)
+
+	tenantIDStr := c.Param("id")
+	log.Printf("🔴 GET USERS - Raw tenant ID from route param: %s", tenantIDStr)
+
+	tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
+	if err != nil {
+		log.Printf("🔴 ERROR - Invalid tenant ID: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tenant ID"})
+		return
+	}
+
+	log.Printf("🔴 GET USERS - Using tenant ID: %d", tenantID)
+
+	role := c.Query("role")
+
+	users, err := h.service.GetTenantUsers(uint(tenantID), role)
+	if err != nil {
+		log.Printf("Failed to fetch users: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users: " + err.Error()})
+		return
+	}
+
+	if users == nil {
+		users = []UserResponse{}
+	}
+
+	log.Printf("Returning %d users for tenant %d", len(users), tenantID)
+	c.JSON(http.StatusOK, users)
 }
 
 // CreateOrUpdateUser handles the POST request to create or update a tenant user
 func (h *Handler) CreateOrUpdateUser(c *gin.Context) {
-    log.Printf("🔴 CREATE USER - Request path: %s", c.Request.URL.Path)
-    log.Printf("🔴 CREATE USER - All params: %v", c.Params)
-    
-    var tenantID uint64
-    var err error
-    
-    tenantIDHeader := c.GetHeader("X-Tenant-ID")
-    log.Printf("🔴 CREATE USER - X-Tenant-ID header: %s", tenantIDHeader)
-    
-    if tenantIDHeader != "" {
-        tenantID, err = strconv.ParseUint(tenantIDHeader, 10, 64)
-        if err == nil {
-            log.Printf("🔴 CREATE USER - Using tenant ID from header: %d", tenantID)
-        } else {
-            log.Printf("🔴 ERROR - Invalid tenant ID in header: %v", err)
-        }
-    }
-    
-    if err != nil || tenantIDHeader == "" {
-        tenantIDStr := c.Param("id")
-        log.Printf("🔴 CREATE USER - Raw tenant ID from route param: %s", tenantIDStr)
-        
-        tenantID, err = strconv.ParseUint(tenantIDStr, 10, 64)
-        if err != nil {
-            log.Printf("🔴 ERROR - Invalid tenant ID in route: %v", err)
-            c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tenant ID"})
-            return
-        }
-        log.Printf("🔴 CREATE USER - Using tenant ID from route param: %d", tenantID)
-    }
-    
-    var input UserInput
-    if err := c.ShouldBindJSON(&input); err != nil {
-        log.Printf("Invalid input: %v", err)
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
-        return
-    }
-    
-    creatorID, exists := c.Get("user_id")
-    if !exists {
-        creatorIDStr := c.GetHeader("X-User-ID")
-        if creatorIDStr != "" {
-            creatorIDUint, err := strconv.ParseUint(creatorIDStr, 10, 64)
-            if err == nil {
-                creatorID = uint(creatorIDUint)
-            }
-        }
-    }
-    
-    creatorIDUint := uint(1)
-    if id, ok := creatorID.(uint); ok {
-        creatorIDUint = id
-    } else if id, ok := creatorID.(float64); ok {
-        creatorIDUint = uint(id)
-    } else if id, ok := creatorID.(int); ok {
-        creatorIDUint = uint(id)
-    } else if id, ok := creatorID.(uint64); ok {
-        creatorIDUint = uint(id)
-    }
-    
-    log.Printf("Creating/updating user %s (%s) for tenant %d by creator %d", 
-               input.Name, input.Email, tenantID, creatorIDUint)
-    
-    user, err := h.service.CreateOrUpdateTenantUser(uint(tenantID), input, creatorIDUint)
-    if err != nil {
-        log.Printf("Failed to create/update user: %v", err)
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create/update user: " + err.Error()})
-        return
-    }
-    
-    log.Printf("User created/updated successfully: %s (ID: %d) for tenant ID: %d", 
-               user.Email, user.ID, tenantID)
-    c.JSON(http.StatusOK, gin.H{
-        "message": "User created and assigned successfully",
-        "user": user,
-    })
+	log.Printf("🔴 CREATE USER - Request path: %s", c.Request.URL.Path)
+	log.Printf("🔴 CREATE USER - All params: %v", c.Params)
+
+	var tenantID uint64
+	var err error
+
+	// UPDATED: Get tenant ID from access context (set by middleware)
+	tenantIDFromContext := middleware.GetTenantIDFromAccessContext(c)
+	if tenantIDFromContext > 0 {
+		tenantID = uint64(tenantIDFromContext)
+		log.Printf("🔴 CREATE USER - Using tenant ID from access context: %d", tenantID)
+	}
+
+	// Fallback: Get from route parameter if not in context
+	if tenantID == 0 {
+		tenantIDStr := c.Param("id")
+		log.Printf("🔴 CREATE USER - Raw tenant ID from route param: %s", tenantIDStr)
+
+		tenantID, err = strconv.ParseUint(tenantIDStr, 10, 64)
+		if err != nil {
+			log.Printf("🔴 ERROR - Invalid tenant ID in route: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tenant ID"})
+			return
+		}
+		log.Printf("🔴 CREATE USER - Using tenant ID from route param: %d", tenantID)
+	}
+
+	var input UserInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		log.Printf("Invalid input: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
+		return
+	}
+
+	creatorID, exists := c.Get("user_id")
+	if !exists {
+		creatorIDStr := c.GetHeader("X-User-ID")
+		if creatorIDStr != "" {
+			creatorIDUint, err := strconv.ParseUint(creatorIDStr, 10, 64)
+			if err == nil {
+				creatorID = uint(creatorIDUint)
+			}
+		}
+	}
+
+	creatorIDUint := uint(1)
+	if id, ok := creatorID.(uint); ok {
+		creatorIDUint = id
+	} else if id, ok := creatorID.(float64); ok {
+		creatorIDUint = uint(id)
+	} else if id, ok := creatorID.(int); ok {
+		creatorIDUint = uint(id)
+	} else if id, ok := creatorID.(uint64); ok {
+		creatorIDUint = uint(id)
+	}
+
+	log.Printf("Creating/updating user %s (%s) for tenant %d by creator %d",
+		input.Name, input.Email, tenantID, creatorIDUint)
+
+	user, err := h.service.CreateOrUpdateTenantUser(uint(tenantID), input, creatorIDUint)
+	if err != nil {
+		log.Printf("Failed to create/update user: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create/update user: " + err.Error()})
+		return
+	}
+
+	log.Printf("User created/updated successfully: %s (ID: %d) for tenant ID: %d",
+		user.Email, user.ID, tenantID)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "User created and assigned successfully",
+		"user":    user,
+	})
 }
+
 // UploadFile handles file uploads for tenant logos and intro videos
 func (h *Handler) UploadFile(c *gin.Context) {
 	// Get logged-in user ID
@@ -402,24 +399,17 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	}
 	userID := userIDVal.(uint)
 
-	// ✅ Get tenant ID from X-Tenant-ID header first
+	// UPDATED: Get tenant ID from access context (set by middleware) first
 	var tenantID uint
-	tenantIDHeader := c.GetHeader("X-Tenant-ID")
-	
-	if tenantIDHeader != "" {
-		// Try to parse tenant ID from header
-		tenantID64, err := strconv.ParseUint(tenantIDHeader, 10, 64)
-		if err != nil {
-			log.Printf("⚠️ Invalid X-Tenant-ID header: %v", err)
-		} else {
-			tenantID = uint(tenantID64)
-			log.Printf("📁 Upload - Using tenant ID from header: %d", tenantID)
-		}
+	tenantIDFromContext := middleware.GetTenantIDFromAccessContext(c)
+	if tenantIDFromContext > 0 {
+		tenantID = tenantIDFromContext
+		log.Printf("📁 Upload - Using tenant ID from access context: %d", tenantID)
 	}
 
-	// ✅ Fallback: Get tenant profile if header is missing or invalid
+	// Fallback: Get tenant profile if not in context
 	if tenantID == 0 {
-		log.Printf("📁 No valid X-Tenant-ID header, fetching from profile for user %d", userID)
+		log.Printf("📁 No tenant ID in access context, fetching from profile for user %d", userID)
 		profile, err := h.service.GetTenantProfile(userID)
 		if err != nil {
 			log.Printf("❌ Failed to get tenant profile for user %d: %v", userID, err)
@@ -492,9 +482,9 @@ func (h *Handler) UploadFile(c *gin.Context) {
 
 	// ✅ Use absolute path /data/uploads to match main.go
 	baseDir := filepath.Join("/data/uploads", "tenants", fmt.Sprintf("%d", tenantID), folder)
-	
+
 	log.Printf("📁 Creating directory: %s", baseDir)
-	
+
 	// Create directory with proper permissions
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
 		log.Printf("❌ Failed to create directory: %v", err)
@@ -535,7 +525,7 @@ func (h *Handler) UploadFile(c *gin.Context) {
 
 	// ✅ Return URL that matches router.Static("/uploads", "/data/uploads")
 	fileURL := fmt.Sprintf("/uploads/tenants/%d/%s/%s", tenantID, folder, filename)
-	
+
 	log.Printf("✅ File uploaded successfully!")
 	log.Printf("   📂 Disk path: %s", fullPath)
 	log.Printf("   🌐 URL path: %s", fileURL)
@@ -543,13 +533,13 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	log.Printf("   📝 Original name: %s", header.Filename)
 
 	c.JSON(http.StatusOK, gin.H{
-		"url": fileURL,
+		"url":     fileURL,
 		"message": "File uploaded successfully",
 		"file_info": gin.H{
 			"original_name": header.Filename,
-			"saved_name": filename,
-			"size": header.Size,
-			"type": fileType,
+			"saved_name":    filename,
+			"size":          header.Size,
+			"type":          fileType,
 		},
 	})
 }

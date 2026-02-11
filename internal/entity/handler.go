@@ -92,41 +92,29 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 	userRole := user.Role.RoleName
 	userRoleID := user.Role.ID
 
-	var accessContext middleware.AccessContext
-	if v, ok := c.Get("access_context"); ok {
-		accessContext, _ = v.(middleware.AccessContext)
-	}
-
 	// -------------------- CreatedBy Logic --------------------
 	switch userRole {
 	case "superadmin":
-		if accessContext.AssignedEntityID != nil {
-			input.CreatedBy = *accessContext.AssignedEntityID
-		} else {
-			tenantID, err := h.Service.Repo.GetTenantIDForUser(userID)
-			if err != nil || tenantID == 0 {
-				h.cleanupTempFiles(tempFiles)
-				c.JSON(http.StatusForbidden, gin.H{"error": "User is not assigned to any tenant"})
-				return
-			}
-			input.CreatedBy = tenantID
+		tenantID, err := h.Service.Repo.GetTenantIDForUser(userID)
+		if err != nil || tenantID == 0 {
+			h.cleanupTempFiles(tempFiles)
+			c.JSON(http.StatusForbidden, gin.H{"error": "User is not assigned to any tenant"})
+			return
 		}
+		input.CreatedBy = tenantID
 
 	case "templeadmin":
 		input.CreatedBy = userID
 
 	case "standarduser", "monitoringuser":
-		if accessContext.AssignedEntityID != nil {
-			input.CreatedBy = *accessContext.AssignedEntityID
-		} else {
-			tenantID, err := h.Service.Repo.GetTenantIDForUser(userID)
-			if err != nil || tenantID == 0 {
-				h.cleanupTempFiles(tempFiles)
-				c.JSON(http.StatusForbidden, gin.H{"error": "User is not assigned to any tenant"})
-				return
-			}
-			input.CreatedBy = tenantID
+
+		tenantID, err := h.Service.Repo.GetTenantIDForUser(userID)
+		if err != nil || tenantID == 0 {
+			h.cleanupTempFiles(tempFiles)
+			c.JSON(http.StatusForbidden, gin.H{"error": "User is not assigned to any tenant"})
+			return
 		}
+		input.CreatedBy = tenantID
 
 	default:
 		h.cleanupTempFiles(tempFiles)
@@ -386,17 +374,17 @@ func (h *Handler) moveFilesToFinalLocation(c *gin.Context, entity *Entity, tempF
 	mediaInfo := MediaInfo{}
 
 	var tenantID uint
-	tenantIDHeader := c.GetHeader("X-Tenant-ID")
+	// UPDATED: Get tenant ID from access context (set by middleware)
+	tenantIDFromContext := middleware.GetTenantIDFromAccessContext(c)
+	if tenantIDFromContext > 0 {
+		tenantID = tenantIDFromContext
+		log.Printf("📁 Using tenant ID from access context: %d", tenantID)
+	}
 
-	if tenantIDHeader != "" {
-		// Try to parse tenant ID from header
-		tenantID64, err := strconv.ParseUint(tenantIDHeader, 10, 64)
-		if err != nil {
-			log.Printf("⚠️ Invalid X-Tenant-ID header: %v", err)
-		} else {
-			tenantID = uint(tenantID64)
-			log.Printf("📁 Using tenant ID from header: %d", tenantID)
-		}
+	// Fallback: Get from entity's CreatedBy (tenant is the creator)
+	if tenantID == 0 && entity.CreatedBy > 0 {
+		tenantID = entity.CreatedBy
+		log.Printf("📁 Using tenant ID from entity.CreatedBy: %d", tenantID)
 	}
 
 	for _, tf := range tempFiles {
@@ -966,6 +954,12 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 	}
 
 	if !hasAccess {
+		log.Printf("🔒 [ACCESS DENIED] handler.go:GetEntityByID:~%d", 970)
+		log.Printf("🔒 UserID: %d, Role: %s", user.ID, user.Role.RoleName)
+		log.Printf("🔒 EntityID: %d, CreatedBy: %d", id, entity.CreatedBy)
+		log.Printf("🔒 AccessContext.TenantID: %d", accessContext.TenantID)
+		log.Printf("🔒 Check: entity.CreatedBy(%d) == accessContext.TenantID(%d)? %v",
+			entity.CreatedBy, accessContext.TenantID, entity.CreatedBy == accessContext.TenantID)
 		c.JSON(http.StatusForbidden, gin.H{
 			"error": "Access denied to this entity",
 		})

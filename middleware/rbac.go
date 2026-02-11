@@ -2,8 +2,9 @@ package middleware
 
 import (
 	"net/http"
+	"runtime/debug"
 	"strings"
-	
+
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/internal/auth"
 )
@@ -12,12 +13,12 @@ import (
 func RBACMiddleware(allowedRoles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Special case for standard users accessing entities endpoint
-		if c.Request.URL.Path == "/api/v1/entities" && 
-		   (c.Request.Method == "GET" || c.Request.Method == "POST") {
+		if c.Request.URL.Path == "/api/v1/entities" &&
+			(c.Request.Method == "GET" || c.Request.Method == "POST") {
 			userVal, exists := c.Get("user")
 			if exists {
-				if user, ok := userVal.(auth.User); ok && 
-				   (user.Role.RoleName == "standarduser" || user.Role.RoleName == "monitoringuser") {
+				if user, ok := userVal.(auth.User); ok &&
+					(user.Role.RoleName == "standarduser" || user.Role.RoleName == "monitoringuser") {
 					// Allow standard users to access this endpoint for both GET and POST
 					c.Next()
 					return
@@ -62,81 +63,116 @@ func RequireTempleAccess() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found in context"})
 			return
 		}
-		
+
 		user, ok := userVal.(auth.User)
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid user object"})
 			return
 		}
-		
+
 		// Get access context from auth middleware
 		accessContextVal, exists := c.Get("access_context")
 		if !exists {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error":       "access context missing",
+				"user_id":     user.ID,
+				"user_role":   user.Role.RoleName,
+				"url_path":    c.Request.URL.Path,
+				"stack_trace": string(debug.Stack()),
+			})
 			return
 		}
-		
+
 		accessContext, ok := accessContextVal.(AccessContext)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid access context"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error":       "invalid access context",
+				"user_id":     user.ID,
+				"user_role":   user.Role.RoleName,
+				"url_path":    c.Request.URL.Path,
+				"stack_trace": string(debug.Stack()),
+			})
 			return
 		}
-		
+
 		// Check if this is a tenant user management endpoint
 		// Allow these endpoints even if no temple exists
 		if strings.Contains(c.Request.URL.Path, "/tenants/") && strings.Contains(c.Request.URL.Path, "/user") {
 			c.Next()
 			return
 		}
-		
+
 		// FIXED: Role-based access control with tenant isolation
 		switch user.Role.RoleName {
 		case RoleSuperAdmin:
 			// Superadmin can access any entity, but should be scoped to requested tenant
 			c.Next()
 			return
-			
+
 		case RoleTempleAdmin:
 			// Temple admin can only access their own temple and related entities
 			if accessContext.DirectEntityID == nil {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-					"error": "templeadmin must have a direct entity assigned",
+					"error":          "templeadmin must have a direct entity assigned",
+					"user_id":        user.ID,
+					"user_role":      user.Role.RoleName,
+					"access_context": accessContext,
+					"url_path":       c.Request.URL.Path,
+					"stack_trace":    string(debug.Stack()),
 				})
 				return
 			}
 			c.Next()
 			return
-			
+
 		case RoleStandardUser, RoleMonitoringUser:
 			// Standard/monitoring users can only access their assigned tenant
-			if accessContext.AssignedEntityID == nil && accessContext.DirectEntityID == nil {
+			// FIX: Also check AssignedEntityID since TenantID might be 0 if authRepo was nil
+			if accessContext.TenantID == 0 && accessContext.DirectEntityID == nil && accessContext.AssignedEntityID == nil {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-					"error": "user must have an assigned entity",
+					"error":          "user must have an assigned entity",
+					"user_id":        user.ID,
+					"user_role":      user.Role.RoleName,
+					"access_context": accessContext,
+					"url_path":       c.Request.URL.Path,
+					"stack_trace":    string(debug.Stack()),
 				})
 				return
 			}
 			c.Next()
 			return
-		
+
 		case RoleDevotee, RoleVolunteer:
 			// Devotees and volunteers can access their associated temple
-			if accessContext.AssignedEntityID == nil && accessContext.DirectEntityID == nil {
+			// FIX: Also check AssignedEntityID
+			if accessContext.TenantID == 0 && accessContext.DirectEntityID == nil && accessContext.AssignedEntityID == nil {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-					"error": "devotee/volunteer must have an associated entity",
+					"error":          "devotee/volunteer must have an associated entity",
+					"user_id":        user.ID,
+					"user_role":      user.Role.RoleName,
+					"access_context": accessContext,
+					"url_path":       c.Request.URL.Path,
+					"stack_trace":    string(debug.Stack()),
 				})
 				return
 			}
-			
+
 			// Set permission type to readonly for regular endpoints
 			// This ensures devotees can view but not modify temple data
 			accessContext.PermissionType = "readonly"
 			c.Set("access_context", accessContext)
-			
+
 			c.Next()
 			return
-			
+
 		default:
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "unsupported role"})
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error":       "unsupported role",
+				"user_id":     user.ID,
+				"user_role":   user.Role.RoleName,
+				"url_path":    c.Request.URL.Path,
+				"stack_trace": string(debug.Stack()),
+			})
 			return
 		}
 	}
@@ -156,7 +192,7 @@ func RequireWriteAccess() gin.HandlerFunc {
 				}
 			}
 		}
-		
+
 		accessContext, exists := c.Get("access_context")
 		if !exists {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
@@ -168,7 +204,7 @@ func RequireWriteAccess() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid access context"})
 			return
 		}
-		
+
 		if !ctx.CanWrite() {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "write access denied"})
 			return

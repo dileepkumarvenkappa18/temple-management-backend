@@ -158,7 +158,7 @@ func main() {
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{httpVersion, httpsVersion},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Tenant-ID", "x-force-delete", "Content-Length", "X-Requested-With", "Cache-Control", "Pragma", "X-Entity-ID"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "x-force-delete", "Content-Length", "X-Requested-With", "Cache-Control", "Pragma", "X-Entity-ID"},
 		ExposeHeaders:    []string{"Content-Length", "Content-Type", "Content-Disposition", "Cache-Control", "Pragma", "Expires"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
@@ -189,7 +189,7 @@ func main() {
 
 		c.Header("Access-Control-Allow-Origin", origin)
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD")
-		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, Content-Length, X-Requested-With, Cache-Control, Pragma, X-Entity-ID")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, Content-Length, X-Requested-With, Cache-Control, Pragma, X-Entity-ID")
 		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition, Cache-Control, Pragma, Expires")
 		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Max-Age", "43200")
@@ -214,7 +214,7 @@ func main() {
 
 	// Alternative route: /files/{entityID}/{filename}
 	router.GET("/uploads/:entityID/:filename",
-		middleware.AuthMiddleware(cfg, authSvc, true), // ✅ Add auth middleware
+		middleware.AuthMiddleware(cfg, authSvc, authRepo, true), // ✅ Add auth middleware with repository
 		func(c *gin.Context) {
 
 			entityID := c.Param("entityID")
@@ -491,6 +491,9 @@ func main() {
 
 	// Register existing routes
 	routes.Setup(router, cfg, captchaService)
+
+	// Add error response logger middleware to capture stack traces for all non-2XX responses
+	//router.Use(middleware.ErrorResponseLogger())
 
 	// Start server
 	fmt.Printf("🚀 Server starting on port %s\n", cfg.Port)
