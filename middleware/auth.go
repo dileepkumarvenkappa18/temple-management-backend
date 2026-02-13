@@ -227,6 +227,7 @@ func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, e
 		accessContext.PermissionType = "full"
 		accessContext.DirectEntityID = user.EntityID
 		accessContext.AssignedEntityID = entityID
+		accessContext.TenantID = user.ID
 
 	case RoleStandardUser:
 		accessContext.PermissionType = "full"
