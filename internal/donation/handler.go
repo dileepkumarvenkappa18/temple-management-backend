@@ -1,8 +1,15 @@
 package donation
 
 import (
+	//"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -28,13 +35,13 @@ func getAccessContextFromContext(c *gin.Context) (middleware.AccessContext, bool
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
 		return middleware.AccessContext{}, false
 	}
-	
+
 	accessContext, ok := accessContextRaw.(middleware.AccessContext)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid access context"})
 		return middleware.AccessContext{}, false
 	}
-	
+
 	return accessContext, true
 }
 
@@ -49,7 +56,7 @@ func getEntityIDFromRequest(c *gin.Context, accessContext middleware.AccessConte
 			return uint(id), nil
 		}
 	}
-	
+
 	// Try header next
 	entityIDHeader := c.GetHeader("X-Entity-ID")
 	if entityIDHeader != "" {
@@ -58,7 +65,7 @@ func getEntityIDFromRequest(c *gin.Context, accessContext middleware.AccessConte
 			return uint(id), nil
 		}
 	}
-	
+
 	// Try query parameter
 	entityIDQuery := c.Query("entity_id")
 	if entityIDQuery != "" {
@@ -67,13 +74,13 @@ func getEntityIDFromRequest(c *gin.Context, accessContext middleware.AccessConte
 			return uint(id), nil
 		}
 	}
-	
+
 	// Fall back to access context
 	contextEntityID := accessContext.GetAccessibleEntityID()
 	if contextEntityID != nil {
 		return *contextEntityID, nil
 	}
-	
+
 	return 0, nil
 }
 
@@ -86,7 +93,7 @@ func (h *Handler) CreateDonation(c *gin.Context) {
 	if !ok {
 		return
 	}
-	
+
 	// NEW: Extract entity ID using the same logic as events
 	entityID, err := getEntityIDFromRequest(c, accessContext)
 	if err != nil || entityID == 0 {
@@ -140,7 +147,6 @@ func (h *Handler) VerifyDonation(c *gin.Context) {
 	})
 }
 
-
 // ==============================
 // 🔍 3. Get My Donations - UPDATED: Entity-based approach
 // ==============================
@@ -150,7 +156,7 @@ func (h *Handler) GetMyDonations(c *gin.Context) {
 	if !ok {
 		return
 	}
-	
+
 	// NEW: Extract entity ID for filtering
 	entityID, err := getEntityIDFromRequest(c, accessContext)
 	if err != nil || entityID == 0 {
@@ -240,7 +246,7 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 		// Devotees see ONLY their own donations for the CURRENT entity
 		filters.UserID = accessContext.UserID
 		filters.EntityID = entityID // Already validated above, cannot be 0
-		
+
 	case "admin", "superadmin":
 		// Admins can see all donations
 		if entityID != 0 {
@@ -252,7 +258,7 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 			filters.EntityID = 0
 			filters.UserID = 0
 		}
-		
+
 	case "trustee", "staff", "templeadmin":
 		// Trustees/Staff can see entity donations
 		if entityID != 0 {
@@ -263,7 +269,7 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 			filters.UserID = accessContext.UserID
 			filters.EntityID = 0
 		}
-		
+
 	default:
 		// Unknown role: show only their own donations
 		filters.UserID = accessContext.UserID
@@ -315,7 +321,7 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 	}
 
 	// 📝 DEBUG LOG (remove in production)
-	log.Printf("🔍 Donation Filters Applied - Role: %s, UserID: %d, EntityID: %d", 
+	log.Printf("🔍 Donation Filters Applied - Role: %s, UserID: %d, EntityID: %d",
 		accessContext.RoleName, filters.UserID, filters.EntityID)
 
 	donations, total, err := h.svc.GetDonationsWithFilters(filters, accessContext)
@@ -553,7 +559,7 @@ func (h *Handler) GetRecentDonations(c *gin.Context) {
 
 		c.JSON(http.StatusOK, gin.H{
 			"recent_donations": recent,
-			"success": true,
+			"success":          true,
 		})
 		return
 	}
@@ -567,7 +573,7 @@ func (h *Handler) GetRecentDonations(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"recent_donations": recent,
-		"success": true,
+		"success":          true,
 	})
 }
 
@@ -579,4 +585,150 @@ func parseIntQuery(c *gin.Context, key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}
+
+// ==============================
+// 🔔 11. Razorpay Webhook Handler - NEW
+// ==============================
+func (h *Handler) HandleWebhook(c *gin.Context) {
+	// Step 1: Verify webhook signature
+	webhookSecret := os.Getenv("RAZORPAY_WEBHOOK_SECRET")
+	if webhookSecret == "" {
+		log.Println("⚠️ RAZORPAY_WEBHOOK_SECRET not configured")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "webhook secret not configured"})
+		return
+	}
+
+	// Get signature from header
+	signature := c.GetHeader("X-Razorpay-Signature")
+	if signature == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing signature"})
+		return
+	}
+
+	// Read request body
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	// Verify signature
+	expectedSignature := hmac.New(sha256.New, []byte(webhookSecret))
+	expectedSignature.Write(body)
+	computedSignature := hex.EncodeToString(expectedSignature.Sum(nil))
+
+	if computedSignature != signature {
+		log.Printf("❌ Webhook signature mismatch - Expected: %s, Got: %s", computedSignature, signature)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid signature"})
+		return
+	}
+
+	// Step 2: Parse webhook payload
+	var payload map[string]interface{}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
+		return
+	}
+
+	event, ok := payload["event"].(string)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing event type"})
+		return
+	}
+
+	// Step 3: Handle different webhook events
+	switch event {
+	case "payment.captured":
+		h.handlePaymentCaptured(c, payload)
+	case "payment.failed":
+		h.handlePaymentFailed(c, payload)
+	default:
+		log.Printf("⚠️ Unhandled webhook event: %s", event)
+		c.JSON(http.StatusOK, gin.H{"message": "event ignored"})
+	}
+}
+
+// Helper: Handle successful payment webhook
+func (h *Handler) handlePaymentCaptured(c *gin.Context, payload map[string]interface{}) {
+	paymentData, ok := payload["payload"].(map[string]interface{})
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload structure"})
+		return
+	}
+
+	payment, ok := paymentData["payment"].(map[string]interface{})
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing payment data"})
+		return
+	}
+
+	entity, ok := payment["entity"].(map[string]interface{})
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing payment entity"})
+		return
+	}
+
+	// Extract payment details
+	orderID, _ := entity["order_id"].(string)
+	paymentID, _ := entity["id"].(string)
+	method, _ := entity["method"].(string)
+	amountPaise, _ := entity["amount"].(float64)
+
+	if orderID == "" || paymentID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing order_id or payment_id"})
+		return
+	}
+
+	amount := amountPaise / 100 // Convert paise to rupees
+
+	// Update donation via service
+	if err := h.svc.HandleRazorpayWebhook(orderID, paymentID, method, amount); err != nil {
+		log.Printf("❌ Webhook processing failed for order %s: %v", orderID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update donation"})
+		return
+	}
+
+	log.Printf("✅ Webhook processed successfully for order %s", orderID)
+	c.JSON(http.StatusOK, gin.H{"message": "webhook processed"})
+}
+
+// Helper: Handle failed payment webhook
+func (h *Handler) handlePaymentFailed(c *gin.Context, payload map[string]interface{}) {
+	paymentData, ok := payload["payload"].(map[string]interface{})
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload structure"})
+		return
+	}
+
+	payment, ok := paymentData["payment"].(map[string]interface{})
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing payment data"})
+		return
+	}
+
+	entity, ok := payment["entity"].(map[string]interface{})
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing payment entity"})
+		return
+	}
+
+	orderID, _ := entity["order_id"].(string)
+	paymentID, _ := entity["id"].(string)
+
+	if orderID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing order_id"})
+		return
+	}
+
+	// ✅ FIXED: Use dedicated failed payment handler
+	err := h.svc.HandleFailedPaymentWebhook(orderID, paymentID)
+	if err != nil {
+		log.Printf("❌ Webhook: Failed to process failed payment for order %s: %v", orderID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update donation"})
+		return
+	}
+
+	log.Printf("✅ Failed payment webhook processed for order %s", orderID)
+	c.JSON(http.StatusOK, gin.H{"message": "webhook processed"})
 }

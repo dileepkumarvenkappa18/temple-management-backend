@@ -1,44 +1,20 @@
 <!DOCTYPE html>
-<html>
-<head>
-  <title>Test Razorpay Payment</title>
-  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-</head>
-<body>
-  <h2>Pay Now (Test Mode)</h2>
-  <button id="rzp-button">Pay ₹1000</button>
-
-  <script>
-    var options = {
-      "key": "rzp_test_HlxefqB2zkbAcC", // Replace with your key
-      "amount": 100000,  // 1000 * 100 paise = 100000 paise
-      "currency": "INR",
-      "name": "Sharath temple",
-      "description": "For temple renovation",
-      "order_id": "order_QzfL64sHZQdmk8", // Replace with your order_id
-      "handler": function (response) {
-        alert("Payment successful!");
-
-        // Log these values — you need them for the verify API
-        console.log("payment_id:", response.razorpay_payment_id);
-        console.log("order_id:", response.razorpay_order_id);
-        console.log("signature:", response.razorpay_signature);
-      },
-      "prefill": {
-        "name": "Sharu Devotee",
-        "email": "sharath.devotee@example.com",
-        "contact": "7204218382"
-      },
-      "theme": {
-        "color": "#3399cc"
-      }
-    };
-
-    var rzp1 = new Razorpay(options);
-    document.getElementById('rzp-button').onclick = function (e) {
-      rzp1.open();
-      e.preventDefault();
-    }
-  </script>
-</body>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/vite.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Temple Management System</title>
+    
+    <!-- Razorpay Checkout Script (Required for payments) -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    
+    <!-- Preconnect to Razorpay for faster loading -->
+    <link rel="preconnect" href="https://api.razorpay.com">
+    <link rel="dns-prefetch" href="https://api.razorpay.com">
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
 </html>

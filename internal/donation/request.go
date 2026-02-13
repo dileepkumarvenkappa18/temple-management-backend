@@ -90,11 +90,16 @@ type DonationFilters struct {
 
 // UpdatePaymentDetailsParams for updating payment information
 type UpdatePaymentDetailsParams struct {
-	Status    string     `json:"status"`
-	PaymentID *string    `json:"payment_id"`
-	Method    string     `json:"method"`
-	Amount    float64    `json:"amount"`
-	DonatedAt *time.Time `json:"donated_at"`
+    Status            string
+    PaymentID         *string
+    Method            string
+    Amount            float64
+    DonatedAt         *time.Time
+    AccountHolderName string  // ✅ ADD if missing
+    AccountNumber     string  // ✅ ADD if missing
+    AccountType       string  // ✅ ADD if missing
+    IFSCCode          string  // ✅ ADD if missing
+    UPIID             string  // ✅ ADD if missing
 }
 
 // ==============================

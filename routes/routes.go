@@ -566,6 +566,7 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 		donationRepo := donation.NewRepository(database.DB)
 		donationService := donation.NewService(donationRepo, cfg, auditSvc)
 		donationHandler := donation.NewHandler(donationService)
+		api.POST("/donations/webhook", donationHandler.HandleWebhook)
 
 		donationRoutes := protected.Group("/donations")
 		{

@@ -90,23 +90,39 @@ func (r *repository) GetByIDWithUser(ctx context.Context, donationID uint) (*Don
 }
 
 func (r *repository) UpdatePaymentDetails(ctx context.Context, orderID string, params UpdatePaymentDetailsParams) error {
-	updates := map[string]interface{}{
-		"status":     params.Status,
-		"payment_id": params.PaymentID,
-		"method":     params.Method,
-		"amount":     params.Amount,
-	}
+    updates := map[string]interface{}{
+        "status":     params.Status,
+        "payment_id": params.PaymentID,
+        "method":     params.Method,
+        "amount":     params.Amount,
+    }
 
-	if params.DonatedAt != nil {
-		updates["donated_at"] = params.DonatedAt
-	}
+    if params.DonatedAt != nil {
+        updates["donated_at"] = params.DonatedAt
+    }
 
-	return r.db.WithContext(ctx).
-		Model(&Donation{}).
-		Where("order_id = ?", orderID).
-		Updates(updates).Error
+    // ✅ ADD THESE LINES
+    if params.AccountHolderName != "" {
+        updates["account_holder_name"] = params.AccountHolderName
+    }
+    if params.AccountNumber != "" {
+        updates["account_number"] = params.AccountNumber
+    }
+    if params.AccountType != "" {
+        updates["account_type"] = params.AccountType
+    }
+    if params.IFSCCode != "" {
+        updates["ifsc_code"] = params.IFSCCode
+    }
+    if params.UPIID != "" {
+        updates["upi_id"] = params.UPIID
+    }
+
+    return r.db.WithContext(ctx).
+        Model(&Donation{}).
+        Where("order_id = ?", orderID).
+        Updates(updates).Error
 }
-
 // ==============================
 // Data Retrieval with Filtering - ENHANCED with entity-based filtering
 // ==============================

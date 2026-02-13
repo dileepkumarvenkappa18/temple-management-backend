@@ -370,8 +370,14 @@ func (h *Handler) moveFilesToFinalLocation(c *gin.Context, entity *Entity, tempF
 	*finalFileInfos = make(map[string]FileInfo)
 	var additionalFiles []FileInfo
 
-	// 🆕 Media info to build JSON
+	// ✅ Start with OLD media (merge instead of overwrite)
 	mediaInfo := MediaInfo{}
+	if oldMediaVal, exists := c.Get("old_media"); exists {
+		if oldMedia, ok := oldMediaVal.(MediaInfo); ok {
+			mediaInfo = oldMedia
+			log.Printf("🧩 Loaded old media for merge: %+v", mediaInfo)
+		}
+	}
 
 	var tenantID uint
 	// UPDATED: Get tenant ID from access context (set by middleware)
@@ -404,7 +410,7 @@ func (h *Handler) moveFilesToFinalLocation(c *gin.Context, entity *Entity, tempF
 
 		finalPath := filepath.Join(entityDir, finalFileName)
 
-		fmt.Println("finalPath: ", finalPath)
+		log.Println("finalPath:", finalPath)
 		// Prefer rename; fall back to copy+remove
 		if err := os.Rename(tf.TempPath, finalPath); err != nil {
 			if err := copyFile(tf.TempPath, finalPath); err != nil {
@@ -414,11 +420,9 @@ func (h *Handler) moveFilesToFinalLocation(c *gin.Context, entity *Entity, tempF
 			_ = os.Remove(tf.TempPath)
 		}
 
-		rel := ""
-		rel = filepath.ToSlash(filepath.Join(strconv.FormatUint(uint64(entity.ID), 10), finalFileName))
-
+		rel := filepath.ToSlash(filepath.Join(strconv.FormatUint(uint64(entity.ID), 10), finalFileName))
 		fileURL := h.buildFileURL(rel)
-		fmt.Println("fileURL: ", fileURL)
+		log.Println("fileURL:", fileURL)
 
 		fi := FileInfo{
 			FileName:     finalFileName,
@@ -436,28 +440,29 @@ func (h *Handler) moveFilesToFinalLocation(c *gin.Context, entity *Entity, tempF
 			if b, err := json.Marshal(fi); err == nil {
 				entity.RegistrationCertInfo = string(b)
 			}
+
 		case "trust_deed":
 			(*finalFileInfos)["trust_deed"] = fi
 			entity.TrustDeedURL = fileURL
 			if b, err := json.Marshal(fi); err == nil {
 				entity.TrustDeedInfo = string(b)
 			}
+
 		case "property_docs":
 			(*finalFileInfos)["property_docs"] = fi
 			entity.PropertyDocsURL = fileURL
 			if b, err := json.Marshal(fi); err == nil {
 				entity.PropertyDocsInfo = string(b)
 			}
+
 		case "additional_docs":
 			additionalFiles = append(additionalFiles, fi)
 
-		// 🆕 Handle temple logo
 		case "temple_logo":
 			(*finalFileInfos)["temple_logo"] = fi
 			mediaInfo.Logo = fileURL
 			log.Printf("✅ Temple logo URL set: %s", fileURL)
 
-		// 🆕 Handle temple video
 		case "temple_video":
 			(*finalFileInfos)["temple_video"] = fi
 			mediaInfo.Video = fileURL
@@ -465,7 +470,7 @@ func (h *Handler) moveFilesToFinalLocation(c *gin.Context, entity *Entity, tempF
 		}
 	}
 
-	// Persist additional as arrays
+	// Persist additional docs as arrays
 	if len(additionalFiles) > 0 {
 		var urlList []string
 		for _, x := range additionalFiles {
@@ -483,14 +488,12 @@ func (h *Handler) moveFilesToFinalLocation(c *gin.Context, entity *Entity, tempF
 		}
 	}
 
-	// 🆕 Save media info as JSON in the Media column
-	if mediaInfo.Logo != "" || mediaInfo.Video != "" {
-		if mediaJSON, err := json.Marshal(mediaInfo); err == nil {
-			entity.Media = string(mediaJSON)
-			log.Printf("✅ Media JSON created: %s", entity.Media)
-		} else {
-			log.Printf("⚠️ Failed to marshal media info: %v", err)
-		}
+	// ✅ Always save merged media back to entity (even if only one changed)
+	if mediaJSON, err := json.Marshal(mediaInfo); err == nil {
+		entity.Media = string(mediaJSON)
+		log.Printf("💾 Final merged media saved: %s", entity.Media)
+	} else {
+		log.Printf("⚠️ Failed to marshal media info: %v", err)
 	}
 
 	// Clean temp
@@ -499,6 +502,7 @@ func (h *Handler) moveFilesToFinalLocation(c *gin.Context, entity *Entity, tempF
 	log.Printf("Successfully processed %d files for entity %d", len(tempFiles), entity.ID)
 	return nil
 }
+
 
 func (h *Handler) updateEntityWithFileInfo(entity *Entity) error {
 	return h.Service.Repo.UpdateEntity(*entity)
@@ -890,6 +894,15 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 		}
 	}
 
+	// ================= PARSE ADDITIONAL DOCS URLS =================
+	var additionalDocs []string
+	if entity.AdditionalDocsURLs != "" {
+		if err := json.Unmarshal([]byte(entity.AdditionalDocsURLs), &additionalDocs); err != nil {
+			log.Printf("⚠️ Failed to parse additional docs URLs for entity %d: %v", entity.ID, err)
+			additionalDocs = []string{}
+		}
+	}
+
 	// ================= FETCH CREATOR DETAILS =================
 	var creatorDetails *CreatorDetails
 
@@ -949,7 +962,6 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 		}
 
 	case "devotee":
-		// ❌ Devotees are NOT allowed full entity access
 		hasAccess = false
 	}
 
@@ -990,7 +1002,7 @@ func (h *Handler) GetEntityByID(c *gin.Context) {
 		"registration_cert_url": entity.RegistrationCertURL,
 		"trust_deed_url":        entity.TrustDeedURL,
 		"property_docs_url":     entity.PropertyDocsURL,
-		"additional_docs_urls":  entity.AdditionalDocsURLs,
+		"additional_docs_urls":  additionalDocs,
 
 		// media
 		"media": mediaObj,
@@ -1035,6 +1047,13 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Temple not found"})
 		return
 	}
+
+	// ================= SAVE OLD MEDIA (FOR MERGE) =================
+	var oldMedia MediaInfo
+	if existingEntity.Media != "" {
+		_ = json.Unmarshal([]byte(existingEntity.Media), &oldMedia)
+	}
+	c.Set("old_media", oldMedia)
 
 	// ================= PERMISSION =================
 	hasAccess := false
@@ -1099,10 +1118,7 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 		input.AdditionalDocsInfo = existingEntity.AdditionalDocsInfo
 	}
 
-	// 🔥 CRITICAL FIX: preserve media ONLY if no new uploads
-	if input.Media == "" && len(tempFiles) == 0 {
-		input.Media = existingEntity.Media
-	}
+	// ❌ REMOVED: wrong media preserve logic (was causing deletion)
 
 	// ================= STATUS =================
 	if wasRejected && user.Role.RoleName != "superadmin" {
@@ -1162,6 +1178,7 @@ func (h *Handler) UpdateEntity(c *gin.Context) {
 
 	c.JSON(http.StatusOK, resp)
 }
+
 
 func (h *Handler) deleteOldEntityFiles(entity *Entity, newFiles []TempFileInfo) error {
 	entityDir := filepath.Join(h.UploadDir, strconv.FormatUint(uint64(entity.ID), 10))
