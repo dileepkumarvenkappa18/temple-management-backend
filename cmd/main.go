@@ -158,7 +158,7 @@ func main() {
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{httpVersion, httpsVersion},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "x-force-delete", "Content-Length", "X-Requested-With", "Cache-Control", "Pragma", "X-Entity-ID"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "x-force-delete", "Content-Length", "X-Requested-With", "Cache-Control", "Pragma", },
 		ExposeHeaders:    []string{"Content-Length", "Content-Type", "Content-Disposition", "Cache-Control", "Pragma", "Expires"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
@@ -189,7 +189,7 @@ func main() {
 
 		c.Header("Access-Control-Allow-Origin", origin)
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD")
-		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, Content-Length, X-Requested-With, Cache-Control, Pragma, X-Entity-ID")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, Content-Length, X-Requested-With, Cache-Control, Pragma")
 		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition, Cache-Control, Pragma, Expires")
 		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Max-Age", "43200")
@@ -543,11 +543,12 @@ func serveEntityFile(c *gin.Context, uploadDir string, user *auth.User, entityID
 		(userRole == "standarduser") ||
 		(userRole == "monitoring user") ||
 		((user != nil) && (user.ID != 0)) {
-		if userRole == "superadmin" {
+		switch userRole {
+case "superadmin":
 			tenantID = int(entity.GetTenantByEntityID(entityID))
-		} else if (userRole == "standarduser") || (userRole == "monitoringuser") {
+		case "standarduser", "monitoringuser":
 			tenantID = GetAssignedTenantID(int(user.ID))
-		} else {
+		default:
 			tenantID = int(user.ID)
 		}
 		fmt.Println("tenantID: ", tenantID)

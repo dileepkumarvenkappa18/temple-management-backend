@@ -20,12 +20,15 @@ import (
 type Handler struct {
 	service  Service
 	auditSvc auditlog.Service
+	// repo is needed to look up entity→tenant for standarduser ownership checks
+	repo Repository
 }
 
-func NewHandler(service Service, auditSvc auditlog.Service) *Handler {
+func NewHandler(service Service, auditSvc auditlog.Service, repo Repository) *Handler {
 	return &Handler{
 		service:  service,
 		auditSvc: auditSvc,
+		repo:     repo,
 	}
 }
 
@@ -47,9 +50,57 @@ func getAccessContextFromContext(c *gin.Context) (middleware.AccessContext, bool
 	return accessContext, true
 }
 
+// canAccessSeva checks if the access context allows access to a seva that belongs to entityID.
+// For standarduser/monitoringuser, also checks via TenantID (entity's created_by == user's tenant).
+func (h *Handler) canAccessSeva(accessContext middleware.AccessContext, sevaEntityID uint) bool {
+	switch accessContext.RoleName {
+	case "superadmin":
+		return true
+
+	case "templeadmin":
+		return accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == sevaEntityID
+
+	case "standarduser", "monitoringuser":
+		// Check direct entity match first
+		if accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == sevaEntityID {
+			return true
+		}
+		// Check via TenantID: does this entity belong to the user's tenant?
+		if accessContext.TenantID > 0 && h.repo != nil {
+			tenantID, err := h.repo.GetTenantIDByEntityID(sevaEntityID)
+			if err == nil && tenantID == accessContext.TenantID {
+				return true
+			}
+		}
+		return false
+	}
+	return false
+}
+
+// resolveEntityID resolves entity ID from: query param → path param → access context
+func resolveEntityID(c *gin.Context, accessContext middleware.AccessContext) (uint, bool) {
+	if entityIDParam := c.Query("entity_id"); entityIDParam != "" {
+		if id, err := strconv.ParseUint(entityIDParam, 10, 32); err == nil {
+			return uint(id), true
+		}
+	}
+	if entityIDPath := c.Param("entity_id"); entityIDPath != "" {
+		if id, err := strconv.ParseUint(entityIDPath, 10, 32); err == nil {
+			return uint(id), true
+		}
+	}
+	if ctxID := accessContext.GetAccessibleEntityID(); ctxID != nil {
+		return *ctxID, true
+	}
+	// For standarduser/monitoringuser with TenantID but no direct entity assignment,
+	// we can't resolve a single entity ID here — caller must use TenantID logic.
+	return 0, false
+}
+
 // ========================= REQUEST STRUCTS =============================
 
 type CreateSevaRequest struct {
+	EntityID       uint    `json:"entity_id"`
 	Name           string  `json:"name" binding:"required"`
 	SevaType       string  `json:"seva_type" binding:"required"`
 	Description    string  `json:"description"`
@@ -58,10 +109,11 @@ type CreateSevaRequest struct {
 	StartTime      string  `json:"start_time"`
 	EndTime        string  `json:"end_time"`
 	Duration       int     `json:"duration"`
-	AvailableSlots int     `json:"available_slots"` // ✅ UPDATED field name
+	AvailableSlots int     `json:"available_slots"`
 }
 
 type UpdateSevaRequest struct {
+	EntityID       uint     `json:"entity_id"`
 	Name           *string  `json:"name,omitempty"`
 	SevaType       *string  `json:"seva_type,omitempty"`
 	Description    *string  `json:"description,omitempty"`
@@ -70,7 +122,7 @@ type UpdateSevaRequest struct {
 	StartTime      *string  `json:"start_time,omitempty"`
 	EndTime        *string  `json:"end_time,omitempty"`
 	Duration       *int     `json:"duration,omitempty"`
-	AvailableSlots *int     `json:"available_slots,omitempty"` // ✅ UPDATED field name
+	AvailableSlots *int     `json:"available_slots,omitempty"`
 	Status         *string  `json:"status,omitempty"`
 }
 
@@ -78,7 +130,6 @@ type BookSevaRequest struct {
 	SevaID uint `json:"seva_id" binding:"required"`
 }
 
-// ✅ NEW: Payment request structs
 type BookSevaWithPaymentRequest struct {
 	SevaID   uint    `json:"seva_id" binding:"required"`
 	Amount   float64 `json:"amount" binding:"required"`
@@ -103,29 +154,35 @@ func (h *Handler) CreateSeva(c *gin.Context) {
 		return
 	}
 
+	var input CreateSevaRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
+		return
+	}
+
+	// Resolve entity ID: URL path → request body → access context
 	var entityID uint
-	entityIDParam := c.Param("entity_id")
-	if entityIDParam != "" {
-		id, err := strconv.ParseUint(entityIDParam, 10, 32)
-		if err == nil {
+	if entityIDParam := c.Param("entity_id"); entityIDParam != "" {
+		if id, err := strconv.ParseUint(entityIDParam, 10, 32); err == nil {
 			entityID = uint(id)
 		}
-	} else {
-		entityIDHeader := c.GetHeader("X-Entity-ID")
-		if entityIDHeader != "" {
-			id, err := strconv.ParseUint(entityIDHeader, 10, 32)
-			if err == nil {
-				entityID = uint(id)
-			}
+	}
+	if entityID == 0 && input.EntityID != 0 {
+		entityID = input.EntityID
+	}
+	if entityID == 0 {
+		if ctxID := accessContext.GetAccessibleEntityID(); ctxID != nil {
+			entityID = *ctxID
 		} else {
-			contextEntityID := accessContext.GetAccessibleEntityID()
-			if contextEntityID != nil {
-				entityID = *contextEntityID
-			} else {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
-				return
-			}
+			c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
+			return
 		}
+	}
+
+	// Verify user can access this entity
+	if !h.canAccessSeva(accessContext, entityID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied to this entity"})
+		return
 	}
 
 	if !accessContext.CanWrite() {
@@ -133,15 +190,8 @@ func (h *Handler) CreateSeva(c *gin.Context) {
 		return
 	}
 
-	var input CreateSevaRequest
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
-		return
-	}
-
 	ip := middleware.GetIPFromContext(c)
 
-	// ✅ UPDATED: Initialize with new slot fields
 	seva := Seva{
 		EntityID:       entityID,
 		Name:           input.Name,
@@ -152,9 +202,9 @@ func (h *Handler) CreateSeva(c *gin.Context) {
 		StartTime:      input.StartTime,
 		EndTime:        input.EndTime,
 		Duration:       input.Duration,
-		AvailableSlots: input.AvailableSlots, // ✅ UPDATED
-		BookedSlots:    0,                    // ✅ NEW: Initialize to 0
-		RemainingSlots: input.AvailableSlots, // ✅ NEW: Initially same as available
+		AvailableSlots: input.AvailableSlots,
+		BookedSlots:    0,
+		RemainingSlots: input.AvailableSlots,
 		Status:         "upcoming",
 	}
 
@@ -174,44 +224,22 @@ func (h *Handler) ListEntitySevas(c *gin.Context) {
 	}
 
 	var entityID uint
-	entityIDParam := c.Query("entity_id")
-	if entityIDParam != "" {
-		id, err := strconv.ParseUint(entityIDParam, 10, 32)
-		if err == nil {
-			entityID = uint(id)
-		}
-	} else {
-		entityIDPath := c.Param("entity_id")
-		if entityIDPath != "" {
-			id, err := strconv.ParseUint(entityIDPath, 10, 32)
-			if err == nil {
-				entityID = uint(id)
-			}
-		} else {
-			entityIDHeader := c.GetHeader("X-Entity-ID")
-			if entityIDHeader != "" {
-				id, err := strconv.ParseUint(entityIDHeader, 10, 32)
-				if err == nil {
-					entityID = uint(id)
-				}
-			}
-		}
-	}
+	entityID, _ = resolveEntityID(c, accessContext)
 
+	// For standarduser with only TenantID (no direct entity), they must pass entity_id in query
+	if entityID == 0 && (accessContext.RoleName == "standarduser" || accessContext.RoleName == "monitoringuser") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "entity_id is required"})
+		return
+	}
 	if entityID == 0 {
-		contextEntityID := accessContext.GetAccessibleEntityID()
-		if contextEntityID != nil {
-			entityID = *contextEntityID
-		} else {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple and no entity_id provided"})
-			return
-		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple and no entity_id provided"})
+		return
 	}
 
 	fmt.Println("entityID for ListEntitySevas:", entityID)
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "1000"))
 	offset := (page - 1) * limit
 
 	sevaType := c.Query("seva_type")
@@ -223,15 +251,7 @@ func (h *Handler) ListEntitySevas(c *gin.Context) {
 		return
 	}
 
-	sevas, total, err := h.service.GetSevasWithFilters(
-		c,
-		entityID,
-		sevaType,
-		search,
-		status,
-		limit,
-		offset,
-	)
+	sevas, total, err := h.service.GetSevasWithFilters(c, entityID, sevaType, search, status, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch sevas: " + err.Error()})
 		return
@@ -248,49 +268,33 @@ func (h *Handler) ListEntitySevas(c *gin.Context) {
 // 📊 Get Approved Booking Counts Per Seva
 func (h *Handler) GetApprovedBookingCounts(c *gin.Context) {
 	var entityID uint
-	entityIDParam := c.Query("entity_id")
-	if entityIDParam != "" {
-		id, err := strconv.ParseUint(entityIDParam, 10, 32)
-		if err == nil {
+
+	if entityIDParam := c.Query("entity_id"); entityIDParam != "" {
+		if id, err := strconv.ParseUint(entityIDParam, 10, 32); err == nil {
 			entityID = uint(id)
 		}
-	} else {
-		entityIDPath := c.Param("entity_id")
-		if entityIDPath != "" {
-			id, err := strconv.ParseUint(entityIDPath, 10, 32)
-			if err == nil {
+	}
+	if entityID == 0 {
+		if entityIDPath := c.Param("entity_id"); entityIDPath != "" {
+			if id, err := strconv.ParseUint(entityIDPath, 10, 32); err == nil {
 				entityID = uint(id)
-			}
-		} else {
-			entityIDHeader := c.GetHeader("X-Entity-ID")
-			if entityIDHeader != "" {
-				id, err := strconv.ParseUint(entityIDHeader, 10, 32)
-				if err == nil {
-					entityID = uint(id)
-				}
 			}
 		}
 	}
-
 	if entityID == 0 {
-		user, exists := c.Get("user")
-		if exists {
+		if user, exists := c.Get("user"); exists {
 			if authUser, ok := user.(auth.User); ok && authUser.EntityID != nil {
 				entityID = *authUser.EntityID
 			}
 		}
 	}
-
 	if entityID == 0 {
-		accessContext, ok := getAccessContextFromContext(c)
-		if ok {
-			contextEntityID := accessContext.GetAccessibleEntityID()
-			if contextEntityID != nil {
-				entityID = *contextEntityID
+		if accessContext, ok := getAccessContextFromContext(c); ok {
+			if ctxID := accessContext.GetAccessibleEntityID(); ctxID != nil {
+				entityID = *ctxID
 			}
 		}
 	}
-
 	if entityID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "entity_id is required"})
 		return
@@ -325,12 +329,6 @@ func (h *Handler) GetSevaByID(c *gin.Context) {
 		return
 	}
 
-	entityID := accessContext.GetAccessibleEntityID()
-	if entityID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple"})
-		return
-	}
-
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id < 1 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid seva ID"})
@@ -343,24 +341,21 @@ func (h *Handler) GetSevaByID(c *gin.Context) {
 		return
 	}
 
-	if seva.EntityID != *entityID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied to this seva"})
-		return
+	if !isSuperAdmin(accessContext.RoleName) {
+		if !h.canAccessSeva(accessContext, seva.EntityID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "access denied to this seva"})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"seva": seva})
 }
 
 // 🛠 Update seva
+// FIXED: standarduser/monitoringuser ownership verified via TenantID, not just EntityID
 func (h *Handler) UpdateSeva(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
 	if !ok {
-		return
-	}
-
-	entityID := accessContext.GetAccessibleEntityID()
-	if entityID == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not linked to a temple"})
 		return
 	}
 
@@ -389,9 +384,12 @@ func (h *Handler) UpdateSeva(c *gin.Context) {
 		return
 	}
 
-	if existingSeva.EntityID != *entityID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "unauthorized: cannot update this seva"})
-		return
+	// FIXED: Use canAccessSeva which checks TenantID for standarduser/monitoringuser
+	if !isSuperAdmin(accessContext.RoleName) {
+		if !h.canAccessSeva(accessContext, existingSeva.EntityID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "unauthorized: cannot update this seva"})
+			return
+		}
 	}
 
 	updatedSeva := *existingSeva
@@ -419,10 +417,12 @@ func (h *Handler) UpdateSeva(c *gin.Context) {
 	if input.Duration != nil {
 		updatedSeva.Duration = *input.Duration
 	}
-	// ✅ UPDATED: Handle AvailableSlots and recalculate RemainingSlots
 	if input.AvailableSlots != nil {
 		updatedSeva.AvailableSlots = *input.AvailableSlots
 		updatedSeva.RemainingSlots = updatedSeva.AvailableSlots - updatedSeva.BookedSlots
+		if updatedSeva.RemainingSlots < 0 {
+			updatedSeva.RemainingSlots = 0
+		}
 	}
 	if input.Status != nil {
 		validStatuses := map[string]bool{"upcoming": true, "ongoing": true, "completed": true}
@@ -442,15 +442,10 @@ func (h *Handler) UpdateSeva(c *gin.Context) {
 }
 
 // ❌ Delete seva
+// FIXED: standarduser/monitoringuser ownership verified via TenantID, not just EntityID
 func (h *Handler) DeleteSeva(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
 	if !ok {
-		return
-	}
-
-	entityID := accessContext.GetAccessibleEntityID()
-	if entityID == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not linked to a temple"})
 		return
 	}
 
@@ -473,9 +468,12 @@ func (h *Handler) DeleteSeva(c *gin.Context) {
 		return
 	}
 
-	if existingSeva.EntityID != *entityID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "unauthorized: cannot delete this seva"})
-		return
+	// FIXED: Use canAccessSeva which checks TenantID for standarduser/monitoringuser
+	if !isSuperAdmin(accessContext.RoleName) {
+		if !h.canAccessSeva(accessContext, existingSeva.EntityID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "unauthorized: cannot delete this seva"})
+			return
+		}
 	}
 
 	if err := h.service.DeleteSeva(c, uint(id), accessContext, ip); err != nil {
@@ -489,17 +487,13 @@ func (h *Handler) DeleteSeva(c *gin.Context) {
 // 📋 Get Sevas for Devotees
 func (h *Handler) GetSevas(c *gin.Context) {
 	var entityID uint
-	entityIDParam := c.Query("entity_id")
-	if entityIDParam != "" {
-		id, err := strconv.ParseUint(entityIDParam, 10, 32)
-		if err == nil {
+	if entityIDParam := c.Query("entity_id"); entityIDParam != "" {
+		if id, err := strconv.ParseUint(entityIDParam, 10, 32); err == nil {
 			entityID = uint(id)
 		}
 	} else {
-		entityIDPath := c.Param("entity_id")
-		if entityIDPath != "" {
-			id, err := strconv.ParseUint(entityIDPath, 10, 32)
-			if err == nil {
+		if entityIDPath := c.Param("entity_id"); entityIDPath != "" {
+			if id, err := strconv.ParseUint(entityIDPath, 10, 32); err == nil {
 				entityID = uint(id)
 			}
 		}
@@ -526,14 +520,7 @@ func (h *Handler) GetSevas(c *gin.Context) {
 	sevaType := c.Query("seva_type")
 	search := c.Query("search")
 
-	sevas, err := h.service.GetPaginatedSevas(
-		c,
-		entityID,
-		sevaType,
-		search,
-		limit,
-		offset,
-	)
+	sevas, err := h.service.GetPaginatedSevas(c, entityID, sevaType, search, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch sevas: " + err.Error()})
 		return
@@ -544,7 +531,7 @@ func (h *Handler) GetSevas(c *gin.Context) {
 
 // ========================= BOOKING HANDLERS =============================
 
-// 🎫 Book Seva - UPDATED: Uses seva's slot management
+// 🎫 Book Seva
 func (h *Handler) BookSeva(c *gin.Context) {
 	var input BookSevaRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -585,7 +572,7 @@ func (h *Handler) BookSeva(c *gin.Context) {
 	})
 }
 
-// ✅ NEW: Book Seva with Razorpay Payment
+// 💳 Book Seva with Razorpay Payment
 func (h *Handler) BookSevaWithPayment(c *gin.Context) {
 	var input BookSevaWithPaymentRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -599,34 +586,27 @@ func (h *Handler) BookSevaWithPayment(c *gin.Context) {
 		return
 	}
 
-	// Validate seva exists and has available slots
 	seva, err := h.service.GetSevaByID(c, input.SevaID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Seva not found"})
 		return
 	}
 
-	// Check remaining slots
 	if seva.RemainingSlots <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No slots available for this seva"})
 		return
 	}
 
-	// Get Razorpay credentials from environment
 	razorpayKey := os.Getenv("RAZORPAY_KEY_ID")
 	razorpaySecret := os.Getenv("RAZORPAY_KEY_SECRET")
-
 	if razorpayKey == "" || razorpaySecret == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Payment gateway not configured"})
 		return
 	}
 
-	// Initialize Razorpay client
 	client := razorpay.NewClient(razorpayKey, razorpaySecret)
-
-	// Create Razorpay order
 	data := map[string]interface{}{
-		"amount":   int(input.Amount * 100), // Convert to paise
+		"amount":   int(input.Amount * 100),
 		"currency": "INR",
 		"receipt":  fmt.Sprintf("seva_%d_%d", input.SevaID, time.Now().Unix()),
 		"notes": map[string]interface{}{
@@ -646,7 +626,6 @@ func (h *Handler) BookSevaWithPayment(c *gin.Context) {
 
 	orderID := body["id"].(string)
 
-	// Create pending booking with Razorpay order ID
 	ip := middleware.GetIPFromContext(c)
 	booking := SevaBooking{
 		SevaID:          input.SevaID,
@@ -663,7 +642,6 @@ func (h *Handler) BookSevaWithPayment(c *gin.Context) {
 		return
 	}
 
-	// Return order details for Razorpay checkout
 	c.JSON(http.StatusCreated, gin.H{
 		"success":      true,
 		"order_id":     orderID,
@@ -674,7 +652,7 @@ func (h *Handler) BookSevaWithPayment(c *gin.Context) {
 	})
 }
 
-// ✅ NEW: Verify Seva Payment
+// ✅ Verify Seva Payment
 func (h *Handler) VerifySevaPayment(c *gin.Context) {
 	var input VerifySevaPaymentRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -684,20 +662,16 @@ func (h *Handler) VerifySevaPayment(c *gin.Context) {
 
 	user := c.MustGet("user").(auth.User)
 
-	// Get Razorpay secret
 	razorpaySecret := os.Getenv("RAZORPAY_KEY_SECRET")
 	if razorpaySecret == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Payment gateway not configured"})
 		return
 	}
 
-	// Verify signature
-message := input.RazorpayOrderID + "|" + input.RazorpayPaymentID
-
-mac := hmac.New(sha256.New, []byte(razorpaySecret))
-mac.Write([]byte(message))
-
-expectedSignature := hex.EncodeToString(mac.Sum(nil))
+	message := input.RazorpayOrderID + "|" + input.RazorpayPaymentID
+	mac := hmac.New(sha256.New, []byte(razorpaySecret))
+	mac.Write([]byte(message))
+	expectedSignature := hex.EncodeToString(mac.Sum(nil))
 
 	if expectedSignature != input.RazorpaySignature {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -709,7 +683,6 @@ expectedSignature := hex.EncodeToString(mac.Sum(nil))
 
 	ip := middleware.GetIPFromContext(c)
 
-	// Update booking with payment details and approve
 	if err := h.service.VerifySevaPayment(
 		c,
 		input.RazorpayOrderID,
@@ -755,26 +728,20 @@ func (h *Handler) GetEntityBookings(c *gin.Context) {
 	}
 
 	var entityID uint
-	entityIDParam := c.Query("entity_id")
-	if entityIDParam != "" {
-		id, err := strconv.ParseUint(entityIDParam, 10, 32)
-		if err == nil {
+	if entityIDParam := c.Query("entity_id"); entityIDParam != "" {
+		if id, err := strconv.ParseUint(entityIDParam, 10, 32); err == nil {
 			entityID = uint(id)
 		}
 	} else {
-		entityIDPath := c.Param("entity_id")
-		if entityIDPath != "" {
-			id, err := strconv.ParseUint(entityIDPath, 10, 32)
-			if err == nil {
+		if entityIDPath := c.Param("entity_id"); entityIDPath != "" {
+			if id, err := strconv.ParseUint(entityIDPath, 10, 32); err == nil {
 				entityID = uint(id)
 			}
 		}
 	}
-
 	if entityID == 0 {
-		contextEntityID := accessContext.GetAccessibleEntityID()
-		if contextEntityID != nil {
-			entityID = *contextEntityID
+		if ctxID := accessContext.GetAccessibleEntityID(); ctxID != nil {
+			entityID = *ctxID
 		} else {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple and no entity_id provided"})
 			return
@@ -822,10 +789,8 @@ func (h *Handler) GetBookingCounts(c *gin.Context) {
 	var entityID uint
 
 	if user.Role.RoleName == "devotee" {
-		entityIDParam := c.Query("entity_id")
-		if entityIDParam != "" {
-			id, err := strconv.ParseUint(entityIDParam, 10, 32)
-			if err == nil {
+		if entityIDParam := c.Query("entity_id"); entityIDParam != "" {
+			if id, err := strconv.ParseUint(entityIDParam, 10, 32); err == nil {
 				entityID = uint(id)
 			}
 		} else if user.EntityID != nil {
@@ -839,13 +804,12 @@ func (h *Handler) GetBookingCounts(c *gin.Context) {
 		if !ok {
 			return
 		}
-
-		contextEntityID := accessContext.GetAccessibleEntityID()
-		if contextEntityID == nil {
+		if ctxID := accessContext.GetAccessibleEntityID(); ctxID != nil {
+			entityID = *ctxID
+		} else {
 			c.JSON(http.StatusForbidden, gin.H{"error": "No accessible entity"})
 			return
 		}
-		entityID = *contextEntityID
 	}
 
 	counts, err := h.service.GetBookingStatusCounts(c, entityID)
@@ -857,7 +821,7 @@ func (h *Handler) GetBookingCounts(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"counts": counts})
 }
 
-// UPDATED: UpdateBookingStatus - Updates BookedSlots and RemainingSlots
+// ✏️ UpdateBookingStatus
 func (h *Handler) UpdateBookingStatus(c *gin.Context) {
 	user := c.MustGet("user").(auth.User)
 

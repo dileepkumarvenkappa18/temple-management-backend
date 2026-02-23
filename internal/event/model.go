@@ -26,6 +26,7 @@ type Event struct {
 // ============================
 // 🟡 Create Event Request
 type CreateEventRequest struct {
+	EntityID  uint   `json:"entity_id"`
 	Title       string `json:"title" binding:"required"`
 	Description string `json:"description" binding:"required"`
 	EventType   string `json:"event_type" binding:"required"`
@@ -38,6 +39,7 @@ type CreateEventRequest struct {
 // ============================
 // 🟠 Update Event Request
 type UpdateEventRequest struct {
+	EntityID  uint   `json:"entity_id"`
 	ID          uint   `json:"-"`
 	Title       string `json:"title" binding:"required"`
 	Description string `json:"description" binding:"required"`

@@ -322,116 +322,53 @@ func (s *Service) GetUpcomingEventsByEntityID(accessContext middleware.AccessCon
 
 // ===========================
 // 🛠 Update Event (with ownership check and audit logging) - FIXED
-func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, accessContext middleware.AccessContext, ip string) error {
-	// Get accessible entity ID
-	entityID := accessContext.GetAccessibleEntityID()
-	if entityID == nil {
-		return errors.New("no accessible entity")
-	}
 
-	// Check write permissions
+// ===========================
+// 🛠 Update Event — entityID passed explicitly from handler
+func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, accessContext middleware.AccessContext, entityID uint, ip string) error {
+	entityIDPtr := &entityID
+
 	if !accessContext.CanWrite() {
-		s.AuditSvc.LogAction(
-			context.Background(),
-			&accessContext.UserID,
-			entityID,
-			"EVENT_UPDATED",
-			map[string]interface{}{
-				"event_id": id,
-				"error":    "write access denied",
-			},
-			ip,
-			"failure",
-		)
+		s.AuditSvc.LogAction(context.Background(), &accessContext.UserID, entityIDPtr,
+			"EVENT_UPDATED", map[string]interface{}{"event_id": id, "error": "write access denied"}, ip, "failure")
 		return errors.New("write access denied")
 	}
 
-	// First check if event exists and user has permission
 	event, err := s.Repo.GetEventByID(id)
 	if err != nil {
-		// Log failed update attempt - event not found
-		s.AuditSvc.LogAction(
-			context.Background(),
-			&accessContext.UserID,
-			entityID,
-			"EVENT_UPDATED",
-			map[string]interface{}{
-				"event_id": id,
-				"error":    "event not found",
-			},
-			ip,
-			"failure",
-		)
+		s.AuditSvc.LogAction(context.Background(), &accessContext.UserID, entityIDPtr,
+			"EVENT_UPDATED", map[string]interface{}{"event_id": id, "error": "event not found"}, ip, "failure")
 		return err
 	}
 
-	if event.EntityID != *entityID {
-		// Log unauthorized update attempt
-		s.AuditSvc.LogAction(
-			context.Background(),
-			&accessContext.UserID,
-			entityID,
-			"EVENT_UPDATED",
-			map[string]interface{}{
-				"event_id":     id,
-				"event_title":  event.Title,
-				"error":        "unauthorized access",
-				"event_entity": event.EntityID,
-			},
-			ip,
-			"failure",
-		)
+	// Use passed entityID — NOT accessContext.GetAccessibleEntityID()
+	if event.EntityID != entityID {
+		s.AuditSvc.LogAction(context.Background(), &accessContext.UserID, entityIDPtr,
+			"EVENT_UPDATED", map[string]interface{}{
+				"event_id": id, "error": "unauthorized access", "event_entity": event.EntityID,
+			}, ip, "failure")
 		return errors.New("unauthorized: cannot update this event")
 	}
 
-	// Store original values for audit log
 	originalTitle := event.Title
 	originalEventType := event.EventType
 	originalEventDate := event.EventDate.Format("2006-01-02")
 	originalLocation := event.Location
 	originalIsActive := event.IsActive
 
-	// 🔄 Parse and update EventDate
 	eventDate, err := time.Parse("2006-01-02", req.EventDate)
 	if err != nil {
-		// Log failed update due to invalid date
-		s.AuditSvc.LogAction(
-			context.Background(),
-			&accessContext.UserID,
-			entityID,
-			"EVENT_UPDATED",
-			map[string]interface{}{
-				"event_id":     id,
-				"event_title":  event.Title,
-				"error":        "invalid event_date format",
-				"invalid_date": req.EventDate,
-			},
-			ip,
-			"failure",
-		)
+		s.AuditSvc.LogAction(context.Background(), &accessContext.UserID, entityIDPtr,
+			"EVENT_UPDATED", map[string]interface{}{"event_id": id, "error": "invalid event_date format"}, ip, "failure")
 		return errors.New("invalid event_date format. Use YYYY-MM-DD")
 	}
 	event.EventDate = eventDate
 
-	// 🔄 Parse and update EventTime (or nil)
 	if req.EventTime != "" {
 		parsedTime, err := time.Parse("15:04", req.EventTime)
 		if err != nil {
-			// Log failed update due to invalid time
-			s.AuditSvc.LogAction(
-				context.Background(),
-				&accessContext.UserID,
-				entityID,
-				"EVENT_UPDATED",
-				map[string]interface{}{
-					"event_id":     id,
-					"event_title":  event.Title,
-					"error":        "invalid event_time format",
-					"invalid_time": req.EventTime,
-				},
-				ip,
-				"failure",
-			)
+			s.AuditSvc.LogAction(context.Background(), &accessContext.UserID, entityIDPtr,
+				"EVENT_UPDATED", map[string]interface{}{"event_id": id, "error": "invalid event_time format"}, ip, "failure")
 			return errors.New("invalid event_time format. Use HH:MM in 24-hour format")
 		}
 		normalizedTime := time.Date(0, 1, 1, parsedTime.Hour(), parsedTime.Minute(), 0, 0, time.UTC)
@@ -440,7 +377,6 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, accessContext mi
 		event.EventTime = nil
 	}
 
-	// 🔄 Other fields
 	event.Title = req.Title
 	event.Description = req.Description
 	event.Location = req.Location
@@ -449,184 +385,91 @@ func (s *Service) UpdateEvent(id uint, req *UpdateEventRequest, accessContext mi
 		event.IsActive = *req.IsActive
 	}
 
-	// ✅ Now update using parsed `*Event`
-	err = s.Repo.UpdateEvent(event)
-	if err != nil {
-		// Log failed update attempt
-		s.AuditSvc.LogAction(
-			context.Background(),
-			&accessContext.UserID,
-			entityID,
-			"EVENT_UPDATED",
-			map[string]interface{}{
-				"event_id":    id,
-				"event_title": originalTitle,
-				"error":       err.Error(),
-			},
-			ip,
-			"failure",
-		)
+	if err = s.Repo.UpdateEvent(event); err != nil {
+		s.AuditSvc.LogAction(context.Background(), &accessContext.UserID, entityIDPtr,
+			"EVENT_UPDATED", map[string]interface{}{"event_id": id, "error": err.Error()}, ip, "failure")
 		return err
 	}
 
-	// Log successful event update with changes
 	changes := make(map[string]interface{})
 	if originalTitle != event.Title {
-		changes["title_changed"] = map[string]string{"from": originalTitle, "to": event.Title}
+		changes["title"] = map[string]string{"from": originalTitle, "to": event.Title}
 	}
 	if originalEventType != event.EventType {
-		changes["event_type_changed"] = map[string]string{"from": originalEventType, "to": event.EventType}
+		changes["event_type"] = map[string]string{"from": originalEventType, "to": event.EventType}
 	}
 	if originalEventDate != event.EventDate.Format("2006-01-02") {
-		changes["event_date_changed"] = map[string]string{"from": originalEventDate, "to": event.EventDate.Format("2006-01-02")}
+		changes["event_date"] = map[string]string{"from": originalEventDate, "to": event.EventDate.Format("2006-01-02")}
 	}
 	if originalLocation != event.Location {
-		changes["location_changed"] = map[string]string{"from": originalLocation, "to": event.Location}
+		changes["location"] = map[string]string{"from": originalLocation, "to": event.Location}
 	}
 	if originalIsActive != event.IsActive {
-		changes["status_changed"] = map[string]bool{"from": originalIsActive, "to": event.IsActive}
+		changes["is_active"] = map[string]bool{"from": originalIsActive, "to": event.IsActive}
 	}
 
-	s.AuditSvc.LogAction(
-		context.Background(),
-		&accessContext.UserID,
-		entityID,
-		"EVENT_UPDATED",
-		map[string]interface{}{
-			"event_id":    event.ID,
-			"event_title": event.Title,
-			"changes":     changes,
-		},
-		ip,
-		"success",
-	)
+	s.AuditSvc.LogAction(context.Background(), &accessContext.UserID, entityIDPtr,
+		"EVENT_UPDATED", map[string]interface{}{
+			"event_id": event.ID, "event_title": event.Title, "changes": changes,
+		}, ip, "success")
 
 	if s.NotifSvc != nil {
-		_ = s.NotifSvc.CreateInAppForEntityRoles(context.Background(), *entityID,
-			[]string{"devotee", "volunteer"},
-			"Event Updated",
-			event.Title+" updated for "+event.EventDate.Format("2006-01-02"),
-			"event",
-		)
+		_ = s.NotifSvc.CreateInAppForEntityRoles(context.Background(), entityID,
+			[]string{"devotee", "volunteer"}, "Event Updated",
+			event.Title+" updated for "+event.EventDate.Format("2006-01-02"), "event")
 	}
 
 	return nil
 }
 
 // ===========================
-// ❌ Delete Event (with ownership check and audit logging) - FIXED
-func (s *Service) DeleteEvent(id uint, accessContext middleware.AccessContext, ip string) error {
-	// Get accessible entity ID
-	entityID := accessContext.GetAccessibleEntityID()
-	if entityID == nil {
-		return errors.New("no accessible entity")
-	}
+// ❌ Delete Event — entityID passed explicitly from handler
+func (s *Service) DeleteEvent(id uint, accessContext middleware.AccessContext, entityID uint, ip string) error {
+	entityIDPtr := &entityID
 
-	// Check write permissions
 	if !accessContext.CanWrite() {
-		s.AuditSvc.LogAction(
-			context.Background(),
-			&accessContext.UserID,
-			entityID,
-			"EVENT_DELETED",
-			map[string]interface{}{
-				"event_id": id,
-				"error":    "write access denied",
-			},
-			ip,
-			"failure",
-		)
+		s.AuditSvc.LogAction(context.Background(), &accessContext.UserID, entityIDPtr,
+			"EVENT_DELETED", map[string]interface{}{"event_id": id, "error": "write access denied"}, ip, "failure")
 		return errors.New("write access denied")
 	}
 
-	// First check if event exists and user has permission
 	event, err := s.Repo.GetEventByID(id)
 	if err != nil {
-		// Log failed delete attempt - event not found
-		s.AuditSvc.LogAction(
-			context.Background(),
-			&accessContext.UserID,
-			entityID,
-			"EVENT_DELETED",
-			map[string]interface{}{
-				"event_id": id,
-				"error":    "event not found",
-			},
-			ip,
-			"failure",
-		)
+		s.AuditSvc.LogAction(context.Background(), &accessContext.UserID, entityIDPtr,
+			"EVENT_DELETED", map[string]interface{}{"event_id": id, "error": "event not found"}, ip, "failure")
 		return err
 	}
 
-	if event.EntityID != *entityID {
-		// Log unauthorized delete attempt
-		s.AuditSvc.LogAction(
-			context.Background(),
-			&accessContext.UserID,
-			entityID,
-			"EVENT_DELETED",
-			map[string]interface{}{
-				"event_id":     id,
-				"event_title":  event.Title,
-				"error":        "unauthorized access",
-				"event_entity": event.EntityID,
-			},
-			ip,
-			"failure",
-		)
+	// Use passed entityID — NOT accessContext.GetAccessibleEntityID()
+	if event.EntityID != entityID {
+		s.AuditSvc.LogAction(context.Background(), &accessContext.UserID, entityIDPtr,
+			"EVENT_DELETED", map[string]interface{}{
+				"event_id": id, "error": "unauthorized access", "event_entity": event.EntityID,
+			}, ip, "failure")
 		return errors.New("unauthorized: cannot delete this event")
 	}
 
-	// Store event details for audit log before deletion
 	eventTitle := event.Title
 	eventType := event.EventType
 	eventDate := event.EventDate.Format("2006-01-02")
 	location := event.Location
 
-	// Attempt to delete the event
-	err = s.Repo.DeleteEvent(id, *entityID)
-	if err != nil {
-		// Log failed delete attempt
-		s.AuditSvc.LogAction(
-			context.Background(),
-			&accessContext.UserID,
-			entityID,
-			"EVENT_DELETED",
-			map[string]interface{}{
-				"event_id":    id,
-				"event_title": eventTitle,
-				"error":       err.Error(),
-			},
-			ip,
-			"failure",
-		)
+	if err = s.Repo.DeleteEvent(id, entityID); err != nil {
+		s.AuditSvc.LogAction(context.Background(), &accessContext.UserID, entityIDPtr,
+			"EVENT_DELETED", map[string]interface{}{"event_id": id, "error": err.Error()}, ip, "failure")
 		return err
 	}
 
-	// Log successful event deletion
-	s.AuditSvc.LogAction(
-		context.Background(),
-		&accessContext.UserID,
-		entityID,
-		"EVENT_DELETED",
-		map[string]interface{}{
-			"event_id":    id,
-			"event_title": eventTitle,
-			"event_type":  eventType,
-			"event_date":  eventDate,
-			"location":    location,
-		},
-		ip,
-		"success",
-	)
+	s.AuditSvc.LogAction(context.Background(), &accessContext.UserID, entityIDPtr,
+		"EVENT_DELETED", map[string]interface{}{
+			"event_id": id, "event_title": eventTitle,
+			"event_type": eventType, "event_date": eventDate, "location": location,
+		}, ip, "success")
 
 	if s.NotifSvc != nil {
-		_ = s.NotifSvc.CreateInAppForEntityRoles(context.Background(), *entityID,
-			[]string{"devotee", "volunteer"},
-			"Event Deleted",
-			eventTitle+" has been removed",
-			"event",
-		)
+		_ = s.NotifSvc.CreateInAppForEntityRoles(context.Background(), entityID,
+			[]string{"devotee", "volunteer"}, "Event Deleted",
+			eventTitle+" has been removed", "event")
 	}
 
 	return nil

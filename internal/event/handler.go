@@ -1,10 +1,11 @@
 package event
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
-	"fmt"
+
 	"github.com/gin-gonic/gin"
 	"github.com/sharath018/temple-management-backend/middleware"
 )
@@ -25,84 +26,76 @@ func getAccessContextFromContext(c *gin.Context) (middleware.AccessContext, bool
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
 		return middleware.AccessContext{}, false
 	}
-	
+
 	accessContext, ok := accessContextRaw.(middleware.AccessContext)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid access context"})
 		return middleware.AccessContext{}, false
 	}
-	
+
 	return accessContext, true
 }
 
 // ===========================
 // 🎯 Create Event - POST /events
 func (h *Handler) CreateEvent(c *gin.Context) {
-    accessContext, ok := getAccessContextFromContext(c)
-    if !ok {
-        return
-    }
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
+		return
+	}
 
-    // Get entity ID from URL parameter if available
-    var entityID uint
-    entityIDParam := c.Param("entity_id")
-    if entityIDParam != "" {
-        id, err := strconv.ParseUint(entityIDParam, 10, 32)
-        if err == nil {
-            entityID = uint(id)
-        }
-    } else {
-        // Check for entity ID in header
-        entityIDHeader := c.GetHeader("X-Entity-ID")
-        if entityIDHeader != "" {
-            id, err := strconv.ParseUint(entityIDHeader, 10, 32)
-            if err == nil {
-                entityID = uint(id)
-            }
-        } else {
-            // If not found in URL or header, try to get from access context
-            contextEntityID := accessContext.GetAccessibleEntityID()
-            if contextEntityID != nil {
-                entityID = *contextEntityID
-            } else {
-                c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
-                return
-            }
-        }
-    }
+	// Priority 1: URL path param
+	var entityID uint
+	if entityIDParam := c.Param("entity_id"); entityIDParam != "" {
+		if id, err := strconv.ParseUint(entityIDParam, 10, 32); err == nil {
+			entityID = uint(id)
+		}
+	}
 
-    // Check write permissions (handled by middleware, but double-check)
-    if !accessContext.CanWrite() {
-        c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
-        return
-    }
+	// Parse body first so entity_id in body is available as fallback
+	var req CreateEventRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input: " + err.Error()})
+		return
+	}
 
-    var req CreateEventRequest
-    if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input: " + err.Error()})
-        return
-    }
+	// Priority 2: Request body entity_id
+	if entityID == 0 && req.EntityID != 0 {
+		entityID = req.EntityID
+	}
 
-    // Basic validation for date being too far in the past
-    if req.EventDate != "" {
-        if eventDate, err := time.Parse("2006-01-02", req.EventDate); err == nil {
-            if eventDate.Before(time.Now().AddDate(-10, 0, 0)) {
-                c.JSON(http.StatusBadRequest, gin.H{"error": "event date is too far in the past"})
-                return
-            }
-        }
-    }
+	// Priority 3: Access context fallback
+	if entityID == 0 {
+		if contextEntityID := accessContext.GetAccessibleEntityID(); contextEntityID != nil {
+			entityID = *contextEntityID
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
+			return
+		}
+	}
 
-    // Get IP address for audit logging
-    ip := middleware.GetIPFromContext(c)
+	if !accessContext.CanWrite() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
+		return
+	}
 
-    // Pass the entity ID to the service
-    if err := h.Service.CreateEvent(&req, accessContext, entityID, ip); err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create event: " + err.Error()})
-        return
-    }
+	if req.EventDate != "" {
+		if eventDate, err := time.Parse("2006-01-02", req.EventDate); err == nil {
+			if eventDate.Before(time.Now().AddDate(-10, 0, 0)) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "event date is too far in the past"})
+				return
+			}
+		}
+	}
 
-    c.JSON(http.StatusCreated, gin.H{"message": "event created successfully"})
+	ip := middleware.GetIPFromContext(c)
+
+	if err := h.Service.CreateEvent(&req, accessContext, entityID, ip); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create event: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "event created successfully"})
 }
 
 // ===========================
@@ -113,7 +106,6 @@ func (h *Handler) GetEventByID(c *gin.Context) {
 		return
 	}
 
-	// Check if user has access to an entity
 	entityID := accessContext.GetAccessibleEntityID()
 	if entityID == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple"})
@@ -138,115 +130,101 @@ func (h *Handler) GetEventByID(c *gin.Context) {
 // ===========================
 // 📆 Upcoming Events - GET /events/upcoming
 func (h *Handler) GetUpcomingEvents(c *gin.Context) {
-    accessContext, ok := getAccessContextFromContext(c)
-    if !ok {
-        return
-    }
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
+		return
+	}
 
-    // Get entity ID from query parameter or URL path
-    var entityID uint
-    entityIDParam := c.Query("entity_id")
-    if entityIDParam != "" {
-        id, err := strconv.ParseUint(entityIDParam, 10, 32)
-        if err == nil {
-            entityID = uint(id)
-        }
-    } else {
-        // Try getting from URL path
-        entityIDPath := c.Param("entity_id")
-        if entityIDPath != "" {
-            id, err := strconv.ParseUint(entityIDPath, 10, 32)
-            if err == nil {
-                entityID = uint(id)
-            }
-        }
-    }
+	// Priority 1: Query param
+	var entityID uint
+	if entityIDParam := c.Query("entity_id"); entityIDParam != "" {
+		if id, err := strconv.ParseUint(entityIDParam, 10, 32); err == nil {
+			entityID = uint(id)
+		}
+	}
 
-    // If no entity ID found, fall back to access context
-    if entityID == 0 {
-        contextEntityID := accessContext.GetAccessibleEntityID()
-        if contextEntityID != nil {
-            entityID = *contextEntityID
-        } else {
-            c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple and no entity_id provided"})
-            return
-        }
-    }
+	// Priority 2: URL path param
+	if entityID == 0 {
+		if entityIDPath := c.Param("entity_id"); entityIDPath != "" {
+			if id, err := strconv.ParseUint(entityIDPath, 10, 32); err == nil {
+				entityID = uint(id)
+			}
+		}
+	}
 
-    // Allow access for devotees and volunteers regardless of entity
-    if accessContext.RoleName == "devotee" || accessContext.RoleName == "volunteer" || accessContext.CanRead() {
-        // Pass the explicit entityID to the service
-        events, err := h.Service.GetUpcomingEventsByEntityID(accessContext, entityID)
-        if err != nil {
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch events"})
-            return
-        }
+	// Priority 3: Access context fallback
+	if entityID == 0 {
+		if contextEntityID := accessContext.GetAccessibleEntityID(); contextEntityID != nil {
+			entityID = *contextEntityID
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple and no entity_id provided"})
+			return
+		}
+	}
 
-        c.JSON(http.StatusOK, events)
-        return
-    }
+	if accessContext.RoleName == "devotee" || accessContext.RoleName == "volunteer" || accessContext.CanRead() {
+		events, err := h.Service.GetUpcomingEventsByEntityID(accessContext, entityID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch events"})
+			return
+		}
+		c.JSON(http.StatusOK, events)
+		return
+	}
 
-    // If not a devotee/volunteer and doesn't have read access
-    c.JSON(http.StatusForbidden, gin.H{"error": "read access denied"})
+	c.JSON(http.StatusForbidden, gin.H{"error": "read access denied"})
 }
 
-
 // ===========================
-// 📄 List Events - GET /events?limit=&offset=&search=
+// 📄 List Events - GET /events
 func (h *Handler) ListEvents(c *gin.Context) {
-    accessContext, ok := getAccessContextFromContext(c)
-    if !ok {
-        return
-    }
+	accessContext, ok := getAccessContextFromContext(c)
+	if !ok {
+		return
+	}
 
-    // Get entity ID from query parameter or URL path
-    var entityID uint
-    entityIDParam := c.Query("entity_id")
-    if entityIDParam != "" {
-        id, err := strconv.ParseUint(entityIDParam, 10, 32)
-        if err == nil {
-            entityID = uint(id)
-        }
-    } else {
-        // Try getting from URL path
-        entityIDPath := c.Param("entity_id")
-        if entityIDPath != "" {
-            id, err := strconv.ParseUint(entityIDPath, 10, 32)
-            if err == nil {
-                entityID = uint(id)
-            }
-        }
-    }
+	// Priority 1: Query param
+	var entityID uint
+	if entityIDParam := c.Query("entity_id"); entityIDParam != "" {
+		if id, err := strconv.ParseUint(entityIDParam, 10, 32); err == nil {
+			entityID = uint(id)
+		}
+	}
 
-    // If no entity ID found, fall back to access context
-    if entityID == 0 {
-        contextEntityID := accessContext.GetAccessibleEntityID()
-        if contextEntityID != nil {
-            entityID = *contextEntityID
-        } else {
-            c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple and no entity_id provided"})
-            return
-        }
-    }
+	// Priority 2: URL path param
+	if entityID == 0 {
+		if entityIDPath := c.Param("entity_id"); entityIDPath != "" {
+			if id, err := strconv.ParseUint(entityIDPath, 10, 32); err == nil {
+				entityID = uint(id)
+			}
+		}
+	}
 
-    limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
-    offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-    search := c.Query("search")
+	// Priority 3: Access context fallback
+	if entityID == 0 {
+		if contextEntityID := accessContext.GetAccessibleEntityID(); contextEntityID != nil {
+			entityID = *contextEntityID
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple and no entity_id provided"})
+			return
+		}
+	}
 
-    // Check permissions
-    if accessContext.RoleName == "devotee" || accessContext.RoleName == "volunteer" || accessContext.CanRead() {
-        // Pass the explicit entityID to the service
-        events, err := h.Service.ListEventsByEntityID(accessContext, entityID, limit, offset, search)
-        if err != nil {
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list events"})
-            return
-        }
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	search := c.Query("search")
 
-        c.JSON(http.StatusOK, events)
-        return
-    }
+	if accessContext.RoleName == "devotee" || accessContext.RoleName == "volunteer" || accessContext.CanRead() {
+		events, err := h.Service.ListEventsByEntityID(accessContext, entityID, limit, offset, search)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list events"})
+			return
+		}
+		c.JSON(http.StatusOK, events)
+		return
+	}
 
-    c.JSON(http.StatusForbidden, gin.H{"error": "read access denied"})
+	c.JSON(http.StatusForbidden, gin.H{"error": "read access denied"})
 }
 
 // ===========================
@@ -257,18 +235,16 @@ func (h *Handler) GetEventStats(c *gin.Context) {
 		return
 	}
 
-	// Check if user has access to an entity
 	entityID := accessContext.GetAccessibleEntityID()
 	if entityID == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user not linked to a temple"})
 		return
 	}
-	fmt.Println("entityID :=",*entityID)
+	fmt.Println("entityID :=", *entityID)
 
 	stats, err := h.Service.GetEventStats(accessContext)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch stats"})
-		
 		return
 	}
 
@@ -283,14 +259,6 @@ func (h *Handler) UpdateEvent(c *gin.Context) {
 		return
 	}
 
-	// Check if user has access to an entity
-	entityID := accessContext.GetAccessibleEntityID()
-	if entityID == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not linked to a temple"})
-		return
-	}
-
-	// Check write permissions (handled by middleware, but double-check)
 	if !accessContext.CanWrite() {
 		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
 		return
@@ -302,17 +270,40 @@ func (h *Handler) UpdateEvent(c *gin.Context) {
 		return
 	}
 
+	// Parse body first so entity_id in body is available as fallback
 	var req UpdateEventRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input: " + err.Error()})
 		return
 	}
 
-	// Get IP address for audit logging
+	// Priority 1: URL path param
+	var entityID uint
+	if entityIDParam := c.Param("entity_id"); entityIDParam != "" {
+		if eid, err := strconv.ParseUint(entityIDParam, 10, 32); err == nil {
+			entityID = uint(eid)
+		}
+	}
+
+	// Priority 2: Request body entity_id
+	if entityID == 0 && req.EntityID != 0 {
+		entityID = req.EntityID
+	}
+
+	// Priority 3: Access context fallback
+	if entityID == 0 {
+		if contextEntityID := accessContext.GetAccessibleEntityID(); contextEntityID != nil {
+			entityID = *contextEntityID
+		} else {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "user not linked to a temple and no entity_id provided"})
+			return
+		}
+	}
+
 	ip := middleware.GetIPFromContext(c)
 
-	// Use the updated service method with access context
-	if err := h.Service.UpdateEvent(uint(id), &req, accessContext, ip); err != nil {
+	// Pass resolved entityID explicitly to service
+	if err := h.Service.UpdateEvent(uint(id), &req, accessContext, entityID, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update event: " + err.Error()})
 		return
 	}
@@ -328,14 +319,6 @@ func (h *Handler) DeleteEvent(c *gin.Context) {
 		return
 	}
 
-	// Check if user has access to an entity
-	entityID := accessContext.GetAccessibleEntityID()
-	if entityID == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not linked to a temple"})
-		return
-	}
-
-	// Check write permissions (handled by middleware, but double-check)
 	if !accessContext.CanWrite() {
 		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
 		return
@@ -347,11 +330,37 @@ func (h *Handler) DeleteEvent(c *gin.Context) {
 		return
 	}
 
-	// Get IP address for audit logging
+	// Priority 1: URL path param
+	var entityID uint
+	if entityIDParam := c.Param("entity_id"); entityIDParam != "" {
+		if eid, err := strconv.ParseUint(entityIDParam, 10, 32); err == nil {
+			entityID = uint(eid)
+		}
+	}
+
+	// Priority 2: Query param (DELETE has no body)
+	if entityID == 0 {
+		if entityIDQuery := c.Query("entity_id"); entityIDQuery != "" {
+			if eid, err := strconv.ParseUint(entityIDQuery, 10, 32); err == nil {
+				entityID = uint(eid)
+			}
+		}
+	}
+
+	// Priority 3: Access context fallback
+	if entityID == 0 {
+		if contextEntityID := accessContext.GetAccessibleEntityID(); contextEntityID != nil {
+			entityID = *contextEntityID
+		} else {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "user not linked to a temple and no entity_id provided"})
+			return
+		}
+	}
+
 	ip := middleware.GetIPFromContext(c)
 
-	// Use the updated service method with access context
-	if err := h.Service.DeleteEvent(uint(id), accessContext, ip); err != nil {
+	// Pass resolved entityID explicitly to service
+	if err := h.Service.DeleteEvent(uint(id), accessContext, entityID, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete event: " + err.Error()})
 		return
 	}

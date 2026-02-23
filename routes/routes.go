@@ -339,7 +339,7 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 
 	sevaRepo := seva.NewRepository(database.DB)
 	sevaService := seva.NewService(sevaRepo, auditSvc)
-	sevaHandler := seva.NewHandler(sevaService, auditSvc)
+	sevaHandler := seva.NewHandler(sevaService, auditSvc,sevaRepo)
 
 	// All Seva routes under: /api/v1/sevas
 	sevaRoutes := protected.Group("/sevas")

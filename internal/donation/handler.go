@@ -28,7 +28,7 @@ func NewHandler(svc Service) *Handler {
 }
 
 // ===========================
-// 📌 Extract Access Context - NEW: Same as event handler
+// 📌 Extract Access Context
 func getAccessContextFromContext(c *gin.Context) (middleware.AccessContext, bool) {
 	accessContextRaw, exists := c.Get("access_context")
 	if !exists {
@@ -45,8 +45,7 @@ func getAccessContextFromContext(c *gin.Context) (middleware.AccessContext, bool
 	return accessContext, true
 }
 
-// ===========================
-// 🌟 Extract Entity ID - FIXED: Removed unused variable
+
 func getEntityIDFromRequest(c *gin.Context, accessContext middleware.AccessContext) (uint, error) {
 	// Try URL parameter first
 	entityIDParam := c.Param("entity_id")
@@ -57,16 +56,7 @@ func getEntityIDFromRequest(c *gin.Context, accessContext middleware.AccessConte
 		}
 	}
 
-	// Try header next
-	entityIDHeader := c.GetHeader("X-Entity-ID")
-	if entityIDHeader != "" {
-		id, err := strconv.ParseUint(entityIDHeader, 10, 32)
-		if err == nil {
-			return uint(id), nil
-		}
-	}
-
-	// Try query parameter
+	// Try query parameter next
 	entityIDQuery := c.Query("entity_id")
 	if entityIDQuery != "" {
 		id, err := strconv.ParseUint(entityIDQuery, 10, 32)
@@ -75,7 +65,7 @@ func getEntityIDFromRequest(c *gin.Context, accessContext middleware.AccessConte
 		}
 	}
 
-	// Fall back to access context
+	// Fall back to access context (from JWT token)
 	contextEntityID := accessContext.GetAccessibleEntityID()
 	if contextEntityID != nil {
 		return *contextEntityID, nil
@@ -85,16 +75,14 @@ func getEntityIDFromRequest(c *gin.Context, accessContext middleware.AccessConte
 }
 
 // ==============================
-// 🌟 1. Create Donation - UPDATED: Entity-based approach
+// 🌟 1. Create Donation
 // ==============================
 func (h *Handler) CreateDonation(c *gin.Context) {
-	// NEW: Use access context instead of direct user context
 	accessContext, ok := getAccessContextFromContext(c)
 	if !ok {
 		return
 	}
 
-	// NEW: Extract entity ID using the same logic as events
 	entityID, err := getEntityIDFromRequest(c, accessContext)
 	if err != nil || entityID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
@@ -107,9 +95,8 @@ func (h *Handler) CreateDonation(c *gin.Context) {
 		return
 	}
 
-	// NEW: Use access context data and extracted entity ID
 	req.UserID = accessContext.UserID
-	req.EntityID = entityID // NEW: Use extracted entity ID
+	req.EntityID = entityID
 	req.IPAddress = middleware.GetIPFromContext(c)
 
 	order, err := h.svc.StartDonation(req)
@@ -133,9 +120,6 @@ func (h *Handler) VerifyDonation(c *gin.Context) {
 
 	req.IPAddress = middleware.GetIPFromContext(c)
 
-	// ✅ DO NOT read payment method from request
-	// Method is fetched from Razorpay inside service layer
-
 	if err := h.svc.VerifyAndUpdateDonation(req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -148,23 +132,20 @@ func (h *Handler) VerifyDonation(c *gin.Context) {
 }
 
 // ==============================
-// 🔍 3. Get My Donations - UPDATED: Entity-based approach
+// 🔍 3. Get My Donations
 // ==============================
 func (h *Handler) GetMyDonations(c *gin.Context) {
-	// NEW: Use access context
 	accessContext, ok := getAccessContextFromContext(c)
 	if !ok {
 		return
 	}
 
-	// NEW: Extract entity ID for filtering
 	entityID, err := getEntityIDFromRequest(c, accessContext)
 	if err != nil || entityID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
 		return
 	}
 
-	// NEW: Pass entity ID to service for filtering
 	donations, err := h.svc.GetDonationsByUserAndEntity(accessContext.UserID, entityID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -179,7 +160,7 @@ func (h *Handler) GetMyDonations(c *gin.Context) {
 }
 
 // ==============================
-// 🔍 4. Get All Donations for Temple - UPDATED: Enhanced entity handling
+// 🔍 4. Get All Donations for Temple - UPDATED: Removed header fallback
 // ==============================
 func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
@@ -187,7 +168,7 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 		return
 	}
 
-	// ✅ EXTRACT entity_id STRICTLY (from param OR query)
+	// ✅ EXTRACT entity_id from route param OR query param ONLY
 	var entityID uint
 
 	// 1️⃣ Try route param: /entity/:entityId/...
@@ -212,20 +193,18 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 		}
 	}
 
-	// 3️⃣ Final fallback: Try header
+	// 3️⃣ Final fallback: Access context (from JWT)
 	if entityID == 0 {
-		if headerEntityID := c.GetHeader("X-Entity-ID"); headerEntityID != "" {
-			parsedID, err := strconv.ParseUint(headerEntityID, 10, 64)
-			if err == nil && parsedID != 0 {
-				entityID = uint(parsedID)
-			}
+		contextEntityID := accessContext.GetAccessibleEntityID()
+		if contextEntityID != nil {
+			entityID = *contextEntityID
 		}
 	}
 
-	// 🔒 DEVOTEES MUST HAVE ENTITY_ID
-	if accessContext.RoleName == "devotee" && entityID == 0 {
+	// 🔒 REQUIRE entity_id for devotees and templeadmins
+	if (accessContext.RoleName == "devotee" || accessContext.RoleName == "templeadmin") && entityID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "entity_id is required for devotees",
+			"error": "entity_id is required",
 		})
 		return
 	}
@@ -245,7 +224,7 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 	case "devotee":
 		// Devotees see ONLY their own donations for the CURRENT entity
 		filters.UserID = accessContext.UserID
-		filters.EntityID = entityID // Already validated above, cannot be 0
+		filters.EntityID = entityID
 
 	case "admin", "superadmin":
 		// Admins can see all donations
@@ -320,7 +299,7 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 		filters.From = &yearAgo
 	}
 
-	// 📝 DEBUG LOG (remove in production)
+	// 📝 DEBUG LOG
 	log.Printf("🔍 Donation Filters Applied - Role: %s, UserID: %d, EntityID: %d",
 		accessContext.RoleName, filters.UserID, filters.EntityID)
 
@@ -342,7 +321,7 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 }
 
 // ==============================
-// 📊 5. Get Donation Dashboard Stats - UPDATED: Enhanced entity handling
+// 📊 5. Get Donation Dashboard Stats
 // ==============================
 func (h *Handler) GetDashboard(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
@@ -350,7 +329,6 @@ func (h *Handler) GetDashboard(c *gin.Context) {
 		return
 	}
 
-	// NEW: Extract entity ID using same logic as events
 	entityID, err := getEntityIDFromRequest(c, accessContext)
 	if err != nil || entityID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
@@ -370,7 +348,7 @@ func (h *Handler) GetDashboard(c *gin.Context) {
 }
 
 // ==============================
-// 🏆 6. Get Top Donors - UPDATED: Enhanced entity handling
+// 🏆 6. Get Top Donors
 // ==============================
 func (h *Handler) GetTopDonors(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
@@ -378,7 +356,6 @@ func (h *Handler) GetTopDonors(c *gin.Context) {
 		return
 	}
 
-	// NEW: Extract entity ID using same logic as events
 	entityID, err := getEntityIDFromRequest(c, accessContext)
 	if err != nil || entityID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
@@ -399,7 +376,7 @@ func (h *Handler) GetTopDonors(c *gin.Context) {
 }
 
 // ==============================
-// 📄 7. Generate Receipt - UPDATED: Enhanced entity and user handling
+// 📄 7. Generate Receipt
 // ==============================
 func (h *Handler) GenerateReceipt(c *gin.Context) {
 	donationIDStr := c.Param("id")
@@ -409,13 +386,12 @@ func (h *Handler) GenerateReceipt(c *gin.Context) {
 		return
 	}
 
-	// NEW: Use access context instead of direct user context
 	accessContext, ok := getAccessContextFromContext(c)
 	if !ok {
 		return
 	}
 
-	// NEW: For devotees, ensure they can only access their own donations by entity
+	// Extract entity ID
 	var entityID uint
 	if accessContext.RoleName == "devotee" {
 		extractedEntityID, err := getEntityIDFromRequest(c, accessContext)
@@ -425,7 +401,6 @@ func (h *Handler) GenerateReceipt(c *gin.Context) {
 		}
 		entityID = extractedEntityID
 	} else {
-		// For temple admins, get their accessible entity
 		extractedEntityID, err := getEntityIDFromRequest(c, accessContext)
 		if err != nil || extractedEntityID == 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
@@ -447,7 +422,7 @@ func (h *Handler) GenerateReceipt(c *gin.Context) {
 }
 
 // ==============================
-// 📈 8. Get Donation Analytics - UPDATED: Enhanced entity handling
+// 📈 8. Get Donation Analytics
 // ==============================
 func (h *Handler) GetAnalytics(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
@@ -455,7 +430,6 @@ func (h *Handler) GetAnalytics(c *gin.Context) {
 		return
 	}
 
-	// NEW: Extract entity ID using same logic as events
 	entityID, err := getEntityIDFromRequest(c, accessContext)
 	if err != nil || entityID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
@@ -476,7 +450,7 @@ func (h *Handler) GetAnalytics(c *gin.Context) {
 }
 
 // ==============================
-// 📊 9. Export Donations - UPDATED: Enhanced entity handling
+// 📊 9. Export Donations
 // ==============================
 func (h *Handler) ExportDonations(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
@@ -484,7 +458,6 @@ func (h *Handler) ExportDonations(c *gin.Context) {
 		return
 	}
 
-	// NEW: Extract entity ID using same logic as events
 	entityID, err := getEntityIDFromRequest(c, accessContext)
 	if err != nil || entityID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
@@ -495,7 +468,7 @@ func (h *Handler) ExportDonations(c *gin.Context) {
 
 	// Build filters for export
 	filters := DonationFilters{
-		EntityID: entityID, // NEW: Use extracted entity ID
+		EntityID: entityID,
 		Status:   c.Query("status"),
 		Type:     c.Query("type"),
 		Method:   c.Query("method"),
@@ -528,7 +501,7 @@ func (h *Handler) ExportDonations(c *gin.Context) {
 }
 
 // ==============================
-// 🕐 10. Get Recent Donations - UPDATED: Enhanced entity handling
+// 🕐 10. Get Recent Donations
 // ==============================
 func (h *Handler) GetRecentDonations(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
@@ -542,7 +515,6 @@ func (h *Handler) GetRecentDonations(c *gin.Context) {
 		limit = 10
 	}
 
-	// NEW: Extract entity ID using same logic as events
 	entityID, err := getEntityIDFromRequest(c, accessContext)
 	if err != nil || entityID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
@@ -588,7 +560,7 @@ func parseIntQuery(c *gin.Context, key string, defaultValue int) int {
 }
 
 // ==============================
-// 🔔 11. Razorpay Webhook Handler - NEW
+// 🔔 11. Razorpay Webhook Handler
 // ==============================
 func (h *Handler) HandleWebhook(c *gin.Context) {
 	// Step 1: Verify webhook signature
@@ -721,7 +693,6 @@ func (h *Handler) handlePaymentFailed(c *gin.Context, payload map[string]interfa
 		return
 	}
 
-	// ✅ FIXED: Use dedicated failed payment handler
 	err := h.svc.HandleFailedPaymentWebhook(orderID, paymentID)
 	if err != nil {
 		log.Printf("❌ Webhook: Failed to process failed payment for order %s: %v", orderID, err)

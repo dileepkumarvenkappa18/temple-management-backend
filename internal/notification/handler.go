@@ -223,15 +223,10 @@ func (h *Handler) SendNotification(c *gin.Context) {
 		return
 	}
 
-	entityID := ctx.GetAccessibleEntityID()
-	if entityID == nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "no accessible temple"})
-		return
-	}
-
 	ip := middleware.GetIPFromContext(c)
 
 	var req struct {
+		EntityID   *uint    `json:"entity_id"`
 		TemplateID *uint    `json:"template_id"`
 		Channel    string   `json:"channel" binding:"required"` // email, sms, whatsapp, push
 		Subject    string   `json:"subject"`
@@ -242,6 +237,16 @@ func (h *Handler) SendNotification(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Resolve entityID from access context, fallback to request body
+	entityID := ctx.GetAccessibleEntityID()
+	if entityID == nil && req.EntityID != nil {
+		entityID = req.EntityID
+	}
+	if entityID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "no accessible temple"})
 		return
 	}
 

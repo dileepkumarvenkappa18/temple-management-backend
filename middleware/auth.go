@@ -13,7 +13,6 @@ import (
 )
 
 // AuthMiddleware handles JWT authentication and sets up access context
-// UPDATED: Accepts repository parameter for backend-based tenant resolution
 func AuthMiddleware(cfg *config.Config, authSvc auth.Service, authRepo auth.Repository, opt ...bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		optional := false
@@ -85,12 +84,11 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service, authRepo auth.Repo
 			return
 		}
 
-		// At this point, user exists. No need for nil check for structs.
 		c.Set("user", user)
 		c.Set("user_id", user.ID)
 		c.Set("claims", claims)
 
-		// Only resolve entity & access context if a valid user exists
+		// Resolve entity & access context
 		entityID := ResolveEntityIDForOperation(c, user, claims)
 		accessContext := CreateAccessContext(c, user, claims, entityID, authRepo)
 		c.Set("access_context", accessContext)
@@ -104,16 +102,16 @@ func AuthMiddleware(cfg *config.Config, authSvc auth.Service, authRepo auth.Repo
 
 // ResolveEntityIDForOperation determines the correct entity ID for the current operation
 func ResolveEntityIDForOperation(c *gin.Context, user auth.User, claims jwt.MapClaims) *uint {
-	// Priority 1: X-Entity-ID header
+
+	// Priority 1: Entity ID from request header X-Entity-ID
 	if entityHeader := c.GetHeader("X-Entity-ID"); entityHeader != "" && entityHeader != "all" {
 		if eid, err := strconv.ParseUint(entityHeader, 10, 32); err == nil {
 			id := uint(eid)
-			fmt.Printf("%s using entity ID from X-Entity-ID header: %d\n", user.Role.RoleName, id)
 			return &id
 		}
 	}
 
-	// Priority 2: Entity ID from URL path (/entity/123/...)
+	// Priority 2: Entity ID from URL path (/entity/123/... OR /entities/123/...)
 	if entityIDFromPath := ExtractEntityIDFromPath(c); entityIDFromPath != nil {
 		fmt.Printf("%s using entity ID from URL path: %d\n", user.Role.RoleName, *entityIDFromPath)
 		return entityIDFromPath
@@ -135,6 +133,12 @@ func ResolveEntityIDForOperation(c *gin.Context, user auth.User, claims jwt.MapC
 			fmt.Printf("SuperAdmin using tenant ID as entity ID: %d\n", *tenantID)
 			return tenantID
 		}
+		if entityQuery := c.Query("entity_id"); entityQuery != "" {
+			if eid, err := strconv.ParseUint(entityQuery, 10, 32); err == nil {
+				id := uint(eid)
+				return &id
+			}
+		}
 		fmt.Println("SuperAdmin with global access (no specific entity)")
 		return nil
 
@@ -145,17 +149,15 @@ func ResolveEntityIDForOperation(c *gin.Context, user auth.User, claims jwt.MapC
 		}
 
 	case RoleStandardUser, RoleMonitoringUser:
-		if assignedTenantIDFloat, exists := claims["assigned_tenant_id"]; exists {
-			if tenantID, ok := assignedTenantIDFloat.(float64); ok && tenantID > 0 {
-				id := uint(tenantID)
-				fmt.Printf("%s using assigned tenant ID: %d\n", user.Role.RoleName, id)
-				return &id
-			}
-		}
+		// DO NOT use assigned_tenant_id as entity ID.
+		// assigned_tenant_id is stored separately in accessContext.TenantID.
+		// Fall back to user's own EntityID only if nothing found in URL/header/query.
 		if user.EntityID != nil {
 			fmt.Printf("%s fallback to own entity ID: %d\n", user.Role.RoleName, *user.EntityID)
 			return user.EntityID
 		}
+		// No entity assigned - return nil, access will be checked via TenantID in accessContext
+		return nil
 
 	case RoleDevotee, RoleVolunteer:
 		if user.EntityID != nil {
@@ -192,18 +194,19 @@ func ResolveTenantIDFromRequest(c *gin.Context, claims jwt.MapClaims) *uint {
 	return nil
 }
 
-// ExtractEntityIDFromPath extracts entity ID from URL
+// ExtractEntityIDFromPath extracts entity ID from URL path.
+// FIXED: Now handles both /entity/123 and /entities/123 patterns.
 func ExtractEntityIDFromPath(c *gin.Context) *uint {
 	path := c.Request.URL.Path
-	if strings.Contains(path, "/entity/") {
-		parts := strings.Split(path, "/")
-		for i, part := range parts {
-			if part == "entity" && i+1 < len(parts) {
-				entityIDFromPath, err := strconv.ParseUint(parts[i+1], 10, 32)
-				if err == nil {
-					uintID := uint(entityIDFromPath)
-					return &uintID
-				}
+	parts := strings.Split(path, "/")
+	for i, part := range parts {
+		// Match both singular "/entity/123" and plural "/entities/123"
+		if (part == "entity" || part == "entities") && i+1 < len(parts) {
+			entityIDFromPath, err := strconv.ParseUint(parts[i+1], 10, 32)
+			if err == nil {
+				uintID := uint(entityIDFromPath)
+				fmt.Printf("Extracted entity ID %d from URL path: %s\n", uintID, path)
+				return &uintID
 			}
 		}
 	}
@@ -211,7 +214,6 @@ func ExtractEntityIDFromPath(c *gin.Context) *uint {
 }
 
 // CreateAccessContext creates the access context with proper entity + tenant resolution
-// UPDATED: Now accepts authRepo to call GetAssignedTenantID() for standard/monitoring users
 func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, entityID *uint, authRepo auth.Repository) AccessContext {
 	accessContext := AccessContext{
 		UserID:   user.ID,
@@ -231,8 +233,14 @@ func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, e
 
 	case RoleStandardUser:
 		accessContext.PermissionType = "full"
-		accessContext.AssignedEntityID = entityID
-		// NEW: Call GetAssignedTenantID() from repository
+		accessContext.DirectEntityID = user.EntityID
+		// Use URL entity ID if provided, otherwise fall back to user's own entity
+		if entityID != nil {
+			accessContext.AssignedEntityID = entityID
+		} else {
+			accessContext.AssignedEntityID = user.EntityID
+		}
+		// Always resolve TenantID from DB for standarduser
 		if authRepo != nil {
 			if assignedTenantID, err := authRepo.GetAssignedTenantID(user.ID); err == nil && assignedTenantID != nil {
 				accessContext.TenantID = *assignedTenantID
@@ -245,11 +253,15 @@ func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, e
 	case RoleMonitoringUser:
 		accessContext.PermissionType = "readonly"
 		accessContext.DirectEntityID = user.EntityID
-		// NEW: Call GetAssignedTenantID() from repository
+		if entityID != nil {
+			accessContext.AssignedEntityID = entityID
+		} else {
+			accessContext.AssignedEntityID = user.EntityID
+		}
+		// Always resolve TenantID from DB for monitoringuser
 		if authRepo != nil {
 			if assignedTenantID, err := authRepo.GetAssignedTenantID(user.ID); err == nil && assignedTenantID != nil {
 				accessContext.TenantID = *assignedTenantID
-				accessContext.AssignedEntityID = entityID
 				fmt.Printf("✅ MonitoringUser %d assigned to tenant: %d\n", user.ID, accessContext.TenantID)
 			} else {
 				fmt.Printf("⚠️ No tenant assigned to MonitoringUser %d\n", user.ID)
@@ -272,7 +284,6 @@ func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, e
 }
 
 // GetTenantIDFromAccessContext is a helper to get tenant ID from the access context
-// This is used by handlers that need to resolve tenant ID
 func GetTenantIDFromAccessContext(c *gin.Context) uint {
 	if accessCtxVal, exists := c.Get("access_context"); exists {
 		if accessCtx, ok := accessCtxVal.(AccessContext); ok {

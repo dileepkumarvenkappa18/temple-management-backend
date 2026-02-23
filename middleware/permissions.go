@@ -21,13 +21,12 @@ type AccessContext struct {
 	UserID           uint
 	RoleName         string
 	DirectEntityID   *uint  // User's own entity (for templeadmin)
-	AssignedEntityID *uint  // Assigned tenant entity (for standarduser/monitoringuser)
+	AssignedEntityID *uint  // Assigned entity from URL or user assignment
 	PermissionType   string // "full" or "readonly"
-	TenantID         uint
+	TenantID         uint   // Tenant this user belongs to (for standarduser/monitoringuser)
 }
 
 // GetAccessibleEntityID returns the entity ID the user can access
-// FIX: Also check AssignedEntityID for standard/monitoring users
 func (ac *AccessContext) GetAccessibleEntityID() *uint {
 	// First try DirectEntityID (for templeadmin)
 	if ac.DirectEntityID != nil {
@@ -39,7 +38,6 @@ func (ac *AccessContext) GetAccessibleEntityID() *uint {
 
 // GetEntityIDForOperation returns the entity ID to use for operations like create/update
 func (ac *AccessContext) GetEntityIDForOperation() *uint {
-	// For operations, prefer the most specific entity ID available
 	entityID := ac.GetAccessibleEntityID()
 	if entityID != nil {
 		fmt.Printf("Using entity ID %d for operation (role: %s)\n", *entityID, ac.RoleName)
@@ -59,73 +57,34 @@ func (ac *AccessContext) CanRead() bool {
 	return ac.PermissionType == "full" || ac.PermissionType == "readonly"
 }
 
-// CanAccessEntity checks if the user can access a specific entity
+// CanAccessEntity checks if the user can access a specific entity.
+// FIXED: standarduser/monitoringuser with a valid TenantID are allowed through.
+// The actual entity-to-tenant ownership check happens at the DB/handler level.
 func (ac *AccessContext) CanAccessEntity(entityID uint) bool {
 	// SuperAdmin can access any entity
 	if ac.RoleName == RoleSuperAdmin {
 		return true
 	}
 
-	// Check if this entity matches user's accessible entity
+	// Check direct entity ID match (works for templeadmin, devotee, volunteer)
 	accessibleEntityID := ac.GetAccessibleEntityID()
 	if accessibleEntityID != nil && *accessibleEntityID == entityID {
+		return true
+	}
+
+	// For standarduser/monitoringuser:
+	// They are assigned to a TENANT (not directly to an entity).
+	// If they have a valid TenantID, allow them through here.
+	// The handler/DB layer is responsible for verifying the entity belongs to their tenant.
+	if (ac.RoleName == RoleStandardUser || ac.RoleName == RoleMonitoringUser) && ac.TenantID > 0 {
 		return true
 	}
 
 	return false
 }
 
-/*
-// ResolveAccessContext helper to create access context from user and assignment
-func ResolveAccessContext(user interface{}, assignedTenantID *uint) AccessContext {
-	// Type assertion to get the auth.User fields we need
-	var userID uint
-	var roleName string
-	var entityID *uint
-
-	// This approach allows the function to work without directly importing auth
-	// which helps prevent import cycles
-	switch u := user.(type) {
-	case struct {
-		ID       uint
-		RoleName string
-		EntityID *uint
-	}:
-		userID = u.ID
-		roleName = u.RoleName
-		entityID = u.EntityID
-	default:
-		// Try to extract using reflection or other methods
-		// For now, return a minimal context
-		return AccessContext{
-			PermissionType: "readonly",
-		}
-	}
-
-	accessContext := AccessContext{
-		UserID:         userID,
-		RoleName:       roleName,
-		DirectEntityID: entityID,
-		PermissionType: "full", // default
-
-	}
-
-	// If user is standarduser or monitoringuser with assigned tenant
-	if assignedTenantID != nil {
-		accessContext.AssignedEntityID = assignedTenantID
-
-		// Set permission type based on role
-		if roleName == RoleMonitoringUser {
-			accessContext.PermissionType = "readonly"
-		}
-	}
-
-	return accessContext
-}*/
-
 // ExtractTenantIDFromContext extracts tenant ID from the access context
 func ExtractTenantIDFromContext(c *gin.Context) *uint {
-	// Use access context instead of header
 	if accessCtxVal, exists := c.Get("access_context"); exists {
 		if ctx, ok := accessCtxVal.(AccessContext); ok {
 			if ctx.TenantID > 0 {
@@ -133,7 +92,6 @@ func ExtractTenantIDFromContext(c *gin.Context) *uint {
 			}
 		}
 	}
-
 	return nil
 }
 

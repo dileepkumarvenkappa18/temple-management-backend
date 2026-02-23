@@ -17,7 +17,6 @@ type Repository interface {
 	GetBookingByOrderID(ctx context.Context, orderID string) (*SevaBooking, error)
 	UpdateSevaBooking(ctx context.Context, booking *SevaBooking) error
 
-
 	// Enhanced seva listing with filters
 	GetSevasWithFilters(ctx context.Context, entityID uint, sevaType, search, status string, limit, offset int) ([]Seva, int64, error)
 
@@ -43,9 +42,11 @@ type Repository interface {
 	GetBookingByID(ctx context.Context, bookingID uint) (*SevaBooking, error)
 	SearchBookingsWithFilters(ctx context.Context, filter BookingFilter) ([]DetailedBooking, int64, error)
 	CountBookingsByStatus(ctx context.Context, entityID uint) (BookingStatusCounts, error)
+	GetTenantIDByEntityID(entityID uint) (uint, error)
 
 	ListPaginatedSevas(ctx context.Context, entityID uint, sevaType string, search string, limit int, offset int) ([]Seva, error)
 }
+
 
 type repository struct {
 	db *gorm.DB
@@ -235,7 +236,7 @@ func (r *repository) GetApprovedBookingsCountPerSeva(ctx context.Context, entity
 		SevaID uint  `gorm:"column:seva_id"`
 		Count  int64 `gorm:"column:count"`
 	}
-	
+
 	var results []Result
 	err := r.db.WithContext(ctx).
 		Model(&SevaBooking{}).
@@ -243,17 +244,17 @@ func (r *repository) GetApprovedBookingsCountPerSeva(ctx context.Context, entity
 		Where("entity_id = ? AND status = ?", entityID, "approved").
 		Group("seva_id").
 		Scan(&results).Error
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Convert to map
 	countMap := make(map[uint]int64)
 	for _, r := range results {
 		countMap[r.SevaID] = r.Count
 	}
-	
+
 	return countMap, nil
 }
 
@@ -351,7 +352,7 @@ func (r *repository) SearchBookingsWithFilters(ctx context.Context, filter Booki
 // Get Counts by Status
 func (r *repository) CountBookingsByStatus(ctx context.Context, entityID uint) (BookingStatusCounts, error) {
 	var counts BookingStatusCounts
-	
+
 	// Initialize counts to zero
 	counts.Total = 0
 	counts.Approved = 0
@@ -367,7 +368,7 @@ func (r *repository) CountBookingsByStatus(ctx context.Context, entityID uint) (
 		WHERE entity_id = ? 
 		GROUP BY status
 	`, entityID).Rows()
-	
+
 	if err != nil {
 		return counts, err
 	}
@@ -392,6 +393,7 @@ func (r *repository) CountBookingsByStatus(ctx context.Context, entityID uint) (
 
 	return counts, nil
 }
+
 // GetBookingByOrderID retrieves a booking by Razorpay order ID
 func (r *repository) GetBookingByOrderID(ctx context.Context, orderID string) (*SevaBooking, error) {
 	var booking SevaBooking
@@ -405,4 +407,15 @@ func (r *repository) GetBookingByOrderID(ctx context.Context, orderID string) (*
 func (r *repository) UpdateSevaBooking(ctx context.Context, booking *SevaBooking) error {
 	return r.db.WithContext(ctx).Save(booking).Error
 }
-
+// GetTenantIDByEntityID returns the tenant (created_by) for a given entity.
+func (r *repository) GetTenantIDByEntityID(entityID uint) (uint, error) {
+	var createdBy uint
+	err := r.db.Table("entities").
+		Select("created_by").
+		Where("id = ?", entityID).
+		Scan(&createdBy).Error
+	if err != nil {
+		return 0, err
+	}
+	return createdBy, nil
+}
