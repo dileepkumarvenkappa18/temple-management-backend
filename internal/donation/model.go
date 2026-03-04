@@ -13,7 +13,6 @@ const (
 	StatusFailed  = "FAILED"
 )
 
-// DonationMethod types (optional use, useful for validations/stats)
 const (
 	MethodUPI        = "UPI"
 	MethodCard       = "CARD"
@@ -21,7 +20,6 @@ const (
 	MethodWallet     = "WALLET"
 )
 
-// DonationType values — for clarity in filtering/analytics
 const (
 	TypeGeneral      = "general"
 	TypeSeva         = "seva"
@@ -33,33 +31,32 @@ const (
 	TypeMaintenance  = "maintenance"
 )
 
-// Donation represents a donation transaction via Razorpay
 type Donation struct {
 	ID uint `gorm:"primaryKey" json:"id"`
 
-	UserID   uint `gorm:"not null;index" json:"user_id"`     // Devotee who donated
-	EntityID uint `gorm:"not null;index" json:"entity_id"`   // Temple ID
+	UserID   uint `gorm:"not null;index" json:"user_id"`   // Devotee who donated
+	EntityID uint `gorm:"not null;index" json:"entity_id"` // Temple ID
 
-	Amount       float64 `gorm:"type:decimal(10,2);not null" json:"amount"`     // Amount in INR (₹)
-	DonationType string  `gorm:"size:50;index" json:"donation_type"`            // general, seva, event, etc.
-	ReferenceID  *uint   `gorm:"index" json:"reference_id,omitempty"`           // Links to seva/event ID if needed
+	Amount       float64 `gorm:"type:decimal(10,2);not null" json:"amount"`
+	DonationType string  `gorm:"size:50;index" json:"donation_type"`
+	ReferenceID  *uint   `gorm:"index" json:"reference_id,omitempty"`
 
-	Method string `gorm:"size:50;not null;index" json:"method"`                 // Razorpay method used (UPI, CARD, etc.)
-	Status string `gorm:"size:20;default:'PENDING';index" json:"status"`        // PENDING, SUCCESS, FAILED
+	Method string `gorm:"size:50;not null;index" json:"method"`
+	Status string `gorm:"size:20;default:'PENDING';index" json:"status"`
 
+	// FIX: json tags match what DonationWithUser returns so both are consistent
 	OrderID   string  `gorm:"size:100;uniqueIndex" json:"transactionId"`
-    PaymentID *string `gorm:"size:100;index" json:"paymentId,omitempty"`
+	PaymentID *string `gorm:"size:100;index" json:"paymentId,omitempty"`
 
-	Note *string `gorm:"type:text" json:"note,omitempty"`                       // Optional donor message/intention
+	Note *string `gorm:"type:text" json:"note,omitempty"`
 
-	// 🔹 BANK DETAILS (ADDED)
-	AccountHolderName string  `gorm:"size:255" json:"account_holder_name"`
-	AccountNumber     string  `gorm:"size:30" json:"account_number"`
-	AccountType       string  `gorm:"size:20" json:"account_type"`
-	IFSCCode          string  `gorm:"size:11" json:"ifsc_code"`
-	UPIID             *string `gorm:"size:100" json:"upi_id,omitempty"`
-	
-	DonatedAt *time.Time     `json:"donated_at,omitempty"`                      // Set only on successful payment
+	AccountHolderName string `gorm:"size:255" json:"account_holder_name"`
+	AccountNumber     string `gorm:"size:30" json:"account_number"`
+	AccountType       string `gorm:"size:20" json:"account_type"`
+	IFSCCode          string `gorm:"size:11" json:"ifsc_code"`
+	UPIID             string `gorm:"size:100" json:"upi_id"` // FIX: was *string, now string
+
+	DonatedAt *time.Time     `json:"donated_at,omitempty"` // Set only on successful payment
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`

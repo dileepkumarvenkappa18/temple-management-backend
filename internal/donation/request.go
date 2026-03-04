@@ -3,79 +3,104 @@ package donation
 import "time"
 
 // ==============================
-// DTOs and Request/Response Models - FIXED + AUDIT SUPPORT
+// DTOs and Request/Response Models
 // ==============================
 
 // CreateDonationRequest is sent by frontend to initiate a donation
 type CreateDonationRequest struct {
-	UserID       uint    `json:"-"`                             // Filled from JWT claims
-	EntityID     uint    `json:"-"`                             // Set from user context
-	Amount       float64 `json:"amount" binding:"required,gt=0"` // Donation amount in INR
-	DonationType string  `json:"donationType" binding:"required,oneof=general seva event festival construction annadanam education maintenance"`
-	ReferenceID  *uint   `json:"referenceID,omitempty"`          // Optional: SevaID or EventID
-	Note         *string `json:"note,omitempty"`                 // Optional donor message
-	IPAddress    string  `json:"-"`                             // ✅ NEW: For audit logging (filled from middleware)
+	UserID       uint    `json:"-"`                                                                                                  // Filled from JWT claims
+	EntityID     uint    `json:"-"`                                                                                                  // Set from user context
+	Amount       float64 `json:"amount" binding:"required,gt=0"`                                                                     // Donation amount in INR
+	DonationType string  `json:"donationType" binding:"required,oneof=general seva event festival construction annadanam education maintenance"` // Donation type
+	ReferenceID  *uint   `json:"referenceID,omitempty"`                                                                              // Optional: SevaID or EventID
+	Note         *string `json:"note,omitempty"`                                                                                     // Optional donor message
+	IPAddress    string  `json:"-"`                                                                                                  // For audit logging (filled from middleware)
 }
 
 // CreateDonationResponse is returned to frontend after creating Razorpay order
+// CreateDonationResponse is returned to frontend after creating Razorpay order
 type CreateDonationResponse struct {
-	OrderID     string  `json:"order_id"`       // Razorpay order ID
-	Amount      float64 `json:"amount"`         // Donation amount in INR
-	Currency    string  `json:"currency"`       // Currency, always "INR"
-	RazorpayKey string  `json:"razorpay_key"`   // Razorpay key for client-side SDK
+	OrderID     string             `json:"order_id"`
+	Amount      float64            `json:"amount"`
+	Currency    string             `json:"currency"`
+	RazorpayKey string             `json:"razorpay_key"`
+	Tenant      TenantPaymentInfo  `json:"tenant"`
 }
 
-// VerifyPaymentRequest is used by frontend to confirm payment success
+// TenantPaymentInfo holds the tenant's registered bank details
+// shown to the devotee on the payment page
+type TenantPaymentInfo struct {
+	AccountHolderName string `json:"account_holder_name"`
+	AccountNumber     string `json:"account_number"`
+	BankName          string `json:"bank_name"`
+	BranchName        string `json:"branch_name"`
+	IFSCCode          string `json:"ifsc_code"`
+	AccountType       string `json:"account_type"`
+	UPIID             string `json:"upi_id"`
+}
+
+// VerifyPaymentRequest is used by frontend to confirm payment success.
+// Frontend sends: { paymentID, orderID, razorpaySig } — these match the json tags below ✅
 type VerifyPaymentRequest struct {
-	OrderID      string `json:"orderID" binding:"required"`            // Razorpay order ID
-	PaymentID    string `json:"paymentID" binding:"required"`          // Razorpay payment ID
-	RazorpaySig  string `json:"razorpaySig" binding:"required"`        // Signature to verify payment
-	IPAddress    string `json:"-"`                                     // ✅ NEW: For audit logging (filled from middleware)
+	OrderID     string `json:"orderID" binding:"required"`     // Razorpay order ID from frontend
+	PaymentID   string `json:"paymentID" binding:"required"`   // Razorpay payment ID from frontend
+	RazorpaySig string `json:"razorpaySig" binding:"required"` // Signature to verify payment
+	IPAddress   string `json:"-"`                              // For audit logging (filled from middleware)
 }
 
-// DonationWithUser includes user and entity information - FIXED FIELD MAPPING
+// DonationWithUser includes user and entity information returned to the frontend.
+//
+// JSON tag mapping (critical — frontend relies on these exact keys):
+//
+//	OrderID    -> "transactionId"  (frontend getOrderId() checks donation.transactionId ✅)
+//	PaymentID  -> "paymentId"      (frontend getPaymentId() checks donation.paymentId ✅)
+//	Method     -> "paymentMethod"  AND "method" (both exported for frontend compatibility)
+//	UPIID      -> "upi_id"        (changed to string to avoid null JSON, empty string is safe ✅)
 type DonationWithUser struct {
 	ID           uint      `json:"id" db:"id"`
 	UserID       uint      `json:"user_id" db:"user_id"`
 	EntityID     uint      `json:"entity_id" db:"entity_id"`
 	Amount       float64   `json:"amount" db:"amount"`
-	DonationType string    `json:"donationType" db:"donation_type"`      // FIXED: proper mapping
+	DonationType string    `json:"donationType" db:"donation_type"`
 	ReferenceID  *uint     `json:"referenceID,omitempty" db:"reference_id"`
-	Method       string    `json:"paymentMethod" db:"method"`            // FIXED: proper mapping
+	Method       string    `json:"paymentMethod" db:"method"` // primary JSON key: paymentMethod
 	Status       string    `json:"status" db:"status"`
-	OrderID      string    `json:"transactionId" db:"order_id"`          // FIXED: proper mapping
-	PaymentID    *string   `json:"paymentId,omitempty" db:"payment_id"`
+	OrderID      string    `json:"transactionId" db:"order_id"` // frontend getOrderId() looks for transactionId ✅
+	PaymentID    *string   `json:"paymentId,omitempty" db:"payment_id"` // frontend getPaymentId() looks for paymentId ✅
 	Note         *string   `json:"note,omitempty" db:"note"`
-	DonatedAt    *time.Time `json:"donatedAt,omitempty" db:"donated_at"`  // FIXED: proper field
-	CreatedAt    time.Time `json:"created_at" db:"created_at"`           // FIXED: show date properly
-	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
-	
-	// User information - FIXED FIELD NAMES
-	UserName  string `json:"userName" db:"user_name"`                   // FIXED: proper mapping
-	UserEmail string `json:"userEmail" db:"user_email"`                 // FIXED: proper mapping
-	
-	// Entity information - FIXED FIELD NAME
-	EntityName string `json:"entityName" db:"entity_name"`              // FIXED: proper mapping
-	
-	// Additional computed fields for consistency
-	Date           time.Time `json:"date" db:"created_at"`               // FIXED: show donation date
-	Type           string    `json:"type" db:"donation_type"`           // FIXED: show donation type
-	DonorName      string    `json:"donorName" db:"user_name"`          // FIXED: donor info
-	DonorEmail     string    `json:"donorEmail" db:"user_email"`        // FIXED: donor info
-	PaymentMethod  string    `json:"method" db:"method"`                // FIXED: payment method
+	DonatedAt    *time.Time `json:"donatedAt,omitempty" db:"donated_at"`
+	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
 
-	// 🔹 NEW: Bank details (from donations table)
-	AccountHolderName string  `json:"account_holder_name"`
-	AccountNumber     string  `json:"account_number"`
-	AccountType       string  `json:"account_type"`
-	IFSCCode          string  `json:"ifsc_code"`
-	UPIID             *string `json:"upi_id"`
+	// User information
+	UserName  string `json:"userName" db:"user_name"`
+	UserEmail string `json:"userEmail" db:"user_email"`
+
+	// Entity information
+	EntityName string `json:"entityName" db:"entity_name"`
+
+	// Computed aliases for frontend compatibility
+	Date          time.Time `json:"date" db:"created_at"`
+	Type          string    `json:"type" db:"donation_type"`
+	DonorName     string    `json:"donorName" db:"user_name"`
+	DonorEmail    string    `json:"donorEmail" db:"user_email"`
+	PaymentMethod string    `json:"method" db:"method"` // secondary alias: method
+
+	// FIX: Payment/bank details stored about the PAYEE (temple/merchant), NOT the payer.
+	// These are populated from the temple's registered bank details via entityRepo.
+	// account_holder_name = temple's registered account holder name (NOT the donor's name/UPI)
+	AccountHolderName string `json:"account_holder_name" db:"account_holder_name"`
+	AccountNumber     string `json:"account_number" db:"account_number"`
+	AccountType       string `json:"account_type" db:"account_type"`
+	IFSCCode          string `json:"ifsc_code" db:"ifsc_code"`
+	// FIX: Changed from *string to string so JSON never emits null (frontend getField checks for null/empty) ✅
+	UPIID string `json:"upi_id" db:"upi_id"`
 }
 
 // DonationFilters for filtering and pagination
 type DonationFilters struct {
 	EntityID  uint       `json:"entity_id"`
-	UserID    uint		`json:"user_id,omitempty"`
+	UserID    uint       `json:"user_id,omitempty"`
 	Status    string     `json:"status,omitempty"`
 	Type      string     `json:"type,omitempty"`
 	Method    string     `json:"method,omitempty"`
@@ -88,18 +113,19 @@ type DonationFilters struct {
 	Limit     int        `json:"limit"`
 }
 
-// UpdatePaymentDetailsParams for updating payment information
+// UpdatePaymentDetailsParams for updating payment information after Razorpay callback
 type UpdatePaymentDetailsParams struct {
-    Status            string
-    PaymentID         *string
-    Method            string
-    Amount            float64
-    DonatedAt         *time.Time
-    AccountHolderName string  // ✅ ADD if missing
-    AccountNumber     string  // ✅ ADD if missing
-    AccountType       string  // ✅ ADD if missing
-    IFSCCode          string  // ✅ ADD if missing
-    UPIID             string  // ✅ ADD if missing
+	Status    string
+	PaymentID *string
+	Method    string
+	Amount    float64
+	DonatedAt *time.Time
+	// Payee details — must be the TEMPLE's info, not the payer/donor's info
+	AccountHolderName string // Temple's registered account holder name
+	AccountNumber     string // Temple's account number or UPI ID
+	AccountType       string // UPI / CARD / BANK_TRANSFER / WALLET etc.
+	IFSCCode          string // Temple's IFSC code
+	UPIID             string // Temple's UPI ID
 }
 
 // ==============================
@@ -189,13 +215,13 @@ type DonationListResponse struct {
 	Success    bool               `json:"success"`
 }
 
-// RecentDonation represents recent donation info - FIXED FOR USER-SPECIFIC DATA
+// RecentDonation represents recent donation info
 type RecentDonation struct {
 	Amount       float64   `json:"amount" db:"amount"`
 	DonationType string    `json:"donation_type" db:"donation_type"`
 	Method       string    `json:"method" db:"method"`
 	Status       string    `json:"status" db:"status"`
 	DonatedAt    time.Time `json:"donated_at" db:"donated_at"`
-	UserName     string    `json:"user_name" db:"user_name"`      // FIXED: Include user info
-	EntityName   string    `json:"entity_name" db:"entity_name"`  // FIXED: Include entity info
+	UserName     string    `json:"user_name" db:"user_name"`
+	EntityName   string    `json:"entity_name" db:"entity_name"`
 }

@@ -31,10 +31,6 @@ type Config struct {
 	RedisPassword string
 	RedisDB       int
 
-	// ✅ Razorpay Keys
-	RazorpayKey    string
-	RazorpaySecret string
-
 	// ✅ SMTP Config
 	SMTPHost      string
 	SMTPPort      string
@@ -78,9 +74,6 @@ func Load() *Config {
 		RedisAddr:     os.Getenv("REDIS_ADDR"),
 		RedisPassword: os.Getenv("REDIS_PASSWORD"),
 		RedisDB:       redisDB,
-
-		RazorpayKey:    os.Getenv("RAZORPAY_KEY_ID"),
-		RazorpaySecret: os.Getenv("RAZORPAY_KEY_SECRET"),
 
 		SMTPHost:      os.Getenv("SMTP_HOST"),
 		SMTPPort:      os.Getenv("SMTP_PORT"),

@@ -81,6 +81,8 @@ type RegisterInput struct {
     IFSCCode          string
     AccountType       string
     UPIID             string
+	RazorpayKeyID     string
+	RazorpaySecret    string
 	LogoURL           string
 	IntroVideoURL     string
 }
@@ -148,6 +150,8 @@ func (s *service) RegisterAndReturnUser(in RegisterInput) (*User, error) {
         BranchName:        in.BranchName,
         IFSCCode:          in.IFSCCode,
         AccountType:       in.AccountType,
+		RazorpayKeyID:     in.RazorpayKeyID,
+    	RazorpaySecret:    in.RazorpaySecret,
     }
     
     // Only set UPI ID if provided
@@ -249,6 +253,12 @@ func (s *service) UpdateAccountDetails(userID uint, input UpdateAccountDetailsIn
 	if input.UPIID != "" {
 		bankUpdates["upi_id"] = input.UPIID
 	}
+	if input.RazorpayKeyID != "" {
+    bankUpdates["razorpay_key_id"] = input.RazorpayKeyID
+	}
+	if input.RazorpaySecret != "" {
+		bankUpdates["razorpay_secret"] = input.RazorpaySecret
+	}
 
 	if len(bankUpdates) > 0 {
 		if err := s.repo.UpdateBankDetails(userID, bankUpdates); err != nil {
@@ -278,6 +288,8 @@ type UpdateAccountDetailsInput struct {
 	IFSCCode          string
 	AccountType       string
 	UPIID             string
+	RazorpayKeyID     string
+	RazorpaySecret    string
 }
 func (s *service) UpdateTenantMedia(tenantID uint, logoURL, videoURL string) error {
 	updates := map[string]interface{}{}
@@ -587,6 +599,8 @@ func (s *service) GetAccountDetails(userID uint) (*AccountDetailsResponse, error
 				IFSCCode          string  `json:"ifsc_code"`
 				AccountType       string  `json:"account_type"`
 				UPIID             *string `json:"upi_id,omitempty"`
+				RazorpayKeyID     string  `json:"razorpay_key_id"`
+				RazorpaySecret    string  `json:"razorpay_secret"`
 			}{
 				AccountHolderName: bank.AccountHolderName,
 				AccountNumber:     bank.AccountNumber,
@@ -595,6 +609,8 @@ func (s *service) GetAccountDetails(userID uint) (*AccountDetailsResponse, error
 				IFSCCode:          bank.IFSCCode,
 				AccountType:       bank.AccountType,
 				UPIID:             bank.UPIID,
+				RazorpayKeyID:     bank.RazorpayKeyID,  // ✅ was missing
+				RazorpaySecret:    bank.RazorpaySecret, // ✅ was missing
 			}
 		}
 	}
@@ -629,5 +645,7 @@ type AccountDetailsResponse struct {
 		IFSCCode          string  `json:"ifsc_code"`
 		AccountType       string  `json:"account_type"`
 		UPIID             *string `json:"upi_id,omitempty"`
+		RazorpayKeyID     string  `json:"razorpay_key_id"` // ✅ ADD
+		RazorpaySecret    string  `json:"razorpay_secret"`  // ✅ ADD
 	} `json:"bank,omitempty"`
 }

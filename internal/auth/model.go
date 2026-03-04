@@ -104,7 +104,8 @@ type Tenant_BankAccountDetails struct {
 	IFSCCode          string  `gorm:"size:11;not null" json:"ifsc_code"`
 	AccountType       string  `gorm:"size:20;not null" json:"account_type"`
 	UPIID             *string `gorm:"size:100" json:"upi_id,omitempty"`
-
+	RazorpayKeyID     string  `gorm:"size:100" json:"-"`
+	RazorpaySecret    string  `gorm:"size:100" json:"-"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

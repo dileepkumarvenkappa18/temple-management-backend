@@ -124,13 +124,31 @@ func (h *Handler) CreateEntity(c *gin.Context) {
 
 	switch userRole {
 	case "superadmin":
-		tenantID, err := h.Service.Repo.GetTenantIDForUser(userID)
-		if err != nil || tenantID == 0 {
-			h.cleanupTempFiles(tempFiles)
-			c.JSON(http.StatusForbidden, gin.H{"error": "User is not assigned to any tenant"})
-			return
-		}
-		input.CreatedBy = tenantID
+
+	tenantIDStr := c.PostForm("tenant_id")
+	if tenantIDStr == "" {
+		tenantIDStr = c.Query("tenant_id")
+	}
+
+	if tenantIDStr == "" {
+		h.cleanupTempFiles(tempFiles)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "tenant_id is required for superadmin to create a temple",
+		})
+		return
+	}
+
+	tid, err := strconv.ParseUint(tenantIDStr, 10, 32)
+	if err != nil || tid == 0 {
+		h.cleanupTempFiles(tempFiles)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid tenant_id",
+		})
+		return
+	}
+
+	input.CreatedBy = uint(tid)
+
 
 	case "templeadmin":
 		input.CreatedBy = userID

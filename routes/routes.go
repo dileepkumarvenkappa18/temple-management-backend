@@ -563,8 +563,9 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 
 	// ========== Donations with New Permission System ==========
 	{
-		donationRepo := donation.NewRepository(database.DB)
-		donationService := donation.NewService(donationRepo, cfg, auditSvc)
+		donationRepo    := donation.NewRepository(database.DB)
+		entityBankRepo  := donation.NewEntityBankRepo(database.DB)
+		donationService := donation.NewServiceWithEntityRepo(donationRepo, entityBankRepo, cfg, auditSvc)
 		donationHandler := donation.NewHandler(donationService)
 		api.POST("/donations/webhook", donationHandler.HandleWebhook)
 

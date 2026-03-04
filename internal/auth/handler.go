@@ -50,6 +50,9 @@ type RegisterRequest struct {
     IFSCCode          string `form:"ifscCode" json:"ifscCode"`
     AccountType       string `form:"accountType" json:"accountType"`
     UPIID             string `form:"upiId" json:"upiId"`
+		// 🆕 Razorpay credentials
+	RazorpayKeyID  string `form:"razorpayKeyId" json:"razorpayKeyId"`
+	RazorpaySecret string `form:"razorpaySecret" json:"razorpaySecret"`
 
 	LogoURL       string `json:"logo_url"`
 	IntroVideoURL string `json:"intro_video_url"`
@@ -155,6 +158,8 @@ func (h *Handler) Register(c *gin.Context) {
     IFSCCode:          req.IFSCCode,
     AccountType:       req.AccountType,
     UPIID:             req.UPIID,
+	RazorpayKeyID:     req.RazorpayKeyID,
+	RazorpaySecret:    req.RazorpaySecret,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -588,6 +593,8 @@ func (h *Handler) UpdateAccountDetails(c *gin.Context) {
 		IFSCCode          string `json:"ifsc_code"`
 		AccountType       string `json:"account_type"`
 		UPIID             string `json:"upi_id"`
+		RazorpayKeyID     string `json:"razorpay_key_id"`
+		RazorpaySecret    string `json:"razorpay_secret"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -612,6 +619,8 @@ func (h *Handler) UpdateAccountDetails(c *gin.Context) {
 		IFSCCode:          req.IFSCCode,
 		AccountType:       req.AccountType,
 		UPIID:             req.UPIID,
+		RazorpayKeyID:     req.RazorpayKeyID,
+		RazorpaySecret:    req.RazorpaySecret,
 	}
 
 	data, err := h.service.UpdateAccountDetails(user.ID, input)

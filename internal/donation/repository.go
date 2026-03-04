@@ -16,7 +16,7 @@ type Repository interface {
 
 	// Data retrieval with filtering
 	ListByUserID(ctx context.Context, userID uint) ([]DonationWithUser, error)
-	ListByUserIDAndEntity(ctx context.Context, userID uint, entityID uint) ([]DonationWithUser, error) // NEW: Entity-based filtering for users
+	ListByUserIDAndEntity(ctx context.Context, userID uint, entityID uint) ([]DonationWithUser, error)
 	ListWithFilters(ctx context.Context, filters DonationFilters) ([]DonationWithUser, int, error)
 
 	// Analytics queries
@@ -27,10 +27,10 @@ type Repository interface {
 	GetDonationTrends(ctx context.Context, entityID uint, days int) ([]TrendData, error)
 	GetDonationsByType(ctx context.Context, entityID uint) ([]TypeData, error)
 	GetDonationsByMethod(ctx context.Context, entityID uint) ([]MethodData, error)
-	
-	// Recent donations - BOTH USER AND ENTITY with enhanced filtering
+
+	// Recent donations
 	GetRecentDonationsByUser(ctx context.Context, userID uint, limit int) ([]RecentDonation, error)
-	GetRecentDonationsByUserAndEntity(ctx context.Context, userID uint, entityID uint, limit int) ([]RecentDonation, error) // NEW: User donations within specific entity
+	GetRecentDonationsByUserAndEntity(ctx context.Context, userID uint, entityID uint, limit int) ([]RecentDonation, error)
 	GetRecentDonationsByEntity(ctx context.Context, entityID uint, limit int) ([]RecentDonation, error)
 }
 
@@ -43,7 +43,7 @@ func NewRepository(db *gorm.DB) Repository {
 }
 
 // ==============================
-// Basic CRUD Operations - UNCHANGED
+// Basic CRUD Operations
 // ==============================
 
 func (r *repository) Create(ctx context.Context, donation *Donation) error {
@@ -61,23 +61,25 @@ func (r *repository) GetByOrderID(ctx context.Context, orderID string) (*Donatio
 	return &donation, nil
 }
 
+const donationSelectFields = `
+	d.id, d.user_id, d.entity_id, d.amount, d.donation_type, d.reference_id,
+	d.method, d.status, d.order_id, d.payment_id, d.note, d.donated_at,
+	d.created_at, d.updated_at,
+	COALESCE(d.account_holder_name, '') as account_holder_name,
+	COALESCE(d.account_number, '') as account_number,
+	COALESCE(d.account_type, '') as account_type,
+	COALESCE(d.ifsc_code, '') as ifsc_code,
+	COALESCE(d.upi_id, '') as upi_id,
+	COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name,
+	COALESCE(u.email, '') as user_email,
+	COALESCE(e.name, '') as entity_name
+`
+
 func (r *repository) GetByIDWithUser(ctx context.Context, donationID uint) (*DonationWithUser, error) {
 	var result DonationWithUser
 	err := r.db.WithContext(ctx).
 		Table("donations d").
-		Select(`
-			d.id, d.user_id, d.entity_id, d.amount, d.donation_type, d.reference_id,
-			d.method, d.status, d.order_id, d.payment_id, d.note, d.donated_at,
-			d.created_at, d.updated_at,
-			d.account_holder_name,
-			d.account_number,
-			d.account_type,
-			d.ifsc_code,
-			d.upi_id,
-			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name, 
-			COALESCE(u.email, '') as user_email,
-			COALESCE(e.name, '') as entity_name
-		`).
+		Select(donationSelectFields).
 		Joins("LEFT JOIN users u ON d.user_id = u.id").
 		Joins("LEFT JOIN entities e ON d.entity_id = e.id").
 		Where("d.id = ?", donationID).
@@ -90,60 +92,39 @@ func (r *repository) GetByIDWithUser(ctx context.Context, donationID uint) (*Don
 }
 
 func (r *repository) UpdatePaymentDetails(ctx context.Context, orderID string, params UpdatePaymentDetailsParams) error {
-    updates := map[string]interface{}{
-        "status":     params.Status,
-        "payment_id": params.PaymentID,
-        "method":     params.Method,
-        "amount":     params.Amount,
-    }
+	updates := map[string]interface{}{
+		"status":     params.Status,
+		"payment_id": params.PaymentID,
+		"method":     params.Method,
+		"amount":     params.Amount,
+	}
 
-    if params.DonatedAt != nil {
-        updates["donated_at"] = params.DonatedAt
-    }
+	if params.DonatedAt != nil {
+		updates["donated_at"] = params.DonatedAt
+	}
 
-    // ✅ ADD THESE LINES
-    if params.AccountHolderName != "" {
-        updates["account_holder_name"] = params.AccountHolderName
-    }
-    if params.AccountNumber != "" {
-        updates["account_number"] = params.AccountNumber
-    }
-    if params.AccountType != "" {
-        updates["account_type"] = params.AccountType
-    }
-    if params.IFSCCode != "" {
-        updates["ifsc_code"] = params.IFSCCode
-    }
-    if params.UPIID != "" {
-        updates["upi_id"] = params.UPIID
-    }
+	// Always update payee fields (even if empty string — clears stale data)
+	updates["account_holder_name"] = params.AccountHolderName
+	updates["account_number"] = params.AccountNumber
+	updates["account_type"] = params.AccountType
+	updates["ifsc_code"] = params.IFSCCode
+	updates["upi_id"] = params.UPIID // FIX: string now, no pointer needed
 
-    return r.db.WithContext(ctx).
-        Model(&Donation{}).
-        Where("order_id = ?", orderID).
-        Updates(updates).Error
+	return r.db.WithContext(ctx).
+		Model(&Donation{}).
+		Where("order_id = ?", orderID).
+		Updates(updates).Error
 }
+
 // ==============================
-// Data Retrieval with Filtering - ENHANCED with entity-based filtering
+// Data Retrieval with Filtering
 // ==============================
 
 func (r *repository) ListByUserID(ctx context.Context, userID uint) ([]DonationWithUser, error) {
 	var donations []DonationWithUser
 	err := r.db.WithContext(ctx).
 		Table("donations d").
-		Select(`
-			d.id, d.user_id, d.entity_id, d.amount, d.donation_type, d.reference_id,
-			d.method, d.status, d.order_id, d.payment_id, d.note, d.donated_at,
-			d.created_at, d.updated_at,
-			d.account_holder_name,
-			d.account_number,
-			d.account_type,
-			d.ifsc_code,
-			d.upi_id,
-			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name, 
-			COALESCE(u.email, '') as user_email,
-			COALESCE(e.name, '') as entity_name
-		`).
+		Select(donationSelectFields).
 		Joins("LEFT JOIN users u ON d.user_id = u.id").
 		Joins("LEFT JOIN entities e ON d.entity_id = e.id").
 		Where("d.user_id = ?", userID).
@@ -153,27 +134,14 @@ func (r *repository) ListByUserID(ctx context.Context, userID uint) ([]DonationW
 	return donations, err
 }
 
-// NEW: Get donations by user filtered by specific entity - SAME PATTERN AS EVENTS
 func (r *repository) ListByUserIDAndEntity(ctx context.Context, userID uint, entityID uint) ([]DonationWithUser, error) {
 	var donations []DonationWithUser
 	err := r.db.WithContext(ctx).
 		Table("donations d").
-		Select(`
-			d.id, d.user_id, d.entity_id, d.amount, d.donation_type, d.reference_id,
-			d.method, d.status, d.order_id, d.payment_id, d.note, d.donated_at,
-			d.created_at, d.updated_at,
-			d.account_holder_name,
-			d.account_number,
-			d.account_type,
-			d.ifsc_code,
-			d.upi_id,
-			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name, 
-			COALESCE(u.email, '') as user_email,
-			COALESCE(e.name, '') as entity_name
-		`).
+		Select(donationSelectFields).
 		Joins("LEFT JOIN users u ON d.user_id = u.id").
 		Joins("LEFT JOIN entities e ON d.entity_id = e.id").
-		Where("d.user_id = ? AND d.entity_id = ?", userID, entityID). // NEW: Entity-based filtering
+		Where("d.user_id = ? AND d.entity_id = ?", userID, entityID).
 		Order("d.created_at DESC").
 		Find(&donations).Error
 
@@ -184,46 +152,28 @@ func (r *repository) ListWithFilters(ctx context.Context, filters DonationFilter
 	var donations []DonationWithUser
 	var total int64
 
-	// Build base query with proper field selection
 	query := r.db.WithContext(ctx).
 		Table("donations d").
-		Select(`
-			d.id, d.user_id, d.entity_id, d.amount, d.donation_type, d.reference_id,
-			d.method, d.status, d.order_id, d.payment_id, d.note, d.donated_at,
-			d.created_at, d.updated_at,
-			d.account_holder_name,
-			d.account_number,
-			d.account_type,
-			d.ifsc_code,
-			d.upi_id,
-			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name, 
-			COALESCE(u.email, '') as user_email,
-			COALESCE(e.name, '') as entity_name
-		`).
+		Select(donationSelectFields).
 		Joins("LEFT JOIN users u ON d.user_id = u.id").
 		Joins("LEFT JOIN entities e ON d.entity_id = e.id")
 
-	// 🔒 UPDATED LOGIC: Apply filters based on what's provided
+	// Role-based filtering
 	if filters.EntityID != 0 && filters.UserID != 0 {
-		// Both filters: user's donations within specific entity (for devotees)
 		query = query.Where("d.entity_id = ? AND d.user_id = ?", filters.EntityID, filters.UserID)
 	} else if filters.EntityID != 0 {
-		// Entity only: all donations for entity (for admins)
 		query = query.Where("d.entity_id = ?", filters.EntityID)
 	} else if filters.UserID != 0 {
-		// User only: all user's donations across entities
 		query = query.Where("d.user_id = ?", filters.UserID)
 	}
 
-	// Apply other filters
 	query = r.applyFilters(query, filters)
 
-	// Count total records
+	// Count query
 	countQuery := r.db.WithContext(ctx).
 		Table("donations d").
 		Joins("LEFT JOIN users u ON d.user_id = u.id")
-	
-	// 🔒 UPDATED LOGIC: Apply same filters to count query
+
 	if filters.EntityID != 0 && filters.UserID != 0 {
 		countQuery = countQuery.Where("d.entity_id = ? AND d.user_id = ?", filters.EntityID, filters.UserID)
 	} else if filters.EntityID != 0 {
@@ -231,11 +181,10 @@ func (r *repository) ListWithFilters(ctx context.Context, filters DonationFilter
 	} else if filters.UserID != 0 {
 		countQuery = countQuery.Where("d.user_id = ?", filters.UserID)
 	}
-	
+
 	countQuery = r.applyFilters(countQuery, filters)
 	countQuery.Count(&total)
 
-	// Apply pagination and ordering
 	if filters.Page > 0 && filters.Limit > 0 {
 		offset := (filters.Page - 1) * filters.Limit
 		query = query.Offset(offset).Limit(filters.Limit)
@@ -246,38 +195,27 @@ func (r *repository) ListWithFilters(ctx context.Context, filters DonationFilter
 }
 
 func (r *repository) applyFilters(query *gorm.DB, filters DonationFilters) *gorm.DB {
-	// Status filter
 	if filters.Status != "" && filters.Status != "all" {
 		query = query.Where("LOWER(d.status) = LOWER(?)", filters.Status)
 	}
-
-	// Type filter
 	if filters.Type != "" && filters.Type != "all" {
 		query = query.Where("LOWER(d.donation_type) = LOWER(?)", filters.Type)
 	}
-
-	// Method filter
 	if filters.Method != "" && filters.Method != "all" {
 		query = query.Where("LOWER(d.method) = LOWER(?)", filters.Method)
 	}
-
-	// Date range filters
 	if filters.From != nil {
 		query = query.Where("d.created_at >= ?", filters.From)
 	}
 	if filters.To != nil {
 		query = query.Where("d.created_at <= ?", filters.To)
 	}
-
-	// Amount range filters
 	if filters.MinAmount != nil {
 		query = query.Where("d.amount >= ?", *filters.MinAmount)
 	}
 	if filters.MaxAmount != nil {
 		query = query.Where("d.amount <= ?", *filters.MaxAmount)
 	}
-
-	// Search filter
 	if filters.Search != "" {
 		searchTerm := "%" + filters.Search + "%"
 		query = query.Where(`
@@ -287,12 +225,11 @@ func (r *repository) applyFilters(query *gorm.DB, filters DonationFilters) *gorm
 			d.order_id ILIKE ?
 		`, searchTerm, searchTerm, searchTerm, searchTerm)
 	}
-
 	return query
 }
 
 // ==============================
-// Analytics Queries - UNCHANGED (Already entity-based)
+// Analytics Queries
 // ==============================
 
 func (r *repository) GetTotalStats(ctx context.Context, entityID uint) (*StatsResult, error) {
@@ -308,7 +245,6 @@ func (r *repository) GetTotalStats(ctx context.Context, entityID uint) (*StatsRe
 		`).
 		Where("entity_id = ?", entityID).
 		Scan(&result).Error
-
 	return &result, err
 }
 
@@ -325,7 +261,6 @@ func (r *repository) GetStatsInDateRange(ctx context.Context, entityID uint, fro
 		`).
 		Where("entity_id = ? AND created_at >= ? AND created_at <= ?", entityID, from, to).
 		Scan(&result).Error
-
 	return &result, err
 }
 
@@ -336,7 +271,6 @@ func (r *repository) GetUniqueDonorCount(ctx context.Context, entityID uint) (in
 		Where("entity_id = ? AND LOWER(status) = 'success'", entityID).
 		Distinct("user_id").
 		Count(&count).Error
-
 	return int(count), err
 }
 
@@ -345,9 +279,9 @@ func (r *repository) GetTopDonors(ctx context.Context, entityID uint, limit int)
 	err := r.db.WithContext(ctx).
 		Table("donations d").
 		Select(`
-			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as name, 
-			COALESCE(u.email, '') as email, 
-			SUM(d.amount) as total_amount, 
+			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as name,
+			COALESCE(u.email, '') as email,
+			SUM(d.amount) as total_amount,
 			COUNT(d.id) as donation_count
 		`).
 		Joins("JOIN users u ON d.user_id = u.id").
@@ -356,14 +290,11 @@ func (r *repository) GetTopDonors(ctx context.Context, entityID uint, limit int)
 		Order("total_amount DESC").
 		Limit(limit).
 		Scan(&donors).Error
-
 	return donors, err
 }
 
 func (r *repository) GetDonationTrends(ctx context.Context, entityID uint, days int) ([]TrendData, error) {
 	var trends []TrendData
-
-	// Get date range
 	endDate := time.Now()
 	startDate := endDate.AddDate(0, 0, -days)
 
@@ -378,7 +309,6 @@ func (r *repository) GetDonationTrends(ctx context.Context, entityID uint, days 
 		Group("DATE(created_at)").
 		Order("date ASC").
 		Scan(&trends).Error
-
 	return trends, err
 }
 
@@ -395,7 +325,6 @@ func (r *repository) GetDonationsByType(ctx context.Context, entityID uint) ([]T
 		Group("donation_type").
 		Order("amount DESC").
 		Scan(&typeData).Error
-
 	return typeData, err
 }
 
@@ -412,24 +341,25 @@ func (r *repository) GetDonationsByMethod(ctx context.Context, entityID uint) ([
 		Group("method").
 		Order("amount DESC").
 		Scan(&methodData).Error
-
 	return methodData, err
 }
 
 // ==============================
-// Recent Donations - ENHANCED with entity-based filtering
+// Recent Donations
 // ==============================
+
+const recentDonationSelect = `
+	d.amount, d.donation_type, d.method, d.status,
+	COALESCE(d.donated_at, d.created_at) as donated_at,
+	COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name,
+	COALESCE(e.name, '') as entity_name
+`
 
 func (r *repository) GetRecentDonationsByUser(ctx context.Context, userID uint, limit int) ([]RecentDonation, error) {
 	var recent []RecentDonation
 	err := r.db.WithContext(ctx).
 		Table("donations d").
-		Select(`
-			d.amount, d.donation_type, d.method, d.status, 
-			COALESCE(d.donated_at, d.created_at) as donated_at,
-			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name,
-			COALESCE(e.name, '') as entity_name
-		`).
+		Select(recentDonationSelect).
 		Joins("LEFT JOIN users u ON d.user_id = u.id").
 		Joins("LEFT JOIN entities e ON d.entity_id = e.id").
 		Where("d.user_id = ?", userID).
@@ -439,20 +369,14 @@ func (r *repository) GetRecentDonationsByUser(ctx context.Context, userID uint, 
 	return recent, err
 }
 
-// NEW: Get recent donations by user filtered by entity - SAME PATTERN AS EVENTS
 func (r *repository) GetRecentDonationsByUserAndEntity(ctx context.Context, userID uint, entityID uint, limit int) ([]RecentDonation, error) {
 	var recent []RecentDonation
 	err := r.db.WithContext(ctx).
 		Table("donations d").
-		Select(`
-			d.amount, d.donation_type, d.method, d.status, 
-			COALESCE(d.donated_at, d.created_at) as donated_at,
-			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name,
-			COALESCE(e.name, '') as entity_name
-		`).
+		Select(recentDonationSelect).
 		Joins("LEFT JOIN users u ON d.user_id = u.id").
 		Joins("LEFT JOIN entities e ON d.entity_id = e.id").
-		Where("d.user_id = ? AND d.entity_id = ?", userID, entityID). // NEW: Entity-based filtering
+		Where("d.user_id = ? AND d.entity_id = ?", userID, entityID).
 		Order("COALESCE(d.donated_at, d.created_at) DESC").
 		Limit(limit).
 		Scan(&recent).Error
@@ -463,15 +387,10 @@ func (r *repository) GetRecentDonationsByEntity(ctx context.Context, entityID ui
 	var recent []RecentDonation
 	err := r.db.WithContext(ctx).
 		Table("donations d").
-		Select(`
-			d.amount, d.donation_type, d.method, d.status, 
-			COALESCE(d.donated_at, d.created_at) as donated_at,
-			COALESCE(NULLIF(u.full_name, ''), u.email, 'Anonymous') as user_name,
-			COALESCE(e.name, '') as entity_name
-		`).
+		Select(recentDonationSelect).
 		Joins("LEFT JOIN users u ON d.user_id = u.id").
 		Joins("LEFT JOIN entities e ON d.entity_id = e.id").
-		Where("d.entity_id = ?", entityID). // Filter by entity instead of user
+		Where("d.entity_id = ?", entityID).
 		Order("COALESCE(d.donated_at, d.created_at) DESC").
 		Limit(limit).
 		Scan(&recent).Error

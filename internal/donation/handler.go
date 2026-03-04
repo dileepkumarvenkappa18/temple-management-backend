@@ -1,7 +1,6 @@
 package donation
 
 import (
-	//"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,7 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
+		"os"
 	"strconv"
 	"time"
 
@@ -17,84 +16,63 @@ import (
 	"github.com/sharath018/temple-management-backend/middleware"
 )
 
-// Handler represents the donation HTTP handler
 type Handler struct {
 	svc Service
 }
 
-// NewHandler creates a new donation handler
 func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// ===========================
-// 📌 Extract Access Context
 func getAccessContextFromContext(c *gin.Context) (middleware.AccessContext, bool) {
 	accessContextRaw, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
 		return middleware.AccessContext{}, false
 	}
-
 	accessContext, ok := accessContextRaw.(middleware.AccessContext)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid access context"})
 		return middleware.AccessContext{}, false
 	}
-
 	return accessContext, true
 }
 
-
 func getEntityIDFromRequest(c *gin.Context, accessContext middleware.AccessContext) (uint, error) {
-	// Try URL parameter first
-	entityIDParam := c.Param("entity_id")
-	if entityIDParam != "" {
+	if entityIDParam := c.Param("entity_id"); entityIDParam != "" {
 		id, err := strconv.ParseUint(entityIDParam, 10, 32)
 		if err == nil {
 			return uint(id), nil
 		}
 	}
-
-	// Try query parameter next
-	entityIDQuery := c.Query("entity_id")
-	if entityIDQuery != "" {
+	if entityIDQuery := c.Query("entity_id"); entityIDQuery != "" {
 		id, err := strconv.ParseUint(entityIDQuery, 10, 32)
 		if err == nil {
 			return uint(id), nil
 		}
 	}
-
-	// Fall back to access context (from JWT token)
-	contextEntityID := accessContext.GetAccessibleEntityID()
-	if contextEntityID != nil {
+	if contextEntityID := accessContext.GetAccessibleEntityID(); contextEntityID != nil {
 		return *contextEntityID, nil
 	}
-
 	return 0, nil
 }
 
-// ==============================
-// 🌟 1. Create Donation
-// ==============================
+
 func (h *Handler) CreateDonation(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
 	if !ok {
 		return
 	}
-
 	entityID, err := getEntityIDFromRequest(c, accessContext)
 	if err != nil || entityID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
 		return
 	}
-
 	var req CreateDonationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
 	req.UserID = accessContext.UserID
 	req.EntityID = entityID
 	req.IPAddress = middleware.GetIPFromContext(c)
@@ -104,11 +82,7 @@ func (h *Handler) CreateDonation(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"data":    order,
-		"success": true,
-	})
+	c.JSON(http.StatusOK, gin.H{"data": order, "success": true})
 }
 
 func (h *Handler) VerifyDonation(c *gin.Context) {
@@ -117,18 +91,12 @@ func (h *Handler) VerifyDonation(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
 	req.IPAddress = middleware.GetIPFromContext(c)
-
 	if err := h.svc.VerifyAndUpdateDonation(req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Donation verification initiated",
-		"success": true,
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "Donation verified successfully", "success": true})
 }
 
 // ==============================
