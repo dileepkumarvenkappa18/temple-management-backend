@@ -2,9 +2,12 @@ package seva
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
+	"github.com/sharath018/temple-management-backend/internal/auth"
 )
 
 type Repository interface {
@@ -16,6 +19,7 @@ type Repository interface {
 	DeleteSeva(ctx context.Context, id uint) error
 	GetBookingByOrderID(ctx context.Context, orderID string) (*SevaBooking, error)
 	UpdateSevaBooking(ctx context.Context, booking *SevaBooking) error
+	GetRazorpayKeysByEntityID(entityID uint) (string, string, error)
 
 	// Enhanced seva listing with filters
 	GetSevasWithFilters(ctx context.Context, entityID uint, sevaType, search, status string, limit, offset int) ([]Seva, int64, error)
@@ -407,6 +411,7 @@ func (r *repository) GetBookingByOrderID(ctx context.Context, orderID string) (*
 func (r *repository) UpdateSevaBooking(ctx context.Context, booking *SevaBooking) error {
 	return r.db.WithContext(ctx).Save(booking).Error
 }
+
 // GetTenantIDByEntityID returns the tenant (created_by) for a given entity.
 func (r *repository) GetTenantIDByEntityID(entityID uint) (uint, error) {
 	var createdBy uint
@@ -418,4 +423,30 @@ func (r *repository) GetTenantIDByEntityID(entityID uint) (uint, error) {
 		return 0, err
 	}
 	return createdBy, nil
+}
+func (r *repository) GetRazorpayKeysByEntityID(entityID uint) (string, string, error) {
+	// Step 1: Get tenant (created_by) for this entity
+	var createdBy uint
+	if err := r.db.Table("entities").
+		Select("created_by").
+		Where("id = ?", entityID).
+		Scan(&createdBy).Error; err != nil {
+		return "", "", fmt.Errorf("entity not found: %v", err)
+	}
+	if createdBy == 0 {
+		return "", "", errors.New("entity has no associated tenant")
+	}
+
+	// Step 2: Fetch Razorpay keys from tenant's bank account details
+	var bankDetails auth.Tenant_BankAccountDetails
+	if err := r.db.Where("user_id = ?", createdBy).
+		First(&bankDetails).Error; err != nil {
+		return "", "", fmt.Errorf("bank details not found for this temple: %v", err)
+	}
+
+	if bankDetails.RazorpayKeyID == "" || bankDetails.RazorpaySecret == "" {
+		return "", "", errors.New("razorpay keys not configured for this temple")
+	}
+
+	return bankDetails.RazorpayKeyID, bankDetails.RazorpaySecret, nil
 }

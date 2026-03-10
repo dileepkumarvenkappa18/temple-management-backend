@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"os"
+	//"os"
 	"strconv"
 	"time"
 
@@ -605,10 +605,10 @@ func (h *Handler) BookSevaWithPayment(c *gin.Context) {
 		return
 	}
 
-	razorpayKey := os.Getenv("RAZORPAY_KEY_ID")
-	razorpaySecret := os.Getenv("RAZORPAY_KEY_SECRET")
-	if razorpayKey == "" || razorpaySecret == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Payment gateway not configured"})
+	// Fetch Razorpay keys from DB (per-temple, stored in tenant_bank_account_details)
+	razorpayKey, razorpaySecret, err := h.repo.GetRazorpayKeysByEntityID(input.EntityID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Payment gateway not configured for this temple: " + err.Error()})
 		return
 	}
 
@@ -670,9 +670,23 @@ func (h *Handler) VerifySevaPayment(c *gin.Context) {
 
 	user := c.MustGet("user").(auth.User)
 
-	razorpaySecret := os.Getenv("RAZORPAY_KEY_SECRET")
-	if razorpaySecret == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Payment gateway not configured"})
+	// Fetch booking first to get EntityID for per-temple Razorpay secret lookup
+	booking, err := h.repo.GetBookingByOrderID(c, input.RazorpayOrderID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "Booking not found for this order",
+		})
+		return
+	}
+
+	// Fetch Razorpay secret from DB using the booking's entity
+	_, razorpaySecret, err := h.repo.GetRazorpayKeysByEntityID(booking.EntityID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Payment gateway not configured for this temple: " + err.Error(),
+		})
 		return
 	}
 
