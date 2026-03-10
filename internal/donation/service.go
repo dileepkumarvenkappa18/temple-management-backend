@@ -284,24 +284,29 @@ func (s *service) GetDonationsWithFilters(filters DonationFilters, accessContext
 		return nil, 0, errors.New("read access denied")
 	}
 
-	if filters.EntityID != 0 && filters.UserID != 0 {
-		entityID := accessContext.GetAccessibleEntityID()
-		if entityID == nil || *entityID != filters.EntityID {
-			return nil, 0, errors.New("access denied to requested entity")
+	
+	isPrivileged := accessContext.RoleName == "superadmin" ||
+		accessContext.RoleName == "standarduser" ||
+		accessContext.RoleName == "templeadmin" ||
+		accessContext.RoleName == "monitoringuser" ||
+		accessContext.RoleName == "standard_user" ||      // ← with underscore
+    accessContext.RoleName == "monitoring_user" || 
+		accessContext.RoleName == "staff"
+
+	if !isPrivileged {
+		// For devotees and regular users, enforce entity ownership check
+		if filters.EntityID != 0 {
+			entityID := accessContext.GetAccessibleEntityID()
+			if entityID == nil || *entityID != filters.EntityID {
+				return nil, 0, errors.New("access denied to requested entity")
+			}
 		}
-		if filters.UserID != accessContext.UserID {
+		if filters.UserID != 0 && filters.UserID != accessContext.UserID {
 			return nil, 0, errors.New("access denied: cannot view other users' donations")
 		}
-	} else if filters.EntityID != 0 {
-		entityID := accessContext.GetAccessibleEntityID()
-		if entityID == nil || *entityID != filters.EntityID {
-			return nil, 0, errors.New("access denied to requested entity")
-		}
-	} else if filters.UserID != 0 {
-		if filters.UserID != accessContext.UserID {
-			return nil, 0, errors.New("access denied: cannot view other users' donations")
-		}
-	} else {
+	}
+
+	if filters.EntityID == 0 && filters.UserID == 0 {
 		return nil, 0, errors.New("either entity_id or user_id must be specified")
 	}
 
@@ -334,9 +339,18 @@ func (s *service) GetDashboardStats(entityID uint, accessContext middleware.Acce
 	if !accessContext.CanRead() {
 		return nil, errors.New("read access denied")
 	}
-	accessibleEntityID := accessContext.GetAccessibleEntityID()
-	if accessibleEntityID == nil || *accessibleEntityID != entityID {
-		return nil, errors.New("access denied to requested entity")
+
+	isPrivileged := accessContext.RoleName == "superadmin" ||
+		accessContext.RoleName == "standarduser" ||
+		accessContext.RoleName == "templeadmin" ||
+		accessContext.RoleName == "monitoringuser" ||
+		accessContext.RoleName == "staff"
+
+	if !isPrivileged {
+		accessibleEntityID := accessContext.GetAccessibleEntityID()
+		if accessibleEntityID == nil || *accessibleEntityID != entityID {
+			return nil, errors.New("access denied to requested entity")
+		}
 	}
 
 	ctx        := context.Background()
@@ -382,14 +396,24 @@ func (s *service) GetDashboardStats(entityID uint, accessContext middleware.Acce
 }
 
 func (s *service) GetTopDonors(entityID uint, limit int, accessContext middleware.AccessContext) ([]TopDonor, error) {
-	if !accessContext.CanRead() {
-		return nil, errors.New("read access denied")
-	}
-	accessibleEntityID := accessContext.GetAccessibleEntityID()
-	if accessibleEntityID == nil || *accessibleEntityID != entityID {
-		return nil, errors.New("access denied to requested entity")
-	}
-	return s.repo.GetTopDonors(context.Background(), entityID, limit)
+    if !accessContext.CanRead() {
+        return nil, errors.New("read access denied")
+    }
+
+    isPrivileged := accessContext.RoleName == "superadmin" ||
+        accessContext.RoleName == "standarduser" ||
+        accessContext.RoleName == "templeadmin" ||
+        accessContext.RoleName == "monitoringuser" ||
+        accessContext.RoleName == "staff"
+
+    if !isPrivileged {
+        accessibleEntityID := accessContext.GetAccessibleEntityID()
+        if accessibleEntityID == nil || *accessibleEntityID != entityID {
+            return nil, errors.New("access denied to requested entity")
+        }
+    }
+
+    return s.repo.GetTopDonors(context.Background(), entityID, limit)
 }
 
 func (s *service) GetAnalytics(entityID uint, days int, accessContext middleware.AccessContext) (*AnalyticsData, error) {

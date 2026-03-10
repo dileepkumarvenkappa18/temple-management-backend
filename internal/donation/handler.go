@@ -8,7 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
-		"os"
+	"os"
 	"strconv"
 	"time"
 
@@ -56,7 +56,6 @@ func getEntityIDFromRequest(c *gin.Context, accessContext middleware.AccessConte
 	}
 	return 0, nil
 }
-
 
 func (h *Handler) CreateDonation(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
@@ -128,7 +127,7 @@ func (h *Handler) GetMyDonations(c *gin.Context) {
 }
 
 // ==============================
-// 🔍 4. Get All Donations for Temple - UPDATED: Removed header fallback
+// 🔍 4. Get All Donations for Temple
 // ==============================
 func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
@@ -194,14 +193,12 @@ func (h *Handler) GetDonationsByEntity(c *gin.Context) {
 		filters.UserID = accessContext.UserID
 		filters.EntityID = entityID
 
-	case "admin", "superadmin":
-		// Admins can see all donations
+	case "admin", "superadmin", "standard_user", "standarduser", "monitoring_user", "monitoringuser":
+		// ✅ FIX: These privileged roles can see ALL donations for the entity
 		if entityID != 0 {
-			// If entity specified, filter by entity
 			filters.EntityID = entityID
-			filters.UserID = 0
+			filters.UserID = 0 // No user filter — see all donations
 		} else {
-			// If no entity specified, show all (admin privilege)
 			filters.EntityID = 0
 			filters.UserID = 0
 		}
@@ -504,7 +501,7 @@ func (h *Handler) GetRecentDonations(c *gin.Context) {
 		return
 	}
 
-	// For temple admins, get donations for their accessible entity
+	// For all other roles (including standard_user), get all donations for the entity
 	recent, err := h.svc.GetRecentDonationsByEntity(c.Request.Context(), entityID, limit, accessContext)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch recent donations"})

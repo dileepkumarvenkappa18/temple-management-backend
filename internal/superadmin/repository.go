@@ -1321,3 +1321,32 @@ func (r *Repository) DeleteTenantAndRelatedRecords(ctx context.Context, userID u
 		return nil
 	})
 }
+func (r *Repository) GetTenantBankDetails(ctx context.Context, userID uint) (*TenantBankDetailsResponse, error) {
+    var bank auth.Tenant_BankAccountDetails
+    err := r.db.WithContext(ctx).
+        Where("user_id = ?", userID).
+        First(&bank).Error
+    if err != nil {
+        if errors.Is(err, gorm.ErrRecordNotFound) {
+            return nil, nil // Not an error — tenant just hasn't added bank details yet
+        }
+        return nil, err
+    }
+
+    upiID := ""
+    if bank.UPIID != nil {
+        upiID = *bank.UPIID
+    }
+
+    return &TenantBankDetailsResponse{
+        ID:                bank.ID,
+        AccountHolderName: bank.AccountHolderName,
+        AccountNumber:     bank.AccountNumber,
+        BankName:          bank.BankName,
+        BranchName:        bank.BranchName,
+        IFSCCode:          bank.IFSCCode,
+        AccountType:       bank.AccountType,
+        UPIID:             upiID,
+        RazorpayConfigured: bank.RazorpayKeyID != "", // Only expose whether it's configured
+    }, nil
+}

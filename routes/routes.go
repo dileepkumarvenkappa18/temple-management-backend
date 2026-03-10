@@ -250,7 +250,7 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 		// Paginated list of all tenants with optional ?status=pending&limit=10&page=1
 		superadminRoutes.GET("/tenants", superadminHandler.GetTenantsWithFilters)
 		superadminRoutes.PATCH("/tenants/:id/approval", superadminHandler.UpdateTenantApprovalStatus)
-
+		superadminRoutes.GET("/tenants/:id/bank-details", superadminHandler.GetTenantBankDetails)
 		// ================ ENTITY APPROVAL MANAGEMENT ================
 		// Paginated list of entities with optional ?status=pending&limit=10&page=1
 		superadminRoutes.GET("/entities", superadminHandler.GetEntitiesWithFilters)

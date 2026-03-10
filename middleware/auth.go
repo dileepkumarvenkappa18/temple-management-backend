@@ -133,20 +133,12 @@ func ResolveEntityIDForOperation(c *gin.Context, user auth.User, claims jwt.MapC
 			fmt.Printf("SuperAdmin using tenant ID as entity ID: %d\n", *tenantID)
 			return tenantID
 		}
-		if entityQuery := c.Query("entity_id"); entityQuery != "" {
-			if eid, err := strconv.ParseUint(entityQuery, 10, 32); err == nil {
-				id := uint(eid)
-				return &id
-			}
-		}
 		fmt.Println("SuperAdmin with global access (no specific entity)")
 		return nil
 
 	case RoleTempleAdmin:
-		if user.EntityID != nil {
-			fmt.Printf("TempleAdmin fallback to assigned entity ID: %d\n", *user.EntityID)
-			return user.EntityID
-		}
+		fmt.Printf("TempleAdmin: no entity in URL/query/header, will rely on TenantID access check\n")
+		return nil
 
 	case RoleStandardUser, RoleMonitoringUser:
 		// DO NOT use assigned_tenant_id as entity ID.
@@ -156,7 +148,6 @@ func ResolveEntityIDForOperation(c *gin.Context, user auth.User, claims jwt.MapC
 			fmt.Printf("%s fallback to own entity ID: %d\n", user.Role.RoleName, *user.EntityID)
 			return user.EntityID
 		}
-		// No entity assigned - return nil, access will be checked via TenantID in accessContext
 		return nil
 
 	case RoleDevotee, RoleVolunteer:
@@ -195,12 +186,11 @@ func ResolveTenantIDFromRequest(c *gin.Context, claims jwt.MapClaims) *uint {
 }
 
 // ExtractEntityIDFromPath extracts entity ID from URL path.
-// FIXED: Now handles both /entity/123 and /entities/123 patterns.
+// Handles both /entity/123 and /entities/123 patterns.
 func ExtractEntityIDFromPath(c *gin.Context) *uint {
 	path := c.Request.URL.Path
 	parts := strings.Split(path, "/")
 	for i, part := range parts {
-		// Match both singular "/entity/123" and plural "/entities/123"
 		if (part == "entity" || part == "entities") && i+1 < len(parts) {
 			entityIDFromPath, err := strconv.ParseUint(parts[i+1], 10, 32)
 			if err == nil {
@@ -213,7 +203,6 @@ func ExtractEntityIDFromPath(c *gin.Context) *uint {
 	return nil
 }
 
-// CreateAccessContext creates the access context with proper entity + tenant resolution
 func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, entityID *uint, authRepo auth.Repository) AccessContext {
 	accessContext := AccessContext{
 		UserID:   user.ID,
@@ -229,12 +218,13 @@ func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, e
 		accessContext.PermissionType = "full"
 		accessContext.DirectEntityID = user.EntityID
 		accessContext.AssignedEntityID = entityID
+		// TenantID = templeadmin's own user ID, since templeadmin IS the tenant.
+		// This is used by canAccessSeva to verify entity ownership via GetTenantIDByEntityID.
 		accessContext.TenantID = user.ID
 
 	case RoleStandardUser:
 		accessContext.PermissionType = "full"
 		accessContext.DirectEntityID = user.EntityID
-		// Use URL entity ID if provided, otherwise fall back to user's own entity
 		if entityID != nil {
 			accessContext.AssignedEntityID = entityID
 		} else {
@@ -277,8 +267,8 @@ func CreateAccessContext(c *gin.Context, user auth.User, claims jwt.MapClaims, e
 		}
 	}
 
-	fmt.Printf("✅ AccessContext initialized: Role=%s, TenantID=%d, EntityID=%v\n",
-		accessContext.RoleName, accessContext.TenantID, accessContext.AssignedEntityID)
+	fmt.Printf("✅ AccessContext initialized: Role=%s, TenantID=%d, DirectEntityID=%v, AssignedEntityID=%v\n",
+		accessContext.RoleName, accessContext.TenantID, accessContext.DirectEntityID, accessContext.AssignedEntityID)
 
 	return accessContext
 }

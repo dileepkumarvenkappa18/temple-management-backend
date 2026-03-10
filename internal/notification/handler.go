@@ -228,11 +228,11 @@ func (h *Handler) SendNotification(c *gin.Context) {
 	var req struct {
 		EntityID   *uint    `json:"entity_id"`
 		TemplateID *uint    `json:"template_id"`
-		Channel    string   `json:"channel" binding:"required"` // email, sms, whatsapp, push
+		Channel    string   `json:"channel" binding:"required"`
 		Subject    string   `json:"subject"`
 		Body       string   `json:"body" binding:"required"`
 		Recipients []string `json:"recipients"`
-		Audience   string   `json:"audience"` // all, devotees, volunteers
+		Audience   string   `json:"audience"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -240,28 +240,58 @@ func (h *Handler) SendNotification(c *gin.Context) {
 		return
 	}
 
-	// Resolve entityID from access context, fallback to request body
-	entityID := ctx.GetAccessibleEntityID()
-	if entityID == nil && req.EntityID != nil {
-		entityID = req.EntityID
-	}
-	if entityID == nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "no accessible temple"})
+	// ✅ entity_id is required in payload for ALL roles
+	if req.EntityID == nil || *req.EntityID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "entity_id is required"})
 		return
 	}
 
-	// If recipients not provided, resolve using audience
-	if len(req.Recipients) == 0 {
-		switch req.Audience {
-		case "all":
-			emails, err := h.Service.GetEmailsByAudience(*entityID, "all")
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch users for audience"})
-				return
-			}
-			req.Recipients = emails
+	// ✅ Authorization per role:
+	switch ctx.RoleName {
 
-		case "devotees", "volunteers":
+	case middleware.RoleSuperAdmin:
+		// Superadmin can send for ANY entity — no check needed
+		fmt.Printf("🔑 Superadmin sending notification for entity %d\n", *req.EntityID)
+
+	case middleware.RoleTempleAdmin:
+		// Templeadmin (tenant) manages multiple entities under their tenant
+		// They can send for any entity that belongs to their TenantID
+		// CanAccessEntity already handles this: it returns true if TenantID > 0
+		if !ctx.CanAccessEntity(*req.EntityID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "you do not have access to this temple"})
+			return
+		}
+		fmt.Printf("🏛️ TempleAdmin (tenant %d) sending notification for entity %d\n", ctx.TenantID, *req.EntityID)
+
+	case middleware.RoleStandardUser, middleware.RoleMonitoringUser:
+		// Standard user JWT has entity_id: 0, but has assigned_tenant_id
+		// Use TenantID to verify they belong to the same tenant as the entity
+		if ctx.TenantID == 0 {
+			c.JSON(http.StatusForbidden, gin.H{"error": "no tenant assigned to your account"})
+			return
+		}
+		// CanAccessEntity returns true for standarduser when TenantID > 0
+		if !ctx.CanAccessEntity(*req.EntityID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "you do not have access to this temple"})
+			return
+		}
+	default:
+		c.JSON(http.StatusForbidden, gin.H{"error": "your role is not permitted to send notifications"})
+		return
+	}
+
+	// ✅ Use payload entity_id for everything from here
+	entityID := req.EntityID
+
+	// ✅ Resolve recipients from audience if not explicitly provided
+	if len(req.Recipients) == 0 {
+		if req.Audience == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "either recipients or audience must be provided"})
+			return
+		}
+
+		switch req.Audience {
+		case "all", "devotees", "volunteers":
 			emails, err := h.Service.GetEmailsByAudience(*entityID, req.Audience)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch users for audience"})
@@ -270,15 +300,23 @@ func (h *Handler) SendNotification(c *gin.Context) {
 			req.Recipients = emails
 
 		default:
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or missing audience if no recipients are provided"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid audience: must be 'all', 'devotees', or 'volunteers'"})
 			return
 		}
 	}
 
-	// Send notification asynchronously
+	// ✅ Fail fast if no recipients found
+	if len(req.Recipients) == 0 {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error":   "no recipients found",
+			"details": "no users matched the specified audience for this temple",
+		})
+		return
+	}
+
+	// ✅ Send asynchronously
 	go func() {
 		bgCtx := context.Background()
-
 		if err := h.Service.SendNotification(
 			bgCtx,
 			ctx.UserID,

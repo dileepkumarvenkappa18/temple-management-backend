@@ -19,7 +19,6 @@ func RBACMiddleware(allowedRoles ...string) gin.HandlerFunc {
 			if exists {
 				if user, ok := userVal.(auth.User); ok &&
 					(user.Role.RoleName == "standarduser" || user.Role.RoleName == "monitoringuser") {
-					// Allow standard users to access this endpoint for both GET and POST
 					c.Next()
 					return
 				}
@@ -38,11 +37,9 @@ func RBACMiddleware(allowedRoles ...string) gin.HandlerFunc {
 			return
 		}
 
-		// Always set both user and userID in context for downstream handlers
 		c.Set("user", user)
 		c.Set("userID", user.ID)
 
-		// Check if the user has one of the allowed roles
 		for _, role := range allowedRoles {
 			if user.Role.RoleName == role {
 				c.Next()
@@ -54,10 +51,12 @@ func RBACMiddleware(allowedRoles ...string) gin.HandlerFunc {
 	}
 }
 
-// RequireTempleAccess with proper tenant isolation
+// RequireTempleAccess ensures the user has access to a temple/entity.
+//
+// For templeadmin: checks DirectEntityID != nil (set to user.EntityID in CreateAccessContext).
+// The actual per-seva ownership check happens later in canAccessSeva via TenantID.
 func RequireTempleAccess() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Get user from context
 		userVal, exists := c.Get("user")
 		if !exists {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found in context"})
@@ -70,7 +69,6 @@ func RequireTempleAccess() gin.HandlerFunc {
 			return
 		}
 
-		// Get access context from auth middleware
 		accessContextVal, exists := c.Get("access_context")
 		if !exists {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
@@ -95,22 +93,22 @@ func RequireTempleAccess() gin.HandlerFunc {
 			return
 		}
 
-		// Check if this is a tenant user management endpoint
-		// Allow these endpoints even if no temple exists
+		// Allow tenant user management endpoints regardless of temple assignment
 		if strings.Contains(c.Request.URL.Path, "/tenants/") && strings.Contains(c.Request.URL.Path, "/user") {
 			c.Next()
 			return
 		}
 
-		// FIXED: Role-based access control with tenant isolation
 		switch user.Role.RoleName {
 		case RoleSuperAdmin:
-			// Superadmin can access any entity, but should be scoped to requested tenant
 			c.Next()
 			return
 
 		case RoleTempleAdmin:
-			// Temple admin can only access their own temple and related entities
+			// DirectEntityID is always set to user.EntityID in CreateAccessContext,
+			// so this gate will pass as long as the templeadmin has any entity on their record.
+			// The per-resource ownership check (which temple they manage) is done in
+			// canAccessSeva / similar handlers via TenantID lookup.
 			if accessContext.DirectEntityID == nil {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 					"error":          "templeadmin must have a direct entity assigned",
@@ -126,8 +124,6 @@ func RequireTempleAccess() gin.HandlerFunc {
 			return
 
 		case RoleStandardUser, RoleMonitoringUser:
-			// Standard/monitoring users can only access their assigned tenant
-			// FIX: Also check AssignedEntityID since TenantID might be 0 if authRepo was nil
 			if accessContext.TenantID == 0 && accessContext.DirectEntityID == nil && accessContext.AssignedEntityID == nil {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 					"error":          "user must have an assigned entity",
@@ -143,8 +139,6 @@ func RequireTempleAccess() gin.HandlerFunc {
 			return
 
 		case RoleDevotee, RoleVolunteer:
-			// Devotees and volunteers can access their associated temple
-			// FIX: Also check AssignedEntityID
 			if accessContext.TenantID == 0 && accessContext.DirectEntityID == nil && accessContext.AssignedEntityID == nil {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 					"error":          "devotee/volunteer must have an associated entity",
@@ -156,12 +150,8 @@ func RequireTempleAccess() gin.HandlerFunc {
 				})
 				return
 			}
-
-			// Set permission type to readonly for regular endpoints
-			// This ensures devotees can view but not modify temple data
 			accessContext.PermissionType = "readonly"
 			c.Set("access_context", accessContext)
-
 			c.Next()
 			return
 
@@ -185,7 +175,6 @@ func RequireWriteAccess() gin.HandlerFunc {
 		if exists {
 			user, ok := userVal.(auth.User)
 			if ok {
-				// Superadmin and templeadmin always have write access
 				if user.Role.RoleName == RoleSuperAdmin || user.Role.RoleName == RoleTempleAdmin {
 					c.Next()
 					return

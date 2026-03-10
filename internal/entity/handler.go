@@ -50,14 +50,24 @@ func canAccessEntityID(accessContext middleware.AccessContext, entityID uint, h 
 		return true
 
 	case "templeadmin":
-		return accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityID
+		// Check direct entity assignment
+		if accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == entityID {
+			return true
+		}
+		// Check if this templeadmin created/owns the entity via TenantID
+		// TenantID is set to user.ID for templeadmin in CreateAccessContext
+		if h != nil && accessContext.TenantID > 0 {
+			tenantID, err := h.Service.GetTenantIDByEntityID(entityID)
+			if err == nil && tenantID == accessContext.TenantID {
+				return true
+			}
+		}
+		return false
 
 	case "standarduser", "monitoringuser":
-		// Check direct entity match first
 		if accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == entityID {
 			return true
 		}
-		// Check via TenantID: does this entity belong to the user's tenant?
 		if accessContext.TenantID > 0 && h != nil {
 			tenantID, err := h.Service.GetTenantIDByEntityID(entityID)
 			if err == nil && tenantID == accessContext.TenantID {
@@ -1414,31 +1424,59 @@ func (h *Handler) UpdateDevoteeMembershipStatus(c *gin.Context) {
 }
 
 func (h *Handler) GetDashboardSummary(c *gin.Context) {
-	accessContextVal, exists := c.Get("access_context")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
-		return
-	}
-	accessContext, ok := accessContextVal.(middleware.AccessContext)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid access context"})
-		return
-	}
+    accessContextVal, exists := c.Get("access_context")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
+        return
+    }
+    accessContext, ok := accessContextVal.(middleware.AccessContext)
+    if !ok {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid access context"})
+        return
+    }
 
-	entityID := accessContext.GetAccessibleEntityID()
-	if entityID == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "No accessible entity found"})
-		return
-	}
+    // ── Use entity_id from query param if provided ────────────────────────
+    var entityID uint
+    if entityIDStr := c.Query("entity_id"); entityIDStr != "" {
+        parsed, err := strconv.ParseUint(entityIDStr, 10, 64)
+        if err != nil || parsed == 0 {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entity_id"})
+            return
+        }
+        entityID = uint(parsed)
+    } else {
+        // Fallback to JWT entity
+        id := accessContext.GetAccessibleEntityID()
+        if id == nil {
+            c.JSON(http.StatusUnauthorized, gin.H{"error": "No accessible entity found"})
+            return
+        }
+        entityID = *id
+    }
 
-	summary, err := h.Service.GetDashboardSummary(*entityID)
-	if err != nil {
-		log.Printf("Dashboard Summary Error for entity %d: %v", *entityID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch dashboard summary", "details": err.Error()})
-		return
-	}
+    // ── Access check for non-privileged roles ─────────────────────────────
+    isPrivileged := accessContext.RoleName == "superadmin" ||
+        accessContext.RoleName == "admin" ||
+        accessContext.RoleName == "templeadmin" ||
+        accessContext.RoleName == "trustee" ||
+        accessContext.RoleName == "staff"
 
-	c.JSON(http.StatusOK, summary)
+    if !isPrivileged {
+        id := accessContext.GetAccessibleEntityID()
+        if id == nil || *id != entityID {
+            c.JSON(http.StatusForbidden, gin.H{"error": "Access denied to requested entity"})
+            return
+        }
+    }
+
+    summary, err := h.Service.GetDashboardSummary(entityID)
+    if err != nil {
+        log.Printf("Dashboard Summary Error for entity %d: %v", entityID, err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch dashboard summary", "details": err.Error()})
+        return
+    }
+
+    c.JSON(http.StatusOK, summary)
 }
 
 func (h *Handler) GetTenantByEntityID(c *gin.Context) {

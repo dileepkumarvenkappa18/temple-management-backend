@@ -93,13 +93,13 @@ func (s *service) CreateSeva(ctx context.Context, seva *Seva, accessContext midd
 		return errors.New("write access denied")
 	}
 
-	// Resolve entity ID: prefer access context (authoritative), fall back to payload.
+	// FIX: Trust seva.EntityID first (set by handler from route.params.id).
+	// Only fall back to JWT access context if entity_id was not provided by caller.
 	var resolvedEntityID uint
-	if ctxEntityID := accessContext.GetAccessibleEntityID(); ctxEntityID != nil {
-		resolvedEntityID = *ctxEntityID
-	} else if seva.EntityID != 0 {
-		// Caller supplied it explicitly — accept it.
+	if seva.EntityID != 0 {
 		resolvedEntityID = seva.EntityID
+	} else if ctxEntityID := accessContext.GetAccessibleEntityID(); ctxEntityID != nil {
+		resolvedEntityID = *ctxEntityID
 	} else {
 		s.auditSvc.LogAction(ctx, &accessContext.UserID, nil, "SEVA_CREATE_FAILED", map[string]interface{}{
 			"reason":    "no accessible entity",
@@ -179,11 +179,14 @@ func (s *service) UpdateSeva(ctx context.Context, seva *Seva, accessContext midd
 		return errors.New("write access denied")
 	}
 
-	// FIX: GetAccessibleEntityID() can return nil for templeadmin if DirectEntityID
-	// is not set in the JWT claims. Fall back to the entity stamped on the seva payload.
-	entityID := accessContext.GetAccessibleEntityID()
-	if entityID == nil && seva.EntityID != 0 {
+	// FIX: Trust seva.EntityID first (set by handler from the existing seva's entity).
+	// JWT GetAccessibleEntityID() returns 3, but the seva belongs to entity 2.
+	// Ownership check must use the seva's actual entity, not the JWT entity.
+	var entityID *uint
+	if seva.EntityID != 0 {
 		entityID = &seva.EntityID
+	} else if ctxID := accessContext.GetAccessibleEntityID(); ctxID != nil {
+		entityID = ctxID
 	}
 
 	if entityID == nil && !isSuperAdmin(accessContext.RoleName) {
@@ -194,7 +197,6 @@ func (s *service) UpdateSeva(ctx context.Context, seva *Seva, accessContext midd
 		return errors.New("no accessible entity")
 	}
 
-	// Always fetch existing — needed for ownership check AND BookedSlots carry-forward.
 	existing, err := s.repo.GetSevaByID(ctx, seva.ID)
 	if err != nil {
 		s.auditSvc.LogAction(ctx, &accessContext.UserID, entityID, "SEVA_UPDATE_FAILED", map[string]interface{}{
@@ -205,15 +207,35 @@ func (s *service) UpdateSeva(ctx context.Context, seva *Seva, accessContext midd
 		return err
 	}
 
-	// Ownership check — superadmin can update any seva; all other roles must own it.
-	if !isSuperAdmin(accessContext.RoleName) && existing.EntityID != *entityID {
-		s.auditSvc.LogAction(ctx, &accessContext.UserID, entityID, "SEVA_UPDATE_FAILED", map[string]interface{}{
-			"seva_id":          seva.ID,
-			"seva_entity_id":   existing.EntityID,
-			"caller_entity_id": *entityID,
-			"reason":           "unauthorized: cannot update this seva",
-		}, ip, "failure")
-		return errors.New("unauthorized: cannot update this seva")
+	// FIX: Ownership check — verify caller can access the seva's entity via
+	// canAccessSeva-style tenant check, not just a direct entity ID match.
+	// A templeadmin with TenantID can manage sevas across all their entities.
+	if !isSuperAdmin(accessContext.RoleName) {
+		canAccess := false
+		// Direct entity match
+		if accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == existing.EntityID {
+			canAccess = true
+		}
+		// Assigned entity match (standarduser/monitoringuser)
+		if accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == existing.EntityID {
+			canAccess = true
+		}
+		// Tenant ownership check — templeadmin can manage all entities under their tenant
+		if !canAccess && accessContext.TenantID > 0 {
+			tenantID, err := s.repo.GetTenantIDByEntityID(existing.EntityID)
+			if err == nil && tenantID == accessContext.TenantID {
+				canAccess = true
+			}
+		}
+		if !canAccess {
+			s.auditSvc.LogAction(ctx, &accessContext.UserID, entityID, "SEVA_UPDATE_FAILED", map[string]interface{}{
+				"seva_id":          seva.ID,
+				"seva_entity_id":   existing.EntityID,
+				"caller_entity_id": *entityID,
+				"reason":           "unauthorized: cannot update this seva",
+			}, ip, "failure")
+			return errors.New("unauthorized: cannot update this seva")
+		}
 	}
 
 	if seva.Status != "" {
@@ -228,7 +250,6 @@ func (s *service) UpdateSeva(ctx context.Context, seva *Seva, accessContext midd
 		}
 	}
 
-	// Carry forward booked slots from the existing record.
 	if seva.BookedSlots == 0 {
 		seva.BookedSlots = existing.BookedSlots
 	}

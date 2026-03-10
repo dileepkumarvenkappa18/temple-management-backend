@@ -1046,3 +1046,25 @@ func (h *Handler) BulkUploadUsers(c *gin.Context) {
 
 	c.JSON(http.StatusOK, result)
 }
+// GET /superadmin/tenants/:id/bank-details
+func (h *Handler) GetTenantBankDetails(c *gin.Context) {
+    idStr := c.Param("id")
+    tenantID, err := strconv.ParseUint(idStr, 10, 64)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tenant ID"})
+        return
+    }
+
+    details, err := h.service.GetTenantBankDetails(c.Request.Context(), uint(tenantID))
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch bank details"})
+        return
+    }
+
+    if details == nil {
+        c.JSON(http.StatusOK, gin.H{"data": nil, "message": "No bank details found"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"data": details})
+}

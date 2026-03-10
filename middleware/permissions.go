@@ -23,17 +23,19 @@ type AccessContext struct {
 	DirectEntityID   *uint  // User's own entity (for templeadmin)
 	AssignedEntityID *uint  // Assigned entity from URL or user assignment
 	PermissionType   string // "full" or "readonly"
-	TenantID         uint   // Tenant this user belongs to (for standarduser/monitoringuser)
+	TenantID         uint   // Tenant this user belongs to (for standarduser/monitoringuser/templeadmin)
 }
 
-// GetAccessibleEntityID returns the entity ID the user can access
+// GetAccessibleEntityID returns the entity ID the user can access.
+// Prefers AssignedEntityID (from request) over DirectEntityID (from user record).
 func (ac *AccessContext) GetAccessibleEntityID() *uint {
-	// First try DirectEntityID (for templeadmin)
+	if ac.AssignedEntityID != nil {
+		return ac.AssignedEntityID
+	}
 	if ac.DirectEntityID != nil {
 		return ac.DirectEntityID
 	}
-	// Fall back to AssignedEntityID (for standard/monitoring users)
-	return ac.AssignedEntityID
+	return nil
 }
 
 // GetEntityIDForOperation returns the entity ID to use for operations like create/update
@@ -58,24 +60,27 @@ func (ac *AccessContext) CanRead() bool {
 }
 
 // CanAccessEntity checks if the user can access a specific entity.
-// FIXED: standarduser/monitoringuser with a valid TenantID are allowed through.
-// The actual entity-to-tenant ownership check happens at the DB/handler level.
+//
+// FIX: templeadmin now also passes through if TenantID > 0, same as standarduser/monitoringuser.
+// The actual entity-to-tenant ownership check happens at the handler level via
+// GetTenantIDByEntityID (canAccessSeva). This method is the coarse gate;
+// fine-grained ownership is verified per-resource in handlers.
 func (ac *AccessContext) CanAccessEntity(entityID uint) bool {
-	// SuperAdmin can access any entity
 	if ac.RoleName == RoleSuperAdmin {
 		return true
 	}
 
-	// Check direct entity ID match (works for templeadmin, devotee, volunteer)
 	accessibleEntityID := ac.GetAccessibleEntityID()
 	if accessibleEntityID != nil && *accessibleEntityID == entityID {
 		return true
 	}
 
-	// For standarduser/monitoringuser:
-	// They are assigned to a TENANT (not directly to an entity).
-	// If they have a valid TenantID, allow them through here.
-	// The handler/DB layer is responsible for verifying the entity belongs to their tenant.
+	// templeadmin: manages entities via TenantID ownership (user.ID == entity.created_by)
+	if ac.RoleName == RoleTempleAdmin && ac.TenantID > 0 {
+		return true
+	}
+
+	// standarduser/monitoringuser: assigned to a tenant, entity ownership verified by handler
 	if (ac.RoleName == RoleStandardUser || ac.RoleName == RoleMonitoringUser) && ac.TenantID > 0 {
 		return true
 	}
@@ -97,20 +102,16 @@ func ExtractTenantIDFromContext(c *gin.Context) *uint {
 
 // GetEntityIDFromContext is a utility function to get the current entity ID from context
 func GetEntityIDFromContext(c *gin.Context) *uint {
-	// First try to get from context (set by middleware)
 	if entityID, exists := c.Get("entity_id"); exists {
 		if id, ok := entityID.(uint); ok {
 			return &id
 		}
 	}
-
-	// Try to get from access context
 	if accessCtx, exists := c.Get("access_context"); exists {
 		if ctx, ok := accessCtx.(AccessContext); ok {
 			return ctx.GetEntityIDForOperation()
 		}
 	}
-
 	return nil
 }
 

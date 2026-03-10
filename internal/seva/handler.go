@@ -20,8 +20,7 @@ import (
 type Handler struct {
 	service  Service
 	auditSvc auditlog.Service
-	// repo is needed to look up entity→tenant for standarduser ownership checks
-	repo Repository
+	repo     Repository
 }
 
 func NewHandler(service Service, auditSvc auditlog.Service, repo Repository) *Handler {
@@ -34,38 +33,48 @@ func NewHandler(service Service, auditSvc auditlog.Service, repo Repository) *Ha
 
 // ===========================
 // 📌 Extract Access Context
-func getAccessContextFromContext(c *gin.Context) (middleware.AccessContext, bool) {
+// Returns a pointer so pointer-receiver methods (CanWrite, CanRead, etc.) work correctly.
+func getAccessContextFromContext(c *gin.Context) (*middleware.AccessContext, bool) {
 	accessContextRaw, exists := c.Get("access_context")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "access context missing"})
-		return middleware.AccessContext{}, false
+		return nil, false
 	}
 
 	accessContext, ok := accessContextRaw.(middleware.AccessContext)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid access context"})
-		return middleware.AccessContext{}, false
+		return nil, false
 	}
 
-	return accessContext, true
+	return &accessContext, true
 }
 
-// canAccessSeva checks if the access context allows access to a seva that belongs to entityID.
-// For standarduser/monitoringuser, also checks via TenantID (entity's created_by == user's tenant).
-func (h *Handler) canAccessSeva(accessContext middleware.AccessContext, sevaEntityID uint) bool {
+func (h *Handler) canAccessSeva(accessContext *middleware.AccessContext, sevaEntityID uint) bool {
 	switch accessContext.RoleName {
 	case "superadmin":
 		return true
 
 	case "templeadmin":
-		return accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == sevaEntityID
+		// Fast path: direct entity match
+		if accessContext.DirectEntityID != nil && *accessContext.DirectEntityID == sevaEntityID {
+			return true
+		}
+		// Ownership check via TenantID
+		if accessContext.TenantID > 0 && h.repo != nil {
+			tenantID, err := h.repo.GetTenantIDByEntityID(sevaEntityID)
+			if err == nil && tenantID == accessContext.TenantID {
+				return true
+			}
+		}
+		return false
 
 	case "standarduser", "monitoringuser":
-		// Check direct entity match first
+		// Direct entity match
 		if accessContext.AssignedEntityID != nil && *accessContext.AssignedEntityID == sevaEntityID {
 			return true
 		}
-		// Check via TenantID: does this entity belong to the user's tenant?
+		// Ownership check via TenantID
 		if accessContext.TenantID > 0 && h.repo != nil {
 			tenantID, err := h.repo.GetTenantIDByEntityID(sevaEntityID)
 			if err == nil && tenantID == accessContext.TenantID {
@@ -78,7 +87,7 @@ func (h *Handler) canAccessSeva(accessContext middleware.AccessContext, sevaEnti
 }
 
 // resolveEntityID resolves entity ID from: query param → path param → access context
-func resolveEntityID(c *gin.Context, accessContext middleware.AccessContext) (uint, bool) {
+func resolveEntityID(c *gin.Context, accessContext *middleware.AccessContext) (uint, bool) {
 	if entityIDParam := c.Query("entity_id"); entityIDParam != "" {
 		if id, err := strconv.ParseUint(entityIDParam, 10, 32); err == nil {
 			return uint(id), true
@@ -92,8 +101,6 @@ func resolveEntityID(c *gin.Context, accessContext middleware.AccessContext) (ui
 	if ctxID := accessContext.GetAccessibleEntityID(); ctxID != nil {
 		return *ctxID, true
 	}
-	// For standarduser/monitoringuser with TenantID but no direct entity assignment,
-	// we can't resolve a single entity ID here — caller must use TenantID logic.
 	return 0, false
 }
 
@@ -147,73 +154,79 @@ type VerifySevaPaymentRequest struct {
 
 // ========================= SEVA HANDLERS =============================
 
-// 🎯 Create Seva - POST /sevas
 func (h *Handler) CreateSeva(c *gin.Context) {
-	accessContext, ok := getAccessContextFromContext(c)
-	if !ok {
-		return
-	}
+    accessContext, ok := getAccessContextFromContext(c)
+    if !ok {
+        return
+    }
 
-	var input CreateSevaRequest
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
-		return
-	}
+    var input CreateSevaRequest
+    if err := c.ShouldBindJSON(&input); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
+        return
+    }
 
-	// Resolve entity ID: URL path → request body → access context
-	var entityID uint
-	if entityIDParam := c.Param("entity_id"); entityIDParam != "" {
-		if id, err := strconv.ParseUint(entityIDParam, 10, 32); err == nil {
-			entityID = uint(id)
-		}
-	}
-	if entityID == 0 && input.EntityID != 0 {
-		entityID = input.EntityID
-	}
-	if entityID == 0 {
-		if ctxID := accessContext.GetAccessibleEntityID(); ctxID != nil {
-			entityID = *ctxID
-		} else {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
-			return
-		}
-	}
+    // Resolve entity ID:
+    // Priority 1: URL path param
+    // Priority 2: Request body entity_id (sent from frontend route.params.id) ← TRUST THIS
+    // Priority 3: Access context (JWT) — LAST RESORT ONLY
+    var entityID uint
+    if entityIDParam := c.Param("entity_id"); entityIDParam != "" {
+        if id, err := strconv.ParseUint(entityIDParam, 10, 32); err == nil {
+            entityID = uint(id)
+        }
+    }
+    if entityID == 0 && input.EntityID != 0 {
+        entityID = input.EntityID // ← use exactly what frontend sent (route.params.id = 1)
+    }
+    if entityID == 0 {
+        if ctxID := accessContext.GetAccessibleEntityID(); ctxID != nil {
+            entityID = *ctxID
+        } else {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a temple and no entity_id provided"})
+            return
+        }
+    }
 
-	// Verify user can access this entity
-	if !h.canAccessSeva(accessContext, entityID) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "access denied to this entity"})
-		return
-	}
+    // FIX: Check access AFTER entityID is resolved from body, NOT before.
+    // Previously canAccessSeva was called with JWT entity (3), causing it to
+    // override the correctly-passed body entity_id (1).
+    if !isSuperAdmin(accessContext.RoleName) {
+        if !h.canAccessSeva(accessContext, entityID) {
+            c.JSON(http.StatusForbidden, gin.H{"error": "access denied to this entity"})
+            return
+        }
+    }
 
-	if !accessContext.CanWrite() {
-		c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
-		return
-	}
+    if !accessContext.CanWrite() {
+        c.JSON(http.StatusForbidden, gin.H{"error": "write access denied"})
+        return
+    }
 
-	ip := middleware.GetIPFromContext(c)
+    ip := middleware.GetIPFromContext(c)
 
-	seva := Seva{
-		EntityID:       entityID,
-		Name:           input.Name,
-		SevaType:       input.SevaType,
-		Description:    input.Description,
-		Price:          input.Price,
-		Date:           input.Date,
-		StartTime:      input.StartTime,
-		EndTime:        input.EndTime,
-		Duration:       input.Duration,
-		AvailableSlots: input.AvailableSlots,
-		BookedSlots:    0,
-		RemainingSlots: input.AvailableSlots,
-		Status:         "upcoming",
-	}
+    seva := Seva{
+        EntityID:       entityID,       // ← now correctly 1, not 3
+        Name:           input.Name,
+        SevaType:       input.SevaType,
+        Description:    input.Description,
+        Price:          input.Price,
+        Date:           input.Date,
+        StartTime:      input.StartTime,
+        EndTime:        input.EndTime,
+        Duration:       input.Duration,
+        AvailableSlots: input.AvailableSlots,
+        BookedSlots:    0,
+        RemainingSlots: input.AvailableSlots,
+        Status:         "upcoming",
+    }
 
-	if err := h.service.CreateSeva(c, &seva, accessContext, ip); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create seva: " + err.Error()})
-		return
-	}
+    if err := h.service.CreateSeva(c, &seva, *accessContext, ip); err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create seva: " + err.Error()})
+        return
+    }
 
-	c.JSON(http.StatusCreated, gin.H{"message": "Seva created successfully", "seva": seva})
+    c.JSON(http.StatusCreated, gin.H{"message": "Seva created successfully", "seva": seva})
 }
 
 // 📄 List all sevas for temple admin with filters and pagination
@@ -226,7 +239,6 @@ func (h *Handler) ListEntitySevas(c *gin.Context) {
 	var entityID uint
 	entityID, _ = resolveEntityID(c, accessContext)
 
-	// For standarduser with only TenantID (no direct entity), they must pass entity_id in query
 	if entityID == 0 && (accessContext.RoleName == "standarduser" || accessContext.RoleName == "monitoringuser") {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "entity_id is required"})
 		return
@@ -352,7 +364,6 @@ func (h *Handler) GetSevaByID(c *gin.Context) {
 }
 
 // 🛠 Update seva
-// FIXED: standarduser/monitoringuser ownership verified via TenantID, not just EntityID
 func (h *Handler) UpdateSeva(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
 	if !ok {
@@ -384,7 +395,6 @@ func (h *Handler) UpdateSeva(c *gin.Context) {
 		return
 	}
 
-	// FIXED: Use canAccessSeva which checks TenantID for standarduser/monitoringuser
 	if !isSuperAdmin(accessContext.RoleName) {
 		if !h.canAccessSeva(accessContext, existingSeva.EntityID) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "unauthorized: cannot update this seva"})
@@ -433,7 +443,7 @@ func (h *Handler) UpdateSeva(c *gin.Context) {
 		updatedSeva.Status = *input.Status
 	}
 
-	if err := h.service.UpdateSeva(c, &updatedSeva, accessContext, ip); err != nil {
+	if err := h.service.UpdateSeva(c, &updatedSeva, *accessContext, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update seva: " + err.Error()})
 		return
 	}
@@ -442,7 +452,6 @@ func (h *Handler) UpdateSeva(c *gin.Context) {
 }
 
 // ❌ Delete seva
-// FIXED: standarduser/monitoringuser ownership verified via TenantID, not just EntityID
 func (h *Handler) DeleteSeva(c *gin.Context) {
 	accessContext, ok := getAccessContextFromContext(c)
 	if !ok {
@@ -468,7 +477,6 @@ func (h *Handler) DeleteSeva(c *gin.Context) {
 		return
 	}
 
-	// FIXED: Use canAccessSeva which checks TenantID for standarduser/monitoringuser
 	if !isSuperAdmin(accessContext.RoleName) {
 		if !h.canAccessSeva(accessContext, existingSeva.EntityID) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "unauthorized: cannot delete this seva"})
@@ -476,7 +484,7 @@ func (h *Handler) DeleteSeva(c *gin.Context) {
 		}
 	}
 
-	if err := h.service.DeleteSeva(c, uint(id), accessContext, ip); err != nil {
+	if err := h.service.DeleteSeva(c, uint(id), *accessContext, ip); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete seva: " + err.Error()})
 		return
 	}

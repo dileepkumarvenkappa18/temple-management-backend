@@ -121,10 +121,10 @@ func (s *service) GetByUserIDAndEntity(userID uint, entityID uint) (*DevoteeProf
 }
 
 func (s *service) CreateOrUpdateProfile(ctx context.Context, userID, entityID uint, input DevoteeProfileInput, ip string) (*DevoteeProfile, error) {
-	existing, err := s.repo.GetByUserID(userID)
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
+	existing, err := s.repo.GetByUserIDAndEntity(userID, entityID)
+if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+    return nil, err
+}
 
 	// Fill the profile from input
 	profile := &DevoteeProfile{

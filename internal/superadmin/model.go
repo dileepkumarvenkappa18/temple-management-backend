@@ -231,3 +231,15 @@ type ApprovalRequest struct {
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
+
+type TenantBankDetailsResponse struct {
+    ID                uint   `json:"id"`
+    AccountHolderName string `json:"account_holder_name"`
+    AccountNumber     string `json:"account_number"`
+    BankName          string `json:"bank_name"`
+    BranchName        string `json:"branch_name"`
+    IFSCCode          string `json:"ifsc_code"`
+    AccountType       string `json:"account_type"`
+    UPIID             string `json:"upi_id,omitempty"`
+    RazorpayConfigured bool   `json:"razorpay_configured"` // true/false only, never expose keys
+}

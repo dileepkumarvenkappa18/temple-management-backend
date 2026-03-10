@@ -1439,3 +1439,9 @@ func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, admi
 		Errors:       errorsList,
 	}, nil
 }
+func (s *Service) GetTenantBankDetails(ctx context.Context, tenantID uint) (*TenantBankDetailsResponse, error) {
+    if tenantID == 0 {
+        return nil, errors.New("invalid tenant ID")
+    }
+    return s.repo.GetTenantBankDetails(ctx, tenantID)
+}
