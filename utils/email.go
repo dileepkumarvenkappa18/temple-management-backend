@@ -43,8 +43,6 @@ func sendEmail(to, subject, body string) error {
 
 	addr := fmt.Sprintf("%s:%s", smtpHost, smtpPort)
 
-	// ✅ FIX: Use smtp.Dial first, then StartTLS (not tls.Dial directly)
-	// This is the same approach that works in your notification system
 	client, err := smtp.Dial(addr)
 	if err != nil {
 		fmt.Printf("❌ Failed to dial SMTP server: %v\n", err)
@@ -52,42 +50,35 @@ func sendEmail(to, subject, body string) error {
 	}
 	defer client.Close()
 
-	// ✅ TLS config - skip verification for Docker environments
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
 		ServerName:         smtpHost,
 	}
 
-	// ✅ Start TLS upgrade on existing connection
 	if err = client.StartTLS(tlsConfig); err != nil {
 		fmt.Printf("❌ TLS connection error: %v\n", err)
 		return fmt.Errorf("failed to start TLS: %w", err)
 	}
 
-	// ✅ Authenticate after TLS is established
 	auth := smtp.PlainAuth("", smtpUsername, smtpPassword, smtpHost)
 	if err := client.Auth(auth); err != nil {
 		fmt.Printf("❌ SMTP auth error: %v\n", err)
 		return fmt.Errorf("authentication failed: %w", err)
 	}
 
-	// Set sender
 	if err := client.Mail(smtpFromEmail); err != nil {
 		return fmt.Errorf("failed to set sender: %w", err)
 	}
 
-	// Set recipient
 	if err := client.Rcpt(to); err != nil {
 		return fmt.Errorf("failed to set recipient: %w", err)
 	}
 
-	// Get data writer
 	w, err := client.Data()
 	if err != nil {
 		return fmt.Errorf("failed to get data writer: %w", err)
 	}
 
-	// Build message
 	from := smtpFromName
 	if from == "" {
 		from = smtpFromEmail
@@ -102,20 +93,17 @@ func sendEmail(to, subject, body string) error {
 		"Content-Type: text/plain; charset=UTF-8\r\n"+
 		"\r\n%s", from, to, subject, body))
 
-	// Write message
 	_, err = w.Write(msg)
 	if err != nil {
 		w.Close()
 		return fmt.Errorf("failed to write message: %w", err)
 	}
 
-	// Close writer
 	err = w.Close()
 	if err != nil {
 		return fmt.Errorf("failed to close writer: %w", err)
 	}
 
-	// Send QUIT command
 	if err := client.Quit(); err != nil {
 		fmt.Printf("⚠️ QUIT command error (non-critical): %v\n", err)
 	}
@@ -150,14 +138,6 @@ func SendBulkEmailsAsync(recipients []string, subject, body string) {
 // ======================
 func SendResetLink(toEmail string, resetToken string) error {
 	baseURL := frontendURL
-
-	// Removing it.. let it bomb, better they set it
-	/*
-		if baseURL == "" {
-			baseURL = "http://localhost:5173" // Updated to match your frontend
-			fmt.Println("⚠️ FRONTEND_URL not set, using default:", baseURL)
-		}
-	*/
 
 	resetURL := fmt.Sprintf("%s/auth-pages/reset-password?token=%s", baseURL, resetToken)
 	subject := "Reset your password"
@@ -200,5 +180,17 @@ func SendEntityApprovalEmail(toEmail, fullName, templeName string) {
 func SendEntityRejectionEmail(toEmail, fullName, templeName, reason string) {
 	subject := fmt.Sprintf("Your Temple \"%s\" Was Rejected", templeName)
 	body := fmt.Sprintf("Hello %s, your temple \"%s\" was rejected.\nReason: %s", fullName, templeName, reason)
+	_ = sendEmail(toEmail, subject, body)
+}
+
+// ======================
+// ✅ NEW: Welcome Email for Admin-Created Users
+// ======================
+func SendWelcomeEmail(toEmail, fullName, password, role string) {
+	subject := "Your account has been created"
+	body := fmt.Sprintf(
+		"Hello %s,\n\nYour account has been created by the administrator.\n\nHere are your login credentials:\n\nEmail    : %s\nPassword : %s\nRole     : %s\n\nPlease log in at: %s\n\nFor your security, please change your password after your first login.\n\nBest regards,\nTemple Management Team",
+		fullName, toEmail, password, role, frontendURL,
+	)
 	_ = sendEmail(toEmail, subject, body)
 }

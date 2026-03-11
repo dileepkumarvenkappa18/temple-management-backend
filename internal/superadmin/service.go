@@ -564,16 +564,14 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, adminID
 
 	// If templeadmin role, create tenant details
 	if strings.ToLower(req.Role) == "templeadmin" {
-		// ✅ FIX: Ensure we're getting the values from request
 		logoURL := req.LogoURL
 		introVideoURL := req.IntroVideoURL
-		
-		// Debug logging to see what we're saving
+
 		fmt.Printf("📝 Creating tenant details for user %d\n", user.ID)
 		fmt.Printf("   Temple Name: %s\n", req.TempleName)
 		fmt.Printf("   LogoURL: %s\n", logoURL)
 		fmt.Printf("   IntroVideoURL: %s\n", introVideoURL)
-		
+
 		tenantDetails := &auth.TenantDetails{
 			UserID:            user.ID,
 			TempleName:        req.TempleName,
@@ -594,9 +592,13 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, adminID
 			}, ip, "failure")
 			return errors.New("failed to create temple details")
 		}
-		
+
 		fmt.Printf("✅ Tenant details created successfully for user %d\n", user.ID)
 	}
+
+	// ✅ Send welcome email with login credentials (non-blocking)
+	fmt.Printf("📧 Sending welcome email to %s (role: %s)\n", req.Email, req.Role)
+	utils.SendWelcomeEmail(req.Email, req.FullName, req.Password, req.Role)
 
 	// Log successful user creation
 	s.auditService.LogAction(ctx, &adminID, nil, "USER_CREATED", map[string]interface{}{
@@ -605,6 +607,7 @@ func (s *Service) CreateUser(ctx context.Context, req CreateUserRequest, adminID
 		"target_name":        req.FullName,
 		"target_role":        req.Role,
 		"has_temple_details": strings.ToLower(req.Role) == "templeadmin",
+		"welcome_email_sent": true,
 	}, ip, "success")
 
 	return nil
@@ -1355,6 +1358,12 @@ func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, admi
 		}
 
 		// Handle password hashing
+		// ✅ Keep plain password for welcome email BEFORE hashing
+		plainPassword := password
+		if plainPassword == "" {
+			plainPassword = "Default@123"
+		}
+
 		var passwordHash string
 		if password != "" {
 			hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -1430,6 +1439,9 @@ func (s *Service) BulkUploadUsers(ctx context.Context, file multipart.File, admi
 
 		successCount++
 		fmt.Printf("Created user: %s (Role: %s)\n", email, roleName)
+
+		// ✅ Send welcome email with login credentials (non-blocking)
+		utils.SendWelcomeEmail(email, fullName, plainPassword, roleName)
 	}
 
 	return &BulkUploadResult{
