@@ -3,12 +3,15 @@ package entity
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
 
 	"github.com/sharath018/temple-management-backend/internal/auditlog"
 	"github.com/sharath018/temple-management-backend/internal/auth"
+	"github.com/sharath018/temple-management-backend/utils"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type MembershipService interface {
@@ -498,4 +501,153 @@ func getUpdatedFields(old, new Entity) []string {
 	}
 
 	return updatedFields
+}
+type AddDevoteeParams struct {
+	EntityID  uint
+	FullName  string
+	Email     string
+	Phone     string
+	Password  string
+	Nakshatra string
+	Rashi     string
+	Lagna     string
+	Gotra     string
+	IP        string
+}
+ 
+type UpdateDevoteeParams struct {
+	EntityID      uint
+	DevoteeUserID uint
+	FullName      string
+	Email         string
+	Phone         string
+	Password      string // blank = keep existing
+	Nakshatra     string
+	Rashi         string
+	Lagna         string
+	Gotra         string
+	IP            string
+}
+ 
+// ================================================================
+// REPLACE the entire AddDevotee method in entity/service.go
+// ================================================================
+
+func (s *Service) AddDevotee(p AddDevoteeParams, creatorUserID uint) (uint, error) {
+	// 1. Check email not already taken
+	existing, _ := s.Repo.GetUserByEmail(p.Email)
+	if existing != nil {
+		return 0, fmt.Errorf("a user with email '%s' already exists", p.Email)
+	}
+
+	// 2. Get devotee role ID
+	roleID, err := s.Repo.GetDevoteeRoleID()
+	if err != nil || roleID == 0 {
+		return 0, fmt.Errorf("devotee role not found in user_roles table")
+	}
+
+	// 3. Hash password
+	hashed, err := bcrypt.GenerateFromPassword([]byte(p.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return 0, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	// 4. Create user record
+	newUser := &auth.User{
+		FullName:     p.FullName,
+		Email:        p.Email,
+		Phone:        p.Phone,
+		PasswordHash: string(hashed),
+		RoleID:       roleID,
+		Status:       "active",
+		EntityID:     &p.EntityID,
+		CreatedBy:    "admin",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	if err := s.Repo.CreateDevoteeUser(newUser); err != nil {
+		return 0, fmt.Errorf("failed to create devotee user: %w", err)
+	}
+
+	// 5. Create membership
+	if err := s.Repo.CreateDevoteeMembership(newUser.ID, p.EntityID); err != nil {
+		return 0, fmt.Errorf("user created but membership failed: %w", err)
+	}
+
+	// 6. Upsert devotee_profile spiritual fields
+	profileUpdates := map[string]interface{}{
+		"nakshatra":  p.Nakshatra,
+		"rashi":      p.Rashi,
+		"lagna":      p.Lagna,
+		"gotra":      p.Gotra,
+		"full_name":  p.FullName,
+		"updated_at": time.Now(),
+	}
+	_ = s.Repo.UpdateDevoteeProfile(newUser.ID, p.EntityID, profileUpdates)
+
+	// 7. Send welcome email with credentials (async, non-blocking)
+	go utils.SendWelcomeEmail(p.Email, p.FullName, p.Password, "devotee")
+
+	// 8. Audit log
+	s.AuditService.LogAction(context.Background(), &creatorUserID, &p.EntityID,
+		"DEVOTEE_ADDED_BY_ADMIN", map[string]interface{}{
+			"devotee_id": newUser.ID,
+			"email":      p.Email,
+			"entity_id":  p.EntityID,
+		}, p.IP, "success")
+
+	return newUser.ID, nil
+}
+ 
+func (s *Service) UpdateDevoteeProfile(p UpdateDevoteeParams, updaterUserID uint) error {
+	// 1. Verify the devotee is actually a member of this entity
+	isMember, err := s.Repo.IsDevoteeMemberOfEntity(p.DevoteeUserID, p.EntityID)
+	if err != nil {
+		return fmt.Errorf("failed to verify membership: %w", err)
+	}
+	if !isMember {
+		return fmt.Errorf("devotee not found in this temple")
+	}
+ 
+	// 2. Update users table (basic fields)
+	userUpdates := map[string]interface{}{
+		"full_name":  p.FullName,
+		"email":      p.Email,
+		"phone":      p.Phone,
+		"updated_at": time.Now(),
+	}
+	// Only update password if a new one was provided
+	if strings.TrimSpace(p.Password) != "" {
+		hashed, err := bcrypt.GenerateFromPassword([]byte(p.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return fmt.Errorf("failed to hash password: %w", err)
+		}
+		userUpdates["password"] = string(hashed)
+	}
+	if err := s.Repo.UpdateDevoteeUser(p.DevoteeUserID, userUpdates); err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+ 
+	// 3. Upsert devotee_profiles spiritual fields
+	profileUpdates := map[string]interface{}{
+		"nakshatra":  p.Nakshatra,
+		"rashi":      p.Rashi,
+		"lagna":      p.Lagna,
+		"gotra":      p.Gotra,
+		"full_name":  p.FullName,
+		"updated_at": time.Now(),
+	}
+	if err := s.Repo.UpdateDevoteeProfile(p.DevoteeUserID, p.EntityID, profileUpdates); err != nil {
+		return fmt.Errorf("failed to update devotee profile: %w", err)
+	}
+ 
+	// 4. Audit log
+	s.AuditService.LogAction(context.Background(), &updaterUserID, &p.EntityID,
+		"DEVOTEE_PROFILE_UPDATED_BY_ADMIN", map[string]interface{}{
+			"devotee_id": p.DevoteeUserID,
+			"email":      p.Email,
+			"entity_id":  p.EntityID,
+		}, p.IP, "success")
+ 
+	return nil
 }

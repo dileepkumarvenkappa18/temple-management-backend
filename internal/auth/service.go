@@ -128,6 +128,9 @@ func (s *service) RegisterAndReturnUser(in RegisterInput) (*User, error) {
 		return nil, err
 	}
 
+	// ✅ Send registration email to the user
+	utils.SendRegistrationEmail(in.Email, in.FullName, roleName, status)
+
 	if roleName == "templeadmin" {
 		tenant := &TenantDetails{
 			UserID:            user.ID,
@@ -141,27 +144,28 @@ func (s *service) RegisterAndReturnUser(in RegisterInput) (*User, error) {
 		if err := s.repo.CreateTenantDetails(tenant); err != nil {
 			return nil, err
 		}
-		   // 🆕 Create bank account details
-    bank := &Tenant_BankAccountDetails{
-        UserID:            user.ID,
-        AccountHolderName: in.AccountHolderName,
-        AccountNumber:     in.AccountNumber,
-        BankName:          in.BankName,
-        BranchName:        in.BranchName,
-        IFSCCode:          in.IFSCCode,
-        AccountType:       in.AccountType,
-		RazorpayKeyID:     in.RazorpayKeyID,
-    	RazorpaySecret:    in.RazorpaySecret,
-    }
-    
-    // Only set UPI ID if provided
-    if in.UPIID != "" {
-        bank.UPIID = &in.UPIID
-    }
 
-    if err := s.repo.CreateBankDetails(bank); err != nil {
-        return nil, err
-    }
+		// 🆕 Create bank account details
+		bank := &Tenant_BankAccountDetails{
+			UserID:            user.ID,
+			AccountHolderName: in.AccountHolderName,
+			AccountNumber:     in.AccountNumber,
+			BankName:          in.BankName,
+			BranchName:        in.BranchName,
+			IFSCCode:          in.IFSCCode,
+			AccountType:       in.AccountType,
+			RazorpayKeyID:     in.RazorpayKeyID,
+			RazorpaySecret:    in.RazorpaySecret,
+		}
+
+		// Only set UPI ID if provided
+		if in.UPIID != "" {
+			bank.UPIID = &in.UPIID
+		}
+
+		if err := s.repo.CreateBankDetails(bank); err != nil {
+			return nil, err
+		}
 
 		if err := s.repo.CreateApprovalRequest(user.ID, "tenant_approval"); err != nil {
 			return nil, err

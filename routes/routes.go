@@ -455,6 +455,9 @@ func Setup(r *gin.Engine, cfg *config.Config, captchaService *utils.CaptchaServi
 				writeRoutes.PUT("/:id", entityHandler.UpdateEntity)
 				writeRoutes.DELETE("/:id", entityHandler.DeleteEntity)
 				writeRoutes.PATCH("/:id/devotees/:userID/status", entityHandler.UpdateDevoteeMembershipStatus)
+				writeRoutes.POST("/:id/devotees",                    entityHandler.AddDevotee)
+				writeRoutes.PUT("/:id/devotees/:userID",             entityHandler.UpdateDevoteeProfile)
+				writeRoutes.POST("/:id/devotees/bulk-upload",        entityHandler.BulkUploadDevotees)
 			}
 
 			// Read operations - all three roles can access

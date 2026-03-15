@@ -37,8 +37,8 @@ func SeedUserRoles(db *gorm.DB) error {
 // ⚠️ WARNING: This is for local development only.
 // Remove or disable before deploying to production.
 func SeedSuperAdminUser(db *gorm.DB) error {
-	email := "superadmin@example.com"
-	password := "admin123"
+	email := "prasad@ezeu.in"
+	password := "EzeuTemple@!2345"
 
 	var existing User
 	if err := db.Where("email = ?", email).First(&existing).Error; err == nil {

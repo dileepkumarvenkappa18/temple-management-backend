@@ -349,12 +349,21 @@ func (s *Service) ApproveEntity(ctx context.Context, entityID uint, adminID uint
 		return err
 	}
 
-	// Log successful approval
+	// ✅ Send approval email to the entity's own email (entered during temple registration)
+	if ent.Email != "" {
+		log.Printf("📧 Sending entity approval email to: %s", ent.Email)
+		utils.SendEntityApprovalEmail(ent.Email, ent.Name, ent.Name)
+		log.Printf("✅ Entity approval email sent to %s", ent.Email)
+	} else {
+		log.Printf("⚠️ Entity %d has no email, skipping approval email", entityID)
+	}
+
 	s.auditService.LogAction(ctx, &adminID, &entityID, "ENTITY_APPROVED", map[string]interface{}{
 		"entity_id":   entityID,
 		"entity_name": ent.Name,
 		"entity_type": ent.TempleType,
 		"created_by":  ent.CreatedBy,
+		"email_sent":  ent.Email != "",
 	}, ip, "success")
 
 	return nil
@@ -401,13 +410,22 @@ func (s *Service) RejectEntity(ctx context.Context, entityID uint, adminID uint,
 		return err
 	}
 
-	// Log successful rejection
+	// ✅ Send rejection email to the entity's own email (entered during temple registration)
+	if ent.Email != "" {
+		log.Printf("📧 Sending entity rejection email to: %s", ent.Email)
+		utils.SendEntityRejectionEmail(ent.Email, ent.Name, ent.Name, reason)
+		log.Printf("✅ Entity rejection email sent to %s", ent.Email)
+	} else {
+		log.Printf("⚠️ Entity %d has no email, skipping rejection email", entityID)
+	}
+
 	s.auditService.LogAction(ctx, &adminID, &entityID, "ENTITY_REJECTED", map[string]interface{}{
 		"entity_id":        entityID,
 		"entity_name":      ent.Name,
 		"entity_type":      ent.TempleType,
 		"created_by":       ent.CreatedBy,
 		"rejection_reason": reason,
+		"email_sent":       ent.Email != "",
 	}, ip, "success")
 
 	return nil

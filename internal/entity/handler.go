@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1513,6 +1514,307 @@ func (h *Handler) GetTenantByEntityID(c *gin.Context) {
 	})
 }
 
+func (h *Handler) AddDevotee(c *gin.Context) {
+	entityIDUint, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entity ID"})
+		return
+	}
+	entityID := uint(entityIDUint)
+ 
+	accessVal, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
+		return
+	}
+	accessCtx := accessVal.(middleware.AccessContext)
+ 
+	if !canAccessEntityID(accessCtx, entityID, h) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+	if !accessCtx.CanWrite() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient write permissions"})
+		return
+	}
+ 
+	var req struct {
+		FullName  string `json:"full_name"  binding:"required"`
+		Email     string `json:"email"      binding:"required"`
+		Phone     string `json:"phone"      binding:"required"`
+		Password  string `json:"password"   binding:"required"`
+		Nakshatra string `json:"nakshatra"`
+		Rashi     string `json:"rashi"`
+		Lagna     string `json:"lagna"`
+		Gotra     string `json:"gotra"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
+		return
+	}
+	if len(req.Password) < 6 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be at least 6 characters"})
+		return
+	}
+ 
+	userVal, _ := c.Get("user")
+	creatorUser := userVal.(auth.User)
+	ip := middleware.GetIPFromContext(c)
+ 
+	devoteeID, err := h.Service.AddDevotee(AddDevoteeParams{
+		EntityID:  entityID,
+		FullName:  strings.TrimSpace(req.FullName),
+		Email:     strings.ToLower(strings.TrimSpace(req.Email)),
+		Phone:     strings.TrimSpace(req.Phone),
+		Password:  req.Password,
+		Nakshatra: req.Nakshatra,
+		Rashi:     req.Rashi,
+		Lagna:     req.Lagna,
+		Gotra:     req.Gotra,
+		IP:        ip,
+	}, creatorUser.ID)
+	if err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+ 
+	c.JSON(http.StatusCreated, gin.H{
+		"message":    "Devotee added successfully",
+		"devotee_id": devoteeID,
+		"entity_id":  entityID,
+	})
+}
+ 
+// UpdateDevoteeProfile handles PUT /entities/:id/devotees/:userID
+func (h *Handler) UpdateDevoteeProfile(c *gin.Context) {
+	entityIDUint, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entity ID"})
+		return
+	}
+	entityID := uint(entityIDUint)
+ 
+	devoteeIDUint, err := strconv.ParseUint(c.Param("userID"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid devotee user ID"})
+		return
+	}
+	devoteeUserID := uint(devoteeIDUint)
+ 
+	accessVal, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
+		return
+	}
+	accessCtx := accessVal.(middleware.AccessContext)
+ 
+	if !canAccessEntityID(accessCtx, entityID, h) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+	if !accessCtx.CanWrite() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient write permissions"})
+		return
+	}
+ 
+	var req struct {
+		FullName  string `json:"full_name"  binding:"required"`
+		Email     string `json:"email"      binding:"required"`
+		Phone     string `json:"phone"      binding:"required"`
+		Password  string `json:"password"`   // optional
+		Nakshatra string `json:"nakshatra"`
+		Rashi     string `json:"rashi"`
+		Lagna     string `json:"lagna"`
+		Gotra     string `json:"gotra"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
+		return
+	}
+ 
+	userVal, _ := c.Get("user")
+	updaterUser := userVal.(auth.User)
+	ip := middleware.GetIPFromContext(c)
+ 
+	if err := h.Service.UpdateDevoteeProfile(UpdateDevoteeParams{
+		EntityID:      entityID,
+		DevoteeUserID: devoteeUserID,
+		FullName:      strings.TrimSpace(req.FullName),
+		Email:         strings.ToLower(strings.TrimSpace(req.Email)),
+		Phone:         strings.TrimSpace(req.Phone),
+		Password:      req.Password,
+		Nakshatra:     req.Nakshatra,
+		Rashi:         req.Rashi,
+		Lagna:         req.Lagna,
+		Gotra:         req.Gotra,
+		IP:            ip,
+	}, updaterUser.ID); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+ 
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "Devotee profile updated successfully",
+		"devotee_id": devoteeUserID,
+	})
+}
+ 
+// BulkUploadDevotees handles POST /entities/:id/devotees/bulk-upload
+func (h *Handler) BulkUploadDevotees(c *gin.Context) {
+	entityIDUint, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid entity ID"})
+		return
+	}
+	entityID := uint(entityIDUint)
+ 
+	accessVal, exists := c.Get("access_context")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access context"})
+		return
+	}
+	accessCtx := accessVal.(middleware.AccessContext)
+ 
+	if !canAccessEntityID(accessCtx, entityID, h) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+	if !accessCtx.CanWrite() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient write permissions"})
+		return
+	}
+ 
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "CSV file required (field name: 'file')"})
+		return
+	}
+	defer file.Close()
+ 
+	if !strings.HasSuffix(strings.ToLower(header.Filename), ".csv") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only CSV files are accepted"})
+		return
+	}
+ 
+	userVal, _ := c.Get("user")
+	creatorUser := userVal.(auth.User)
+	ip := middleware.GetIPFromContext(c)
+ 
+	reader := csv.NewReader(file)
+	reader.TrimLeadingSpace = true
+ 
+	headers, err := reader.Read()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read CSV header row"})
+		return
+	}
+ 
+	// Map header name → column index
+	colIndex := map[string]int{}
+	for i, hdr := range headers {
+		colIndex[strings.ToLower(strings.TrimSpace(hdr))] = i
+	}
+ 
+	// Validate required columns exist
+	for _, col := range []string{"full_name", "email", "phone", "password"} {
+		if _, ok := colIndex[col]; !ok {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": fmt.Sprintf("Missing required CSV column: '%s'", col),
+			})
+			return
+		}
+	}
+ 
+	type rowError struct {
+		Row   int    `json:"row"`
+		Error string `json:"error"`
+	}
+ 
+	col := func(record []string, name string) string {
+		idx, ok := colIndex[name]
+		if !ok || idx >= len(record) {
+			return ""
+		}
+		return strings.TrimSpace(record[idx])
+	}
+ 
+	var (
+		succeeded int
+		rowErrors []rowError
+		rowNum    = 1
+	)
+ 
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		rowNum++
+		if err != nil {
+			rowErrors = append(rowErrors, rowError{Row: rowNum, Error: fmt.Sprintf("parse error: %v", err)})
+			continue
+		}
+		if rowNum > 501 { // header + 500 data rows
+			rowErrors = append(rowErrors, rowError{Row: rowNum, Error: "row limit of 500 exceeded; remaining rows skipped"})
+			break
+		}
+ 
+		fullName := col(record, "full_name")
+		email    := strings.ToLower(col(record, "email"))
+		phone    := col(record, "phone")
+		password := col(record, "password")
+ 
+		var errs []string
+		if fullName == "" { errs = append(errs, "full_name required") }
+		if !strings.Contains(email, "@") { errs = append(errs, "valid email required") }
+		if phone == "" { errs = append(errs, "phone required") }
+		if len(password) < 6 { errs = append(errs, "password min 6 chars") }
+ 
+		if len(errs) > 0 {
+			rowErrors = append(rowErrors, rowError{Row: rowNum, Error: strings.Join(errs, "; ")})
+			continue
+		}
+ 
+		_, err = h.Service.AddDevotee(AddDevoteeParams{
+			EntityID:  entityID,
+			FullName:  fullName,
+			Email:     email,
+			Phone:     phone,
+			Password:  password,
+			Nakshatra: col(record, "nakshatra"),
+			Rashi:     col(record, "rashi"),
+			Lagna:     col(record, "lagna"),
+			Gotra:     col(record, "gotra"),
+			IP:        ip,
+		}, creatorUser.ID)
+		if err != nil {
+			rowErrors = append(rowErrors, rowError{Row: rowNum, Error: err.Error()})
+		} else {
+			succeeded++
+		}
+	}
+ 
+	status := http.StatusOK
+	if succeeded == 0 && len(rowErrors) > 0 {
+		status = http.StatusUnprocessableEntity
+	}
+ 
+	c.JSON(status, gin.H{
+		"message":   fmt.Sprintf("%d devotee(s) created successfully", succeeded),
+		"succeeded": succeeded,
+		"failed":    len(rowErrors),
+		"errors":    rowErrors,
+	})
+}
+ 
 func GetTenantByEntityID(entityID string) uint {
 	if repo == nil {
 		log.Printf("⚠️ Repository not initialized for GetTenantByEntityID")

@@ -344,17 +344,16 @@ type DevoteeDTO struct {
 	Lagna     string `json:"lagna"`
 }
 
-// GetDevoteesByEntityID with LEFT JOIN to devotee_profiles table
 func (r *Repository) GetDevoteesByEntityID(entityID uint) ([]DevoteeDTO, error) {
 	var devotees []DevoteeDTO
 
 	err := r.DB.
 		Table("user_entity_memberships AS uem").
 		Select("u.id AS user_id, u.full_name, u.email, u.phone, uem.status, dp.nakshatra, dp.rashi, dp.lagna").
-		Joins("JOIN users u ON u.id = uem.user_id").
+		Joins("JOIN users u ON u.id = uem.user_id AND u.deleted_at IS NULL").
 		Joins("JOIN user_roles ur ON u.role_id = ur.id").
-		Joins("LEFT JOIN devotee_profiles dp ON dp.user_id = u.id").
-		Where("uem.entity_id = ? AND ur.role_name = ?", entityID, "devotee").
+		Joins("LEFT JOIN devotee_profiles dp ON dp.user_id = u.id AND dp.entity_id = ?", entityID).
+		Where("uem.entity_id = ? AND LOWER(ur.role_name) = ?", entityID, "devotee").
 		Scan(&devotees).Error
 
 	if err != nil {
@@ -365,7 +364,6 @@ func (r *Repository) GetDevoteesByEntityID(entityID uint) ([]DevoteeDTO, error) 
 	log.Printf("Found %d devotees for entity %d", len(devotees), entityID)
 	return devotees, nil
 }
-
 type DevoteeStats struct {
 	TotalDevotees  int64 `json:"total_devotees"`
 	ActiveDevotees int64 `json:"active_devotees"`
@@ -531,4 +529,68 @@ func (r *Repository) GetTenantIDByEntityID(entityID uint) (uint, error) {
 	}
 
 	return tenantID, nil
+}
+
+func (r *Repository) GetUserByEmail(email string) (*auth.User, error) {
+	var user auth.User
+	err := r.DB.Where("email = ?", email).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+ 
+func (r *Repository) CreateDevoteeUser(user *auth.User) error {
+	return r.DB.Create(user).Error
+}
+ 
+func (r *Repository) CreateDevoteeMembership(userID, entityID uint) error {
+	membership := map[string]interface{}{
+		"user_id":   userID,
+		"entity_id": entityID,
+		"status":    "active",
+		"joined_at": time.Now(),
+		"created_at": time.Now(),
+	}
+	return r.DB.Table("user_entity_memberships").Create(&membership).Error
+}
+ 
+func (r *Repository) GetDevoteeRoleID() (uint, error) {
+	var roleID uint
+	err := r.DB.Table("user_roles").
+		Select("id").
+		Where("role_name = ?", "devotee").
+		Limit(1).
+		Scan(&roleID).Error
+	return roleID, err
+}
+ 
+func (r *Repository) UpdateDevoteeUser(userID uint, updates map[string]interface{}) error {
+	return r.DB.Table("users").Where("id = ?", userID).Updates(updates).Error
+}
+ 
+func (r *Repository) UpdateDevoteeProfile(userID, entityID uint, updates map[string]interface{}) error {
+	// Try update first
+	result := r.DB.Table("devotee_profiles").
+		Where("user_id = ? AND entity_id = ?", userID, entityID).
+		Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	// If no profile row existed yet, create one
+	if result.RowsAffected == 0 {
+		updates["user_id"] = userID
+		updates["entity_id"] = entityID
+		updates["created_at"] = time.Now()
+		return r.DB.Table("devotee_profiles").Create(&updates).Error
+	}
+	return nil
+}
+ 
+func (r *Repository) IsDevoteeMemberOfEntity(userID, entityID uint) (bool, error) {
+	var count int64
+	err := r.DB.Table("user_entity_memberships").
+		Where("user_id = ? AND entity_id = ?", userID, entityID).
+		Count(&count).Error
+	return count > 0, err
 }
